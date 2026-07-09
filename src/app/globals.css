@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   RPOS — Design tokens
+   Brand: Cyprus (#004741) / Sand (#F0EDE4)
+   Values are space-separated RGB channels for Tailwind alpha.
+   ============================================================ */
+
+:root {
+  /* Light theme — "Sand" */
+  --bg: 240 237 228;          /* #F0EDE4 */
+  --surface: 251 250 246;     /* near white sand */
+  --surface-2: 245 242 234;
+  --line: 214 208 192;
+  --content: 11 31 27;        /* deep green-black */
+  --muted: 74 92 86;
+  --faint: 126 138 132;
+  --brand: 0 71 65;           /* cyprus */
+  --brand-contrast: 240 237 228;
+  --accent: 28 118 108;
+  --positive: 21 128 96;
+  --warning: 176 122 20;
+  --danger: 176 45 45;
+
+  --glass: 251 250 246;
+  --glass-alpha: 0.72;
+  --ring: 0 71 65;
+
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark theme — Black field · Sand type · Cyprus-green accent
+     1) main = black   2) second = Sand   3) third = Cyprus green */
+  --bg: 8 8 8;                /* #080808 — black */
+  --surface: 20 20 19;        /* elevated black */
+  --surface-2: 30 30 28;      /* card / input black */
+  --line: 42 42 40;           /* hairlines */
+  --content: 240 237 228;     /* Sand — primary text */
+  --muted: 176 172 160;       /* sand-grey */
+  --faint: 122 118 108;
+  /* Cyprus green, lifted just enough to stay legible on black.
+     Deep #004741 is used for solid fills under Sand text (see --brand-strong). */
+  --brand: 20 168 140;        /* legible Cyprus green — accents, icons, active */
+  --brand-contrast: 240 237 228; /* Sand text sits on the green */
+  --brand-strong: 0 71 65;    /* exact Cyprus #004741 — solid blocks/buttons */
+  --accent: 61 200 168;
+  --positive: 74 200 150;
+  --warning: 224 176 72;
+  --danger: 236 116 108;
+
+  --glass: 16 16 15;
+  --glass-alpha: 0.6;
+  --ring: 20 168 140;
+
+  color-scheme: dark;
+}
+
+:root {
+  /* Light mode: solid brand == the standard brand green */
+  --brand-strong: 0 71 65;
+}
+
+* {
+  border-color: rgb(var(--line));
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--content));
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+}
+
+/* Smooth theme transition without flashing on load */
+.theme-ready,
+.theme-ready * {
+  transition: background-color 0.35s ease, border-color 0.35s ease,
+    color 0.2s ease, fill 0.2s ease;
+}
+
+/* ---------- Reusable component classes ---------- */
+@layer components {
+  .glass {
+    background-color: rgb(var(--glass) / var(--glass-alpha));
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid rgb(var(--line) / 0.7);
+  }
+
+  .card {
+    @apply rounded-2xl border bg-surface shadow-soft;
+    border-color: rgb(var(--line));
+  }
+
+  .input-base {
+    @apply w-full rounded-xl border bg-surface-2 px-3.5 py-2.5 text-sm text-content
+      placeholder:text-faint outline-none transition;
+    border-color: rgb(var(--line));
+  }
+  .input-base:focus {
+    border-color: rgb(var(--ring) / 0.9);
+    box-shadow: 0 0 0 3px rgb(var(--ring) / 0.16);
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl
+      text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none
+      disabled:opacity-50;
+  }
+
+  .focus-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--bg)), 0 0 0 4px rgb(var(--ring) / 0.7);
+  }
+
+  .hairline {
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      rgb(var(--line)),
+      transparent
+    );
+  }
+}
+
+/* ---------- Scrollbars ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--faint));
+  background-clip: content-box;
+}
+
+/* Subtle grain overlay used on hero surfaces */
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
