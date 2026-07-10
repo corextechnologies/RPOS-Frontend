@@ -18,7 +18,7 @@ import { ApiClient, MasterDataKey, MasterDataTypeMap } from "./contract";
 
 const DB_KEY = "rpos-mock-db";
 const SESSION_KEY = "rpos-mock-session";
-const SEED_VERSION = 3;
+const SEED_VERSION = 5;
 
 const TEST_PASSWORD = "Test@1234";
 
@@ -40,7 +40,6 @@ const PERMISSIONS = [
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   "Super Admin": PERMISSIONS,
-  "Head Office": ["master_data:read", "master_data:write", "organizations:read", "branches:read", "users:read", "roles:read", "finance:read", "inventory:read", "production:read", "orders:read", "reports:read"],
   "Finance Manager": ["master_data:read", "finance:read", "finance:write", "inventory:read", "reports:read"],
   "Inventory Manager": ["master_data:read", "inventory:read", "inventory:write", "branches:read", "reports:read"],
   "Store Manager": ["master_data:read", "inventory:read", "inventory:write", "branches:read"],
@@ -79,7 +78,6 @@ function seedDb(): MockDb {
 
   const users: (User & { password: string })[] = [
     ["Super Admin", "admin@test.com", "Super Admin", null],
-    ["Head Office", "headoffice@test.com", "Head Office", null],
     ["Finance Manager", "finance@test.com", "Finance Manager", null],
     ["Inventory Manager", "inventory@test.com", "Inventory Manager", null],
     ["Store Manager", "store@test.com", "Store Manager", null],
@@ -198,17 +196,38 @@ function seedDb(): MockDb {
   };
 }
 
+function hasHeadOfficeRemnants(db: MockDb): boolean {
+  return (
+    db.roles.some((r) => r.name === "Head Office") ||
+    db.users.some(
+      (u) =>
+        u.role_name === "Head Office" ||
+        u.email.toLowerCase() === "headoffice@test.com",
+    )
+  );
+}
+
+function clearHeadOfficeSession() {
+  if (typeof window === "undefined") return;
+  const email = localStorage.getItem(SESSION_KEY);
+  if (email?.toLowerCase() === "headoffice@test.com") {
+    localStorage.removeItem(SESSION_KEY);
+    tokens.clear();
+  }
+}
+
 function load(): MockDb {
   if (typeof window === "undefined") return seedDb();
   try {
     const raw = localStorage.getItem(DB_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as MockDb;
-      if (parsed._seed === SEED_VERSION) return parsed;
+      if (parsed._seed === SEED_VERSION && !hasHeadOfficeRemnants(parsed)) return parsed;
     }
   } catch {}
   const fresh = seedDb();
   localStorage.setItem(DB_KEY, JSON.stringify(fresh));
+  clearHeadOfficeSession();
   return fresh;
 }
 

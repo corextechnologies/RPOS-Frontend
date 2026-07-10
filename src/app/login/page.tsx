@@ -14,7 +14,6 @@ import { ApiError } from "@/lib/types";
 
 const DEMO = [
   { label: "Super Admin", email: "admin@test.com" },
-  { label: "Head Office", email: "headoffice@test.com" },
   { label: "Auditor", email: "auditor@test.com" },
 ];
 

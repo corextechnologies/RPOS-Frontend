@@ -33,7 +33,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-bg/70 px-4 backdrop-blur-xl sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-bg/70 px-4 backdrop-blur-xl sm:px-6">
       <button
         onClick={onMenu}
         className="focus-ring grid h-9 w-9 place-items-center rounded-xl border border-line text-muted lg:hidden"
@@ -42,7 +42,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         <Icon name="menu" size={18} />
       </button>
 
-      <div className="relative hidden max-w-sm flex-1 items-center sm:flex">
+      <div className="relative hidden max-w-3xl flex-1 items-center sm:flex lg:ml-[17vw]">
         <span className="pointer-events-none absolute left-3 text-faint">
           <Icon name="search" size={16} />
         </span>

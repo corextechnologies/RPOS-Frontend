@@ -39,7 +39,7 @@ export default function UsersPage() {
 
   const roleName = (id: number) => roles.data?.find((r) => r.id === id)?.name ?? "—";
   const branchName = (id: string | null) =>
-    id ? branches.data?.find((b) => b.id === id)?.name ?? "—" : "Head Office";
+    id ? branches.data?.find((b) => b.id === id)?.name ?? "—" : "Central";
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
@@ -223,14 +223,14 @@ export default function UsersPage() {
                 />
               )}
             </Field>
-            <Field label="Branch" hint="Leave empty for Head Office.">
+            <Field label="Branch" hint="Leave empty for central / org-wide users.">
               {(id) => (
                 <Select
                   id={id}
                   value={form.branch_id}
                   onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
                   options={(branches.data ?? []).map((b) => ({ value: b.id, label: b.name }))}
-                  placeholder="Head Office (none)"
+                  placeholder="No branch (central)"
                 />
               )}
             </Field>
