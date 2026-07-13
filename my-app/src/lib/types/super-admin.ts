@@ -132,6 +132,22 @@ export interface MeResponse {
   restaurant_id: number | null;
   created_by_id: number | null;
   is_active: boolean;
+  /** When true, user must set a new password before accessing any portal. */
+  must_change_password?: boolean;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  token: string;
+  password: string;
+}
+
+export interface ChangePasswordInput {
+  current_password: string;
+  new_password: string;
 }
 
 export function displayName(user: MeResponse): string {

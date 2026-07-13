@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, ChevronRight, LogOut, Menu, User } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { AUTH_ROUTES } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,29 +16,36 @@ import {
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { initials } from "@/lib/utils";
 import { displayName } from "@/lib/types/super-admin";
+import { titleCase } from "@/lib/utils";
 
-const LABELS: Record<string, string> = {
-  dashboard: "Restaurants",
+const SEGMENT_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
   restaurants: "Restaurants",
   new: "Add Restaurant",
   billing: "Billing",
   settings: "Settings",
 };
 
-function Breadcrumbs() {
+interface TopbarProps {
+  portalLabel: string;
+  portalHome: string;
+  onMenu: () => void;
+}
+
+function Breadcrumbs({ portalLabel, portalHome }: { portalLabel: string; portalHome: string }) {
   const pathname = usePathname();
   const parts = pathname.split("/").filter(Boolean).slice(1);
 
   return (
     <nav aria-label="Breadcrumb" className="hidden items-center gap-1 text-sm text-faint sm:flex">
-      <Link href="/super-admin/dashboard" className="hover:text-content">
-        Super Admin
+      <Link href={portalHome} className="hover:text-content">
+        {portalLabel}
       </Link>
       {parts.map((part, i) => (
         <span key={`${part}-${i}`} className="flex items-center gap-1">
           <ChevronRight className="h-3.5 w-3.5" />
           <span className={i === parts.length - 1 ? "font-medium text-content" : "hover:text-content"}>
-            {LABELS[part] ?? part}
+            {SEGMENT_LABELS[part] ?? titleCase(part)}
           </span>
         </span>
       ))}
@@ -45,7 +53,7 @@ function Breadcrumbs() {
   );
 }
 
-export function Topbar({ onMenu }: { onMenu: () => void }) {
+export function Topbar({ portalLabel, portalHome, onMenu }: TopbarProps) {
   const { user, logout } = useAuth();
 
   return (
@@ -54,14 +62,10 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenu} aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </Button>
-        <Breadcrumbs />
+        <Breadcrumbs portalLabel={portalLabel} portalHome={portalHome} />
       </div>
       <div className="flex items-center gap-2">
-        <div className="hidden items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-xs text-muted sm:flex">
-          <span className="h-2 w-2 rounded-full bg-brand" />
-          All tenants
-        </div>
-        <Button variant="ghost" size="icon" aria-label="Notifications">
+        <Button variant="ghost" size="icon" aria-label="Notifications (coming soon)" disabled>
           <Bell className="h-4 w-4" />
         </Button>
         <ThemeToggle />
@@ -83,7 +87,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
             <DropdownMenuItem
               onClick={async () => {
                 await logout();
-                window.location.href = "/login";
+                window.location.assign(AUTH_ROUTES.login);
               }}
             >
               <LogOut className="mr-2 h-4 w-4" />

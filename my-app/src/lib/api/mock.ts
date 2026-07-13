@@ -5,16 +5,18 @@ import {
   ApiError,
   PLAN_AMOUNTS,
   type BillingSummary,
+  type ChangePasswordInput,
   type CreateRestaurantInput,
   type CreateRestaurantResult,
+  type ForgotPasswordInput,
   type Invoice,
   type MeResponse,
   type PlanTier,
+  type ResetPasswordInput,
   type Restaurant,
   type RestaurantFilters,
   type RestaurantStats,
   type TokenResponse,
-  type UpdateRestaurantInput,
 } from "@/lib/types/super-admin";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
@@ -22,15 +24,28 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 1;
+const SEED_VERSION = 2;
 
 const MOCK_SUPER_ADMIN_EMAIL = apiConfig.mockDemoEmail;
 const MOCK_SUPER_ADMIN_PASSWORD = apiConfig.mockDemoPassword;
+
+interface MockUserAccount {
+  email: string;
+  password: string;
+  me: MeResponse;
+}
+
+interface MockResetToken {
+  email: string;
+  expires: number;
+}
 
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
   invoices: Invoice[];
+  users: MockUserAccount[];
+  resetTokens: Record<string, MockResetToken>;
 }
 
 const now = () => new Date().toISOString();
@@ -52,6 +67,97 @@ function randomPassword(length = 12): string {
     out += chars[Math.floor(Math.random() * chars.length)];
   }
   return out;
+}
+
+function seedUsers(): MockUserAccount[] {
+  const users: MockUserAccount[] = [];
+
+  if (MOCK_SUPER_ADMIN_EMAIL && MOCK_SUPER_ADMIN_PASSWORD) {
+    users.push({
+      email: MOCK_SUPER_ADMIN_EMAIL,
+      password: MOCK_SUPER_ADMIN_PASSWORD,
+      me: {
+        id: 1,
+        email: MOCK_SUPER_ADMIN_EMAIL,
+        full_name: "Super Admin",
+        role: "SUPER_ADMIN",
+        restaurant_id: null,
+        created_by_id: null,
+        is_active: true,
+      },
+    });
+  }
+
+  users.push(
+    {
+      email: "admin@demo-restaurant.ros",
+      password: "Demo@1234",
+      me: {
+        id: 2,
+        email: "admin@demo-restaurant.ros",
+        full_name: "Alex Rivera",
+        role: "ADMIN",
+        restaurant_id: 1,
+        created_by_id: 1,
+        is_active: true,
+      },
+    },
+    {
+      email: "warehouse@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 3,
+        email: "warehouse@demo.ros",
+        full_name: "Sam Warehouse",
+        role: "WAREHOUSE_MANAGER",
+        restaurant_id: 1,
+        created_by_id: 2,
+        is_active: true,
+      },
+    },
+    {
+      email: "kitchen@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 4,
+        email: "kitchen@demo.ros",
+        full_name: "Casey Kitchen",
+        role: "KITCHEN_MANAGER",
+        restaurant_id: 1,
+        created_by_id: 2,
+        is_active: true,
+      },
+    },
+    {
+      email: "branch@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 5,
+        email: "branch@demo.ros",
+        full_name: "Riley Branch",
+        role: "BRANCH_MANAGER",
+        restaurant_id: 1,
+        created_by_id: 2,
+        is_active: true,
+      },
+    },
+    {
+      email: "temp@demo.ros",
+      password: "Temp@1234",
+      me: {
+        id: 6,
+        email: "temp@demo.ros",
+        full_name: "Temp User",
+        role: "ADMIN",
+        restaurant_id: 1,
+        created_by_id: 1,
+        is_active: true,
+        must_change_password: true,
+      },
+    },
+  );
+
+  return users;
 }
 
 function seedDb(): MockDb {
@@ -159,7 +265,7 @@ function seedDb(): MockDb {
     },
   ];
 
-  return { _seed: SEED_VERSION, restaurants, invoices };
+  return { _seed: SEED_VERSION, restaurants, invoices, users: seedUsers(), resetTokens: {} };
 }
 
 function loadDb(): MockDb {
@@ -249,35 +355,35 @@ function findRestaurant(db: MockDb, id: string): Restaurant {
   return r;
 }
 
+function findUser(db: MockDb, email: string): MockUserAccount | undefined {
+  return db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+}
+
+function setSession(me: MeResponse) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(me));
+  }
+}
+
+function issueTokens(me: MeResponse): TokenResponse {
+  const tokens_: TokenResponse = {
+    access_token: `mock-access-${me.role.toLowerCase()}`,
+    refresh_token: "mock-refresh-token",
+    token_type: "bearer",
+  };
+  tokens.set(tokens_.access_token, tokens_.refresh_token);
+  setSession(me);
+  return tokens_;
+}
+
 export const mockClient: ApiClient = {
   async login(email, password) {
-    if (
-      MOCK_SUPER_ADMIN_EMAIL &&
-      MOCK_SUPER_ADMIN_PASSWORD &&
-      email === MOCK_SUPER_ADMIN_EMAIL &&
-      password === MOCK_SUPER_ADMIN_PASSWORD
-    ) {
-      const me: MeResponse = {
-        id: 1,
-        email: MOCK_SUPER_ADMIN_EMAIL,
-        full_name: "Super Admin",
-        role: "SUPER_ADMIN",
-        restaurant_id: null,
-        created_by_id: null,
-        is_active: true,
-      };
-      const tokens_: TokenResponse = {
-        access_token: "mock-access-token",
-        refresh_token: "mock-refresh-token",
-        token_type: "bearer",
-      };
-      tokens.set(tokens_.access_token, tokens_.refresh_token);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(SESSION_KEY, JSON.stringify(me));
-      }
-      return delay(tokens_);
+    const db = loadDb();
+    const user = findUser(db, email);
+    if (!user || user.password !== password) {
+      throw new ApiError("Invalid email or password", 401);
     }
-    throw new ApiError("Invalid email or password", 401);
+    return delay(issueTokens({ ...user.me }));
   },
 
   async me() {
@@ -287,6 +393,52 @@ export const mockClient: ApiClient = {
   async logout() {
     tokens.clear();
     if (typeof window !== "undefined") localStorage.removeItem(SESSION_KEY);
+    return delay(undefined);
+  },
+
+  async forgotPassword(input: ForgotPasswordInput) {
+    const db = loadDb();
+    const user = findUser(db, input.email);
+    if (user) {
+      const token = `reset-${Date.now()}`;
+      db.resetTokens[token] = {
+        email: user.email,
+        expires: Date.now() + 60 * 60 * 1000,
+      };
+      saveDb(db);
+      if (typeof window !== "undefined") {
+        console.info("[mock] Password reset token:", token);
+      }
+    }
+    return delay(undefined);
+  },
+
+  async resetPassword(input: ResetPasswordInput) {
+    const db = loadDb();
+    const entry = db.resetTokens[input.token];
+    if (!entry || entry.expires < Date.now()) {
+      throw new ApiError("Invalid or expired reset token", 400);
+    }
+    const user = findUser(db, entry.email);
+    if (!user) throw new ApiError("User not found", 404);
+    user.password = input.password;
+    user.me = { ...user.me, must_change_password: false };
+    delete db.resetTokens[input.token];
+    saveDb(db);
+    return delay(undefined);
+  },
+
+  async changePassword(input: ChangePasswordInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const user = findUser(db, me.email);
+    if (!user || user.password !== input.current_password) {
+      throw new ApiError("Current password is incorrect", 400);
+    }
+    user.password = input.new_password;
+    user.me = { ...user.me, must_change_password: false };
+    saveDb(db);
+    setSession(user.me);
     return delay(undefined);
   },
 

@@ -21,8 +21,8 @@ const grotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Restaurant OS · Super Admin",
-  description: "Restaurant Operating System — Super Admin portal for multi-tenant management.",
+  title: "Restaurant OS",
+  description: "Restaurant Operating System — multi-portal frontend for hospitality operations.",
 };
 
 export const viewport: Viewport = {

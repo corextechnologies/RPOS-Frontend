@@ -1,9 +1,12 @@
 import type {
   BillingSummary,
+  ChangePasswordInput,
   CreateRestaurantInput,
   CreateRestaurantResult,
+  ForgotPasswordInput,
   Invoice,
   MeResponse,
+  ResetPasswordInput,
   Restaurant,
   RestaurantFilters,
   RestaurantStats,
@@ -15,6 +18,9 @@ export interface ApiClient {
   login(email: string, password: string): Promise<TokenResponse>;
   me(): Promise<MeResponse>;
   logout(): Promise<void>;
+  forgotPassword(input: ForgotPasswordInput): Promise<void>;
+  resetPassword(input: ResetPasswordInput): Promise<void>;
+  changePassword(input: ChangePasswordInput): Promise<void>;
 
   listRestaurants(filters?: RestaurantFilters): Promise<Restaurant[]>;
   getRestaurant(id: string): Promise<Restaurant>;

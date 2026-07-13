@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { api, tokens } from "@/lib/api";
-import { canPerform, portalPathForRole, type AuthAction } from "@/lib/auth/actions";
+import { canPerform, postAuthPath, type AuthAction } from "@/lib/auth/actions";
 import type { MeResponse } from "@/lib/types/super-admin";
 
 interface AuthContextValue {
@@ -45,14 +45,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    loadMe();
-  }, [loadMe]);
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      if (!tokens.access) {
+        if (!cancelled) {
+          setUser(null);
+          setLoading(false);
+        }
+        return;
+      }
+      try {
+        const me = await api.me();
+        if (!cancelled) setUser(me);
+      } catch {
+        tokens.clear();
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    const id = window.setTimeout(() => {
+      void bootstrap();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     await api.login(email, password);
     const me = await api.me();
     setUser(me);
-    return portalPathForRole(me.role);
+    setLoading(false);
+    return postAuthPath(me);
   }, []);
 
   const logout = useCallback(async () => {

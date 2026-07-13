@@ -1,4 +1,3 @@
-import { ApiError } from "@/lib/types/super-admin";
 import { apiConfig } from "./config";
 import { parseApiError, unwrapData } from "./envelope";
 import { tokens } from "./tokens";
