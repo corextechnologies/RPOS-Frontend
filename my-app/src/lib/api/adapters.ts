@@ -1,0 +1,87 @@
+import type {
+  BillingSummary,
+  CreateRestaurantInput,
+  CreateRestaurantResult,
+  PlanStatus,
+  PlanTier,
+  Restaurant,
+  RestaurantOut,
+  RestaurantCreateResult,
+  UpdateRestaurantInput,
+} from "@/lib/types/super-admin";
+
+function statusToPlanStatus(status: RestaurantOut["status"]): PlanStatus {
+  return status === "ACTIVE" ? "active" : "halted";
+}
+
+export function restaurantFromApi(r: RestaurantOut): Restaurant {
+  return {
+    id: String(r.id),
+    name: r.name,
+    plan_tier: (r.plan_tier ?? "starter") as PlanTier,
+    plan_status: statusToPlanStatus(r.status),
+    branch_limit: r.branch_limit ?? 0,
+    branch_count: 0,
+    plan_amount: r.plan_amount,
+    next_billing_date: r.next_billing_date,
+    admin: {
+      name: "",
+      email: r.owner_contact_email ?? "",
+      phone: r.owner_contact_number ?? "",
+      access_status: "active",
+    },
+  };
+}
+
+export function createInputToApi(body: CreateRestaurantInput) {
+  return {
+    name: body.name,
+    owner_contact_email: body.owner_email,
+    owner_contact_number: body.owner_phone || undefined,
+    admin_full_name: body.owner_name || undefined,
+    branch_limit: body.branch_limit,
+    plan_tier: body.plan_tier,
+    plan_amount: body.plan_amount,
+    next_billing_date: body.next_billing_date,
+  };
+}
+
+export function updateInputToApi(body: UpdateRestaurantInput) {
+  const patch: Record<string, unknown> = {};
+  if (body.owner_email !== undefined) patch.owner_contact_email = body.owner_email;
+  if (body.owner_phone !== undefined) patch.owner_contact_number = body.owner_phone;
+  if (body.plan_tier !== undefined) patch.plan_tier = body.plan_tier;
+  if (body.plan_amount !== undefined) patch.plan_amount = body.plan_amount;
+  if (body.branch_limit !== undefined) patch.branch_limit = body.branch_limit;
+  if (body.next_billing_date !== undefined) patch.next_billing_date = body.next_billing_date;
+  return patch;
+}
+
+export function createResultFromApi(result: RestaurantCreateResult): CreateRestaurantResult {
+  return {
+    restaurant: restaurantFromApi(result.restaurant),
+    admin_email: result.admin_email,
+    admin_user_id: result.admin_user_id,
+    credential_email_sent: result.credential_email_sent,
+  };
+}
+
+export function billingFromApi(
+  b: {
+    restaurant_id: number;
+    plan_tier: string | null;
+    plan_amount: string | null;
+    next_billing_date: string | null;
+    invoices: unknown[];
+  },
+  restaurant?: Restaurant,
+): BillingSummary {
+  return {
+    restaurant_id: String(b.restaurant_id),
+    plan_tier: (b.plan_tier ?? restaurant?.plan_tier ?? "starter") as PlanTier,
+    plan_status: restaurant?.plan_status ?? "active",
+    plan_amount: b.plan_amount ?? restaurant?.plan_amount ?? null,
+    next_billing_date: b.next_billing_date,
+    invoices: [],
+  };
+}

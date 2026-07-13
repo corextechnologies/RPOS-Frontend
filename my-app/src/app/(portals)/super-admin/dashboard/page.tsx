@@ -53,6 +53,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
+import { USE_MOCK } from "@/lib/api";
+import { MOCK_ONLY_ACTIONS } from "@/lib/auth/actions";
 import type { Restaurant, RestaurantFilters } from "@/lib/types/super-admin";
 import { titleCase } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -84,9 +86,11 @@ function StatCard({
 function RestaurantMobileCard({
   restaurant,
   onAction,
+  canAction,
 }: {
   restaurant: Restaurant;
   onAction: (action: string, r: Restaurant) => void;
+  canAction: (action: string) => boolean;
 }) {
   return (
     <Card className={cn(restaurant.plan_status === "halted" && "opacity-[var(--halted-opacity)]")}>
@@ -117,17 +121,23 @@ function RestaurantMobileCard({
                   <><PlayCircle className="mr-2 h-4 w-4" /> Activate plan</>
                 )}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onAction(restaurant.admin.access_status === "active" ? "revoke" : "restore", restaurant)}>
-                {restaurant.admin.access_status === "active" ? (
-                  <><ShieldOff className="mr-2 h-4 w-4" /> Revoke access</>
-                ) : (
-                  <><ShieldCheck className="mr-2 h-4 w-4" /> Restore access</>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-danger" onClick={() => onAction("delete", restaurant)}>
-                <Trash2 className="mr-2 h-4 w-4" /> Delete
-              </DropdownMenuItem>
+              {USE_MOCK && canAction("revoke") && (
+                <DropdownMenuItem onClick={() => onAction(restaurant.admin.access_status === "active" ? "revoke" : "restore", restaurant)}>
+                  {restaurant.admin.access_status === "active" ? (
+                    <><ShieldOff className="mr-2 h-4 w-4" /> Revoke access</>
+                  ) : (
+                    <><ShieldCheck className="mr-2 h-4 w-4" /> Restore access</>
+                  )}
+                </DropdownMenuItem>
+              )}
+              {USE_MOCK && canAction("delete") && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-danger" onClick={() => onAction("delete", restaurant)}>
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -136,12 +146,16 @@ function RestaurantMobileCard({
           <Badge variant={restaurant.plan_status === "active" ? "success" : "warning"}>
             {titleCase(restaurant.plan_status)}
           </Badge>
-          <Badge variant={restaurant.admin.access_status === "active" ? "secondary" : "destructive"}>
-            Access: {titleCase(restaurant.admin.access_status)}
-          </Badge>
+          {USE_MOCK && (
+            <Badge variant={restaurant.admin.access_status === "active" ? "secondary" : "destructive"}>
+              Access: {titleCase(restaurant.admin.access_status)}
+            </Badge>
+          )}
         </div>
         <p className="text-sm text-muted">
-          {restaurant.branch_count} / {restaurant.branch_limit} branches · {restaurant.admin.phone}
+          {USE_MOCK
+            ? `${restaurant.branch_count} / ${restaurant.branch_limit} branches · ${restaurant.admin.phone}`
+            : `${restaurant.branch_limit} branch limit · ${restaurant.admin.email}`}
         </p>
       </CardContent>
     </Card>
@@ -150,6 +164,12 @@ function RestaurantMobileCard({
 
 export default function DashboardPage() {
   const { can } = useAuth();
+  const canAction = (action: string) => {
+    if (!USE_MOCK && MOCK_ONLY_ACTIONS.includes(action as (typeof MOCK_ONLY_ACTIONS)[number])) {
+      return false;
+    }
+    return can(action as Parameters<typeof can>[0]);
+  };
   const [search, setSearch] = useState("");
   const [planStatus, setPlanStatus] = useState<RestaurantFilters["plan_status"]>("all");
   const [accessStatus, setAccessStatus] = useState<RestaurantFilters["access_status"]>("all");
@@ -246,7 +266,9 @@ export default function DashboardPage() {
         <StatCard label="Total restaurants" value={stats.data?.total ?? 0} icon={Building2} loading={stats.isLoading} />
         <StatCard label="Active plans" value={stats.data?.active_plans ?? 0} icon={PlayCircle} loading={stats.isLoading} />
         <StatCard label="Halted" value={stats.data?.halted ?? 0} icon={PauseCircle} loading={stats.isLoading} />
-        <StatCard label="Revoked access" value={stats.data?.revoked ?? 0} icon={ShieldOff} loading={stats.isLoading} />
+        {USE_MOCK && (
+          <StatCard label="Revoked access" value={stats.data?.revoked ?? 0} icon={ShieldOff} loading={stats.isLoading} />
+        )}
       </div>
 
       {stats.data && (
@@ -294,16 +316,18 @@ export default function DashboardPage() {
                 <SelectItem value="halted">Halted</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={accessStatus} onValueChange={(v) => setAccessStatus(v as RestaurantFilters["access_status"])}>
-              <SelectTrigger className="sm:w-40">
-                <SelectValue placeholder="Access" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All access</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="revoked">Revoked</SelectItem>
-              </SelectContent>
-            </Select>
+            {USE_MOCK && (
+              <Select value={accessStatus} onValueChange={(v) => setAccessStatus(v as RestaurantFilters["access_status"])}>
+                <SelectTrigger className="sm:w-40">
+                  <SelectValue placeholder="Access" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All access</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="revoked">Revoked</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -338,9 +362,9 @@ export default function DashboardPage() {
                     <TableRow>
                       <TableHead>Restaurant</TableHead>
                       <TableHead>Plan</TableHead>
-                      <TableHead>Branches</TableHead>
-                      <TableHead>Admin</TableHead>
-                      <TableHead>Access</TableHead>
+                      <TableHead>{USE_MOCK ? "Branches" : "Branch limit"}</TableHead>
+                      <TableHead>Owner</TableHead>
+                      {USE_MOCK && <TableHead>Access</TableHead>}
                       <TableHead className="w-12" />
                     </TableRow>
                   </TableHeader>
@@ -362,17 +386,19 @@ export default function DashboardPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {r.branch_count} / {r.branch_limit}
+                          {USE_MOCK ? `${r.branch_count} / ${r.branch_limit}` : r.branch_limit}
                         </TableCell>
                         <TableCell>
-                          <p className="text-sm">{r.admin.name}</p>
+                          <p className="text-sm">{r.admin.name || "—"}</p>
                           <p className="text-xs text-muted">{r.admin.email}</p>
                         </TableCell>
-                        <TableCell>
-                          <Badge variant={r.admin.access_status === "active" ? "secondary" : "destructive"}>
-                            {titleCase(r.admin.access_status)}
-                          </Badge>
-                        </TableCell>
+                        {USE_MOCK && (
+                          <TableCell>
+                            <Badge variant={r.admin.access_status === "active" ? "secondary" : "destructive"}>
+                              {titleCase(r.admin.access_status)}
+                            </Badge>
+                          </TableCell>
+                        )}
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -388,27 +414,27 @@ export default function DashboardPage() {
                                 <Receipt className="mr-2 h-4 w-4" /> View billing
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              {can("plans:halt") && r.plan_status === "active" && (
+                              {canAction("plans:halt") && r.plan_status === "active" && (
                                 <DropdownMenuItem onClick={() => handleAction("halt", r)}>
                                   <PauseCircle className="mr-2 h-4 w-4" /> Halt plan
                                 </DropdownMenuItem>
                               )}
-                              {can("plans:activate") && r.plan_status === "halted" && (
+                              {canAction("plans:activate") && r.plan_status === "halted" && (
                                 <DropdownMenuItem onClick={() => handleAction("activate", r)}>
                                   <PlayCircle className="mr-2 h-4 w-4" /> Activate plan
                                 </DropdownMenuItem>
                               )}
-                              {can("admins:revoke") && r.admin.access_status === "active" && (
+                              {USE_MOCK && canAction("revoke") && r.admin.access_status === "active" && (
                                 <DropdownMenuItem onClick={() => handleAction("revoke", r)}>
                                   <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
                                 </DropdownMenuItem>
                               )}
-                              {can("admins:restore") && r.admin.access_status === "revoked" && (
+                              {USE_MOCK && canAction("restore") && r.admin.access_status === "revoked" && (
                                 <DropdownMenuItem onClick={() => handleAction("restore", r)}>
                                   <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
                                 </DropdownMenuItem>
                               )}
-                              {can("restaurants:delete") && (
+                              {USE_MOCK && canAction("delete") && (
                                 <>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem className="text-danger" onClick={() => handleAction("delete", r)}>
@@ -426,7 +452,7 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-3 p-4 md:hidden">
                 {restaurants.data.map((r) => (
-                  <RestaurantMobileCard key={r.id} restaurant={r} onAction={handleAction} />
+                  <RestaurantMobileCard key={r.id} restaurant={r} onAction={handleAction} canAction={canAction} />
                 ))}
               </div>
             </>
