@@ -104,6 +104,28 @@
   --ring: 0 71 65; /* Cyprus */
   --brand-strong: 0 71 65; /* #004741 */
 
+  /* shadcn aliases — mapped to Cyprus/Sand palette */
+  --background: var(--bg);
+  --foreground: var(--content);
+  --card: var(--surface);
+  --card-foreground: var(--content);
+  --popover: var(--surface);
+  --popover-foreground: var(--content);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-contrast);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--content);
+  --muted-foreground: var(--muted);
+  --accent-foreground: var(--content);
+  --destructive: var(--danger);
+  --destructive-foreground: 251 250 246;
+  --border: var(--line);
+  --input: var(--line);
+  --radius: 0.9rem;
+
+  /* Derived UI states */
+  --halted-opacity: 0.6;
+
   color-scheme: light;
 }
 
@@ -127,6 +149,23 @@
   --glass: 16 16 15;
   --glass-alpha: 0.6;
   --ring: 20 168 140; /* #14A88C */
+
+  --background: var(--bg);
+  --foreground: var(--content);
+  --card: var(--surface);
+  --card-foreground: var(--content);
+  --popover: var(--surface);
+  --popover-foreground: var(--content);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-contrast);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--content);
+  --muted-foreground: var(--muted);
+  --accent-foreground: var(--content);
+  --destructive: var(--danger);
+  --destructive-foreground: 240 237 228;
+  --border: var(--line);
+  --input: var(--line);
 
   color-scheme: dark;
 }

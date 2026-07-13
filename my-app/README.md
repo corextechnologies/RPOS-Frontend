@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Restaurant OS — Super Admin Portal
 
-## Getting Started
+Phase 0 foundation + Phase 1 Super Admin portal for multi-tenant restaurant management.
 
-First, run the development server:
+## Run locally
 
 ```bash
+cd my-app
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Demo login (mock API)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Email | Password |
+|-------|----------|
+| `superadmin@ros.test` | `Super@1234` |
 
-## Learn More
+Mock API is enabled by default (`NEXT_PUBLIC_USE_MOCK` is not `"false"`). Data persists in `localStorage`.
 
-To learn more about Next.js, take a look at the following resources:
+### Environment variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEXT_PUBLIC_USE_MOCK` | `true` | Use in-memory mock API |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000/v1` | Live API base URL |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Stack
 
-## Deploy on Vercel
+- Next.js 16 (App Router) + TypeScript
+- TanStack Query — server state
+- shadcn/ui + Tailwind CSS v4 — UI (Cyprus/Sand theme)
+- react-hook-form + zod — forms
+- Recharts — dashboard charts
+- sonner — toasts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Routes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Route | Description |
+|-------|-------------|
+| `/login` | Shared login (Super Admin) |
+| `/super-admin/dashboard` | Restaurants list, stats, filters |
+| `/super-admin/restaurants/new` | Add restaurant + admin |
+| `/super-admin/restaurants/[id]` | Edit, revoke, delete |
+| `/super-admin/restaurants/[id]/billing` | Billing + invoice sharing |
+| `/super-admin/settings` | Profile, theme, API mode |
+
+## Feature map
+
+| Feature | Primary files |
+|---------|---------------|
+| Design tokens | `src/app/globals.css`, `tailwind.config.ts`, `DESIGN_NOTES.md` |
+| Auth + role redirect | `src/lib/auth.tsx`, `src/lib/auth/actions.ts` |
+| Mock API | `src/lib/api/mock.ts`, `src/lib/api/contract.ts` |
+| TanStack Query hooks | `src/lib/hooks/use-restaurants.ts`, `src/lib/api/query-keys.ts` |
+| App shell | `src/app/(portals)/super-admin/layout.tsx`, `src/components/layout/` |
+| Dashboard + filters | `src/app/(portals)/super-admin/dashboard/page.tsx` |
+| Add restaurant + credentials | `src/app/(portals)/super-admin/restaurants/new/page.tsx`, `src/components/ui/credentials-dialog.tsx` |
+| Edit / delete / revoke | `src/app/(portals)/super-admin/restaurants/[id]/page.tsx`, `src/components/ui/confirm-dialog.tsx` |
+| Plan halt/activate | Dashboard row actions, `mock.haltPlan` / `mock.activatePlan` |
+| Billing + share invoice | `src/app/(portals)/super-admin/restaurants/[id]/billing/page.tsx` |
+| Form validation | `src/lib/schemas/restaurant.ts` |
+| Shared UI kit | `src/components/ui/` |
+
+## Scripts
+
+```bash
+npm run dev      # Development server
+npm run build    # Production build
+npm run start    # Start production server
+npm run lint     # ESLint
+```

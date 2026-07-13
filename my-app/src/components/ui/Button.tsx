@@ -1,50 +1,48 @@
-"use client";
-
-import { forwardRef } from "react";
+import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
-import { Spinner } from "@/components/icons";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
-type Size = "sm" | "md" | "lg" | "icon";
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+  {
+    variants: {
+      variant: {
+        default: "bg-brand text-brand-contrast hover:bg-brand/90 shadow-soft",
+        destructive: "bg-danger text-white hover:bg-danger/90",
+        outline: "border border-line bg-surface hover:bg-surface-2 text-content",
+        secondary: "bg-surface-2 text-content hover:bg-surface-2/80",
+        ghost: "hover:bg-surface-2 text-content",
+        link: "text-brand underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-8 rounded-lg px-3 text-xs",
+        lg: "h-11 rounded-xl px-6",
+        icon: "h-9 w-9",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  },
+);
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant;
-  size?: Size;
-  loading?: boolean;
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
 }
 
-const VARIANTS: Record<Variant, string> = {
-  primary:
-    "bg-brand-strong text-brand-contrast hover:brightness-125 shadow-soft",
-  secondary:
-    "bg-surface-2 text-content hover:bg-line/60 border border-line",
-  outline:
-    "border border-line bg-transparent text-content hover:bg-surface-2",
-  ghost: "bg-transparent text-muted hover:bg-surface-2 hover:text-content",
-  danger:
-    "bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20",
-};
-
-const SIZES: Record<Size, string> = {
-  sm: "h-8 px-3 text-[13px]",
-  md: "h-10 px-4",
-  lg: "h-11 px-5 text-[15px]",
-  icon: "h-9 w-9",
-};
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", loading, children, disabled, ...props }, ref) => {
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
     return (
-      <button
-        ref={ref}
-        className={cn("btn focus-ring", VARIANTS[variant], SIZES[size], className)}
-        disabled={disabled || loading}
-        {...props}
-      >
-        {loading && <Spinner size={16} />}
-        {children}
-      </button>
+      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
     );
   },
 );
 Button.displayName = "Button";
+
+export { Button, buttonVariants };

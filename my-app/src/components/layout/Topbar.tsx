@@ -1,121 +1,95 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Bell, ChevronRight, LogOut, Menu, User } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { useToast } from "@/components/ui/Toast";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { Icon } from "@/components/icons";
-import { USE_MOCK } from "@/lib/api";
-import { Badge } from "@/components/ui/Badge";
 import { initials } from "@/lib/utils";
+
+const LABELS: Record<string, string> = {
+  dashboard: "Restaurants",
+  restaurants: "Restaurants",
+  new: "Add Restaurant",
+  billing: "Billing",
+  settings: "Settings",
+};
+
+function Breadcrumbs() {
+  const pathname = usePathname();
+  const parts = pathname.split("/").filter(Boolean).slice(1);
+
+  return (
+    <nav aria-label="Breadcrumb" className="hidden items-center gap-1 text-sm text-faint sm:flex">
+      <Link href="/super-admin/dashboard" className="hover:text-content">
+        Super Admin
+      </Link>
+      {parts.map((part, i) => (
+        <span key={`${part}-${i}`} className="flex items-center gap-1">
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className={i === parts.length - 1 ? "font-medium text-content" : "hover:text-content"}>
+            {LABELS[part] ?? part}
+          </span>
+        </span>
+      ))}
+    </nav>
+  );
+}
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const { user, logout } = useAuth();
-  const router = useRouter();
-  const toast = useToast();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
-
-  const doLogout = async () => {
-    await logout();
-    toast.info("Signed out");
-    router.replace("/login");
-  };
 
   return (
-    <header className="sticky top-0 z-30 grid h-16 grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-line bg-bg/70 px-4 backdrop-blur-xl sm:px-6">
-      <button
-        onClick={onMenu}
-        className="focus-ring grid h-9 w-9 place-items-center rounded-xl border border-line text-muted lg:hidden"
-        aria-label="Open menu"
-      >
-        <Icon name="menu" size={18} />
-      </button>
-
-      <div className="relative hidden w-full max-w-xl justify-self-center sm:block">
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint">
-          <Icon name="search" size={16} />
-        </span>
-        <input
-          placeholder="Search branches, users, settings…"
-          className="input-base h-9 w-full border-line/60 bg-surface-2 pl-9 text-[13px]"
-        />
+    <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-line bg-surface/80 px-4 backdrop-blur-md sm:px-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenu} aria-label="Open menu">
+          <Menu className="h-5 w-5" />
+        </Button>
+        <Breadcrumbs />
       </div>
-
-      <div className="col-start-3 flex items-center justify-end gap-2">
-        {USE_MOCK && (
-          <Badge tone="warning" dot className="hidden md:inline-flex">
-            Demo data
-          </Badge>
-        )}
-
-        <button
-          className="focus-ring relative grid h-9 w-9 place-items-center rounded-xl border border-line text-muted transition hover:text-content"
-          aria-label="Notifications"
-        >
-          <Icon name="bell" size={18} />
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-brand ring-2 ring-bg" />
-        </button>
-
-        <ThemeToggle />
-
-        <div ref={ref} className="relative">
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="focus-ring flex items-center gap-2 rounded-xl border border-line py-1 pl-1 pr-2 transition hover:bg-surface-2"
-          >
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-strong text-[11px] font-semibold text-brand-contrast">
-              {user ? initials(user.name) : "··"}
-            </span>
-            <Icon name="chevronDown" size={15} className="text-faint" />
-          </button>
-
-          <AnimatePresence>
-            {menuOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                transition={{ duration: 0.16 }}
-                className="glass absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl p-1.5 shadow-lift"
-              >
-                <div className="px-3 py-2.5">
-                  <p className="truncate text-sm font-semibold text-content">{user?.name}</p>
-                  <p className="truncate text-xs text-muted">{user?.email}</p>
-                  <div className="mt-2">
-                    <Badge tone="brand">{user?.role}</Badge>
-                  </div>
-                </div>
-                <div className="my-1 h-px bg-line" />
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    router.push("/settings");
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-content"
-                >
-                  <Icon name="settings" size={16} /> Settings
-                </button>
-                <button
-                  onClick={doLogout}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-danger transition hover:bg-danger/10"
-                >
-                  <Icon name="logout" size={16} /> Sign out
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+      <div className="flex items-center gap-2">
+        <div className="hidden items-center gap-2 rounded-xl border border-line bg-surface-2 px-3 py-1.5 text-xs text-muted sm:flex">
+          <span className="h-2 w-2 rounded-full bg-brand" />
+          All tenants
         </div>
+        <Button variant="ghost" size="icon" aria-label="Notifications">
+          <Bell className="h-4 w-4" />
+        </Button>
+        <ThemeToggle />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="gap-2 px-2">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-xs font-semibold text-brand">
+                {user ? initials(user.name) : "?"}
+              </span>
+              <span className="hidden text-sm font-medium sm:inline">{user?.name}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem disabled>
+              <User className="mr-2 h-4 w-4" />
+              {user?.email}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={async () => {
+                await logout();
+                window.location.href = "/login";
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

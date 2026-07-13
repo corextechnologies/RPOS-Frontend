@@ -1,453 +1,492 @@
 /**
- * Mock adapter — a fully working in-memory backend persisted to localStorage.
- * Seeded to mirror RPOS-Backend/seed/*. Lets the entire Main Admin portal be
- * driven end-to-end before the real API is wired up. Flip NEXT_PUBLIC_USE_MOCK
- * to "false" to switch to the live backend (identical contract).
+ * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
-import { ApiError } from "@/lib/types";
-import type {
-  Branch,
-  MeResponse,
-  Organization,
-  Role,
-  TokenResponse,
-  User,
-} from "@/lib/types";
+import {
+  ApiError,
+  PLAN_AMOUNTS,
+  type BillingSummary,
+  type CreateRestaurantInput,
+  type CreateRestaurantResult,
+  type Invoice,
+  type MeResponse,
+  type PlanTier,
+  type Restaurant,
+  type RestaurantFilters,
+  type RestaurantStats,
+  type TokenResponse,
+  type UpdateRestaurantInput,
+} from "@/lib/types/super-admin";
+import type { ApiClient } from "./contract";
 import { tokens } from "./tokens";
-import { ApiClient, MasterDataKey, MasterDataTypeMap } from "./contract";
 
-const DB_KEY = "rpos-mock-db";
-const SESSION_KEY = "rpos-mock-session";
-const SEED_VERSION = 3;
+const DB_KEY = "ros-super-admin-mock-db";
+const SESSION_KEY = "ros-super-admin-session";
+const SEED_VERSION = 1;
 
-const TEST_PASSWORD = "Test@1234";
-
-const ORG_ID = "0b8f9c2a-1111-4a10-9c00-000000000001";
-const ORG_ID_2 = "0b8f9c2a-1111-4a10-9c00-000000000002";
-const BR_DOWNTOWN = "b1000000-0000-4000-8000-000000000001";
-const BR_UPTOWN = "b1000000-0000-4000-8000-000000000002";
-const BR_HUB = "b1000000-0000-4000-8000-000000000003";
-const BR_DARK = "b1000000-0000-4000-8000-000000000004";
-
-// RBAC catalog (mirrors seed/rbac_catalog.py)
-const PERMISSIONS = [
-  "master_data:read", "master_data:write", "organizations:read", "organizations:write",
-  "branches:read", "branches:write", "users:read", "users:write", "roles:read",
-  "roles:write", "permissions:assign", "inventory:read", "inventory:write",
-  "finance:read", "finance:write", "production:read", "production:write",
-  "production:approve", "orders:read", "orders:write", "reports:read",
-];
-
-const ROLE_PERMISSIONS: Record<string, string[]> = {
-  "Super Admin": PERMISSIONS,
-  "Head Office": ["master_data:read", "master_data:write", "organizations:read", "branches:read", "users:read", "roles:read", "finance:read", "inventory:read", "production:read", "orders:read", "reports:read"],
-  "Finance Manager": ["master_data:read", "finance:read", "finance:write", "inventory:read", "reports:read"],
-  "Inventory Manager": ["master_data:read", "inventory:read", "inventory:write", "branches:read", "reports:read"],
-  "Store Manager": ["master_data:read", "inventory:read", "inventory:write", "branches:read"],
-  "Procurement Officer": ["master_data:read", "inventory:read"],
-  "Kitchen Manager": ["master_data:read", "production:read", "production:write", "production:approve"],
-  "Kitchen Staff": ["production:read"],
-  "Branch Manager": ["branches:read", "orders:read", "orders:write", "inventory:read", "reports:read"],
-  "Cashier": ["orders:read", "orders:write"],
-  "Supervisor": ["orders:read", "orders:write"],
-  "Delivery Staff": ["orders:read"],
-  "Auditor": ["master_data:read", "organizations:read", "branches:read", "users:read", "roles:read", "finance:read", "inventory:read", "production:read", "orders:read", "reports:read"],
-  "Reports Viewer": ["branches:read", "reports:read"],
-};
-const ROLE_ORDER = Object.keys(ROLE_PERMISSIONS);
+const SUPER_ADMIN_EMAIL = "superadmin@ros.test";
+const SUPER_ADMIN_PASSWORD = "Super@1234";
 
 interface MockDb {
   _seed: number;
-  organizations: Organization[];
-  branches: Branch[];
-  roles: Role[];
-  users: (User & { password: string })[];
-  masterData: Record<string, { id: number; [k: string]: unknown }[]>;
-  counters: Record<string, number>;
+  restaurants: Restaurant[];
+  invoices: Invoice[];
 }
 
 const now = () => new Date().toISOString();
-const today = () => new Date().toISOString().slice(0, 10);
 
-function seedDb(): MockDb {
-  const roles: Role[] = ROLE_ORDER.map((name, i) => ({
-    id: i + 1,
-    name,
-    permissions: [...ROLE_PERMISSIONS[name]].sort(),
-  }));
-  const roleId = (name: string) => roles.find((r) => r.name === name)!.id;
-
-  const users: (User & { password: string })[] = [
-    ["Super Admin", "admin@test.com", "Super Admin", null],
-    ["Head Office", "headoffice@test.com", "Head Office", null],
-    ["Finance Manager", "finance@test.com", "Finance Manager", null],
-    ["Inventory Manager", "inventory@test.com", "Inventory Manager", null],
-    ["Store Manager", "store@test.com", "Store Manager", null],
-    ["Kitchen Manager", "kitchen@test.com", "Kitchen Manager", null],
-    ["Branch Manager", "branch@test.com", "Branch Manager", BR_DOWNTOWN],
-    ["Cashier", "cashier@test.com", "Cashier", BR_DOWNTOWN],
-    ["Auditor", "auditor@test.com", "Auditor", null],
-  ].map(([name, email, role, branch], i) => ({
-    id: i + 1,
-    name: name as string,
-    email: email as string,
-    role_id: roleId(role as string),
-    role_name: role as string,
-    branch_id: branch as string | null,
-    is_active: true,
-    password: TEST_PASSWORD,
-  }));
-
-  const branch = (
-    id: string,
-    org: string,
-    name: string,
-    location: string,
-    branch_type: Branch["branch_type"],
-    tax: number | null,
-  ): Branch => ({
-    id,
-    organization_id: org,
-    name,
-    location,
-    branch_type,
-    timings: [
-      { day: "Mon-Fri", open: "09:00", close: "23:00" },
-      { day: "Sat-Sun", open: "10:00", close: "00:00" },
-    ],
-    tax_percentage: tax,
-    tax_percentage_online: tax !== null ? tax + 1 : null,
-    latitude: null,
-    longitude: null,
-    delivery_type: branch_type === "dark_kitchen" ? "delivery_only" : "hybrid",
-    geofence_placeholder: null,
-    is_active: true,
-    created_at: now(),
-    updated_at: now(),
-  });
-
-  return {
-    _seed: SEED_VERSION,
-    organizations: [
-      { id: ORG_ID, name: "Demo Restaurant Group", slug: "demo-restaurant-group", is_active: true, created_at: now(), updated_at: now() },
-      { id: ORG_ID_2, name: "Layered Hospitality", slug: "layered-hospitality", is_active: false, created_at: now(), updated_at: now() },
-    ],
-    branches: [
-      branch(BR_HUB, ORG_ID, "Central Production Hub", "Industrial Area, Sector 7", "hub", null),
-      branch(BR_DOWNTOWN, ORG_ID, "Downtown Branch", "Main St", "branch", 16),
-      branch(BR_UPTOWN, ORG_ID, "Uptown Branch", "5th Ave", "branch", 16),
-      branch(BR_DARK, ORG_ID, "Riverside Dark Kitchen", "Wharf Rd", "dark_kitchen", 16),
-    ],
-    roles,
-    users,
-    masterData: {
-      "master-data/units": [
-        { id: 1, name: "Kilogram", symbol: "kg", effective_date: today() },
-        { id: 2, name: "Gram", symbol: "g", effective_date: today() },
-        { id: 3, name: "Litre", symbol: "L", effective_date: today() },
-        { id: 4, name: "Millilitre", symbol: "ml", effective_date: today() },
-        { id: 5, name: "Piece", symbol: "pc", effective_date: today() },
-        { id: 6, name: "Box", symbol: "box", effective_date: today() },
-      ],
-      "master-data/categories": [
-        { id: 1, name: "Flour & Grains", category_type: "raw_material", effective_date: today() },
-        { id: 2, name: "Dairy", category_type: "raw_material", effective_date: today() },
-        { id: 3, name: "Cakes", category_type: "product", effective_date: today() },
-        { id: 4, name: "Beverages", category_type: "product", effective_date: today() },
-        { id: 5, name: "Utilities", category_type: "expense", effective_date: today() },
-      ],
-      "master-data/taxes": [
-        { id: 1, name: "Standard GST", tax_type: "GST", percentage: 16, branch_id: null, effective_date: today() },
-        { id: 2, name: "Online Order Tax", tax_type: "GST", percentage: 17, branch_id: BR_DOWNTOWN, effective_date: today() },
-      ],
-      "master-data/storage-locations": [
-        { id: 1, name: "Dry Store A", location_type: "central_store", branch_id: null, effective_date: today() },
-        { id: 2, name: "Cold Room 1", location_type: "central_store", branch_id: null, effective_date: today() },
-        { id: 3, name: "FG Freezer", location_type: "finished_goods", branch_id: null, effective_date: today() },
-        { id: 4, name: "Downtown Backstore", location_type: "branch", branch_id: BR_DOWNTOWN, effective_date: today() },
-      ],
-      "master-data/packaging-types": [
-        { id: 1, name: "1lb Cake Box", description: "Standard single-cake carton", effective_date: today() },
-        { id: 2, name: "Insulated Pouch", description: "Cold-chain delivery pouch", effective_date: today() },
-      ],
-      "master-data/allergens": [
-        { id: 1, name: "Gluten", effective_date: today() },
-        { id: 2, name: "Dairy", effective_date: today() },
-        { id: 3, name: "Nuts", effective_date: today() },
-        { id: 4, name: "Eggs", effective_date: today() },
-        { id: 5, name: "Soy", effective_date: today() },
-      ],
-      "master-data/reason-codes": [
-        { id: 1, name: "Spillage", code: "WST-SPL", reason_type: "wastage", effective_date: today() },
-        { id: 2, name: "Expired", code: "WST-EXP", reason_type: "wastage", effective_date: today() },
-        { id: 3, name: "Damaged in transit", code: "REJ-DMG", reason_type: "rejection", effective_date: today() },
-        { id: 4, name: "Count mismatch", code: "DSC-CNT", reason_type: "discrepancy", effective_date: today() },
-      ],
-      "master-data/temperature-ranges": [
-        { id: 1, name: "Chilled / Dairy", min_celsius: 2, max_celsius: 5, effective_date: today() },
-        { id: 2, name: "Frozen", min_celsius: -22, max_celsius: -18, effective_date: today() },
-        { id: 3, name: "Ambient", min_celsius: 15, max_celsius: 25, effective_date: today() },
-      ],
-      "master-data/configuration-values": [
-        { id: 1, key: "reorder_threshold_default", value: "10", value_type: "number", description: "Default reorder point (units)", effective_date: today() },
-        { id: 2, key: "expense_auto_approve_limit", value: "5000", value_type: "number", description: "Auto-approve expenses under this amount", effective_date: today() },
-        { id: 3, key: "safety_stock_buffer_pct", value: "12", value_type: "percentage", description: "Finished-goods safety stock buffer", effective_date: today() },
-      ],
-    },
-    counters: {},
-  };
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
 }
 
-function load(): MockDb {
+function slugify(s: string) {
+  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function randomPassword(length = 12): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#";
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
+function seedDb(): MockDb {
+  const r1: Restaurant = {
+    id: "rest-001",
+    name: "Demo Restaurant Group",
+    plan_tier: "growth",
+    plan_status: "active",
+    branch_limit: 10,
+    branch_count: 4,
+    admin: {
+      id: "admin-001",
+      name: "Alex Rivera",
+      email: "admin@demo-restaurant.ros",
+      phone: "+1 555 010 2001",
+      access_status: "active",
+    },
+    created_at: now(),
+    updated_at: now(),
+  };
+
+  const r2: Restaurant = {
+    id: "rest-002",
+    name: "Layered Hospitality",
+    plan_tier: "enterprise",
+    plan_status: "halted",
+    branch_limit: 25,
+    branch_count: 8,
+    admin: {
+      id: "admin-002",
+      name: "Jordan Lee",
+      email: "admin@layered-hospitality.ros",
+      phone: "+1 555 010 2002",
+      access_status: "active",
+    },
+    created_at: now(),
+    updated_at: now(),
+  };
+
+  const r3: Restaurant = {
+    id: "rest-003",
+    name: "Sunset Bistro",
+    plan_tier: "starter",
+    plan_status: "active",
+    branch_limit: 3,
+    branch_count: 2,
+    admin: {
+      id: "admin-003",
+      name: "Morgan Chen",
+      email: "admin@sunset-bistro.ros",
+      phone: "+1 555 010 2003",
+      access_status: "revoked",
+    },
+    created_at: now(),
+    updated_at: now(),
+  };
+
+  const restaurants = [r1, r2, r3];
+
+  const invoices: Invoice[] = [
+    {
+      id: "inv-001",
+      restaurant_id: "rest-001",
+      amount: PLAN_AMOUNTS.growth,
+      billing_date: addMonths(new Date(), -2).toISOString().slice(0, 10),
+      period: "Jan 2026",
+      shared_with_admin: true,
+      status: "paid",
+    },
+    {
+      id: "inv-002",
+      restaurant_id: "rest-001",
+      amount: PLAN_AMOUNTS.growth,
+      billing_date: addMonths(new Date(), -1).toISOString().slice(0, 10),
+      period: "Feb 2026",
+      shared_with_admin: false,
+      status: "paid",
+    },
+    {
+      id: "inv-003",
+      restaurant_id: "rest-001",
+      amount: PLAN_AMOUNTS.growth,
+      billing_date: new Date().toISOString().slice(0, 10),
+      period: "Mar 2026",
+      shared_with_admin: false,
+      status: "pending",
+    },
+    {
+      id: "inv-004",
+      restaurant_id: "rest-002",
+      amount: PLAN_AMOUNTS.enterprise,
+      billing_date: addMonths(new Date(), -1).toISOString().slice(0, 10),
+      period: "Feb 2026",
+      shared_with_admin: true,
+      status: "overdue",
+    },
+    {
+      id: "inv-005",
+      restaurant_id: "rest-003",
+      amount: PLAN_AMOUNTS.starter,
+      billing_date: addMonths(new Date(), -1).toISOString().slice(0, 10),
+      period: "Feb 2026",
+      shared_with_admin: false,
+      status: "paid",
+    },
+  ];
+
+  return { _seed: SEED_VERSION, restaurants, invoices };
+}
+
+function loadDb(): MockDb {
   if (typeof window === "undefined") return seedDb();
   try {
     const raw = localStorage.getItem(DB_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as MockDb;
-      if (parsed._seed === SEED_VERSION) return parsed;
+    if (!raw) {
+      const db = seedDb();
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+      return db;
     }
-  } catch {}
-  const fresh = seedDb();
-  localStorage.setItem(DB_KEY, JSON.stringify(fresh));
-  return fresh;
+    const db = JSON.parse(raw) as MockDb;
+    if (db._seed !== SEED_VERSION) {
+      const fresh = seedDb();
+      localStorage.setItem(DB_KEY, JSON.stringify(fresh));
+      return fresh;
+    }
+    return db;
+  } catch {
+    return seedDb();
+  }
 }
 
-function save(db: MockDb) {
-  if (typeof window !== "undefined") localStorage.setItem(DB_KEY, JSON.stringify(db));
+function saveDb(db: MockDb) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+  }
 }
 
-function nextId(db: MockDb, key: string, list: { id: number }[]): number {
-  const max = list.reduce((m, r) => Math.max(m, r.id), 0);
-  return max + 1;
+function delay<T>(value: T, ms = 280): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
-function uuid(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
+function requireAuth(): MeResponse {
+  if (typeof window === "undefined") {
+    return {
+      id: "sa-1",
+      name: "Super Admin",
+      email: SUPER_ADMIN_EMAIL,
+      role: "super_admin",
+      is_active: true,
+    };
+  }
+  const session = localStorage.getItem(SESSION_KEY);
+  if (!session) throw new ApiError("Unauthorized", 401);
+  return JSON.parse(session) as MeResponse;
 }
 
-// Simulate network latency so loading states are visible/real.
-const delay = <T>(v: T, ms = 260): Promise<T> =>
-  new Promise((res) => setTimeout(() => res(v), ms));
+function filterRestaurants(list: Restaurant[], filters?: RestaurantFilters): Restaurant[] {
+  let result = [...list];
+  if (filters?.search) {
+    const q = filters.search.toLowerCase();
+    result = result.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.admin.name.toLowerCase().includes(q) ||
+        r.admin.email.toLowerCase().includes(q),
+    );
+  }
+  if (filters?.plan_status && filters.plan_status !== "all") {
+    result = result.filter((r) => r.plan_status === filters.plan_status);
+  }
+  if (filters?.access_status && filters.access_status !== "all") {
+    result = result.filter((r) => r.admin.access_status === filters.access_status);
+  }
+  return result;
+}
 
-function currentEmail(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(SESSION_KEY);
+function computeStats(restaurants: Restaurant[]): RestaurantStats {
+  const active = restaurants.filter((r) => r.plan_status === "active").length;
+  const halted = restaurants.filter((r) => r.plan_status === "halted").length;
+  const revoked = restaurants.filter((r) => r.admin.access_status === "revoked").length;
+  return {
+    total: restaurants.length,
+    active_plans: active,
+    halted,
+    revoked,
+    by_plan_status: { active, halted },
+  };
+}
+
+function findRestaurant(db: MockDb, id: string): Restaurant {
+  const r = db.restaurants.find((x) => x.id === id);
+  if (!r) throw new ApiError("Restaurant not found", 404);
+  return r;
 }
 
 export const mockClient: ApiClient = {
   async login(email, password) {
-    const db = load();
-    const user = db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (!user || user.password !== password || !user.is_active) {
-      return delay(null, 350).then(() => {
-        throw new ApiError("Invalid email or password", 401);
-      });
+    if (email === SUPER_ADMIN_EMAIL && password === SUPER_ADMIN_PASSWORD) {
+      const me: MeResponse = {
+        id: "sa-1",
+        name: "Super Admin",
+        email: SUPER_ADMIN_EMAIL,
+        role: "super_admin",
+        is_active: true,
+      };
+      const tokens_: TokenResponse = {
+        access_token: "mock-access-token",
+        refresh_token: "mock-refresh-token",
+        token_type: "bearer",
+      };
+      tokens.set(tokens_.access_token, tokens_.refresh_token);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(me));
+      }
+      return delay(tokens_);
     }
-    localStorage.setItem(SESSION_KEY, user.email);
-    const t: TokenResponse = {
-      access_token: `mock.${btoa(user.email)}.${Date.now()}`,
-      refresh_token: `mockrefresh.${btoa(user.email)}`,
-      token_type: "bearer",
-    };
-    tokens.set(t.access_token, t.refresh_token);
-    return delay(t, 500);
+    throw new ApiError("Invalid email or password", 401);
   },
 
   async me() {
-    const db = load();
-    const email = currentEmail();
-    const user = email && db.users.find((u) => u.email === email);
-    if (!user) throw new ApiError("Not authenticated", 401);
-    const role = db.roles.find((r) => r.id === user.role_id);
-    const res: MeResponse = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role_name,
-      branch_id: user.branch_id,
-      is_active: user.is_active,
-      permissions: role ? role.permissions : [],
-    };
-    return delay(res, 180);
+    return delay(requireAuth());
   },
 
   async logout() {
-    if (typeof window !== "undefined") localStorage.removeItem(SESSION_KEY);
     tokens.clear();
-    return delay(undefined, 120);
+    if (typeof window !== "undefined") localStorage.removeItem(SESSION_KEY);
+    return delay(undefined);
   },
 
-  async listOrganizations() {
-    return delay([...load().organizations].sort((a, b) => a.name.localeCompare(b.name)));
+  async listRestaurants(filters) {
+    requireAuth();
+    const db = loadDb();
+    return delay(filterRestaurants(db.restaurants, filters));
   },
-  async createOrganization(body) {
-    const db = load();
-    const org: Organization = {
-      id: uuid(),
-      name: String(body.name ?? "Untitled"),
-      slug: String(body.slug ?? ""),
-      is_active: body.is_active ?? true,
+
+  async getRestaurant(id) {
+    requireAuth();
+    const db = loadDb();
+    return delay(findRestaurant(db, id));
+  },
+
+  async getRestaurantStats() {
+    requireAuth();
+    const db = loadDb();
+    return delay(computeStats(db.restaurants));
+  },
+
+  async createRestaurant(body: CreateRestaurantInput) {
+    requireAuth();
+    const db = loadDb();
+    const slug = slugify(body.name);
+    const id = `rest-${Date.now()}`;
+    const adminId = `admin-${Date.now()}`;
+    const tempPassword = randomPassword();
+    const adminEmail = `admin+${slug}@tenant.ros`;
+
+    const restaurant: Restaurant = {
+      id,
+      name: body.name,
+      plan_tier: body.plan_tier,
+      plan_status: "active",
+      branch_limit: Math.max(body.branch_count, 3),
+      branch_count: body.branch_count,
+      admin: {
+        id: adminId,
+        name: body.owner_name,
+        email: body.owner_email || adminEmail,
+        phone: body.owner_phone,
+        access_status: "active",
+      },
       created_at: now(),
       updated_at: now(),
     };
-    db.organizations.push(org);
-    save(db);
-    return delay(org, 400);
-  },
-  async updateOrganization(id, body) {
-    const db = load();
-    const org = db.organizations.find((o) => o.id === id);
-    if (!org) throw new ApiError("Organization not found", 404);
-    Object.assign(org, body, { updated_at: now() });
-    save(db);
-    return delay(org, 400);
+
+    db.restaurants.push(restaurant);
+
+    const nextBilling = addMonths(new Date(), 1).toISOString().slice(0, 10);
+    db.invoices.push({
+      id: `inv-${Date.now()}`,
+      restaurant_id: id,
+      amount: PLAN_AMOUNTS[body.plan_tier as PlanTier],
+      billing_date: nextBilling,
+      period: new Date().toLocaleString("en-US", { month: "short", year: "numeric" }),
+      shared_with_admin: false,
+      status: "pending",
+    });
+
+    saveDb(db);
+
+    const result: CreateRestaurantResult = {
+      restaurant,
+      credentials: {
+        email: restaurant.admin.email,
+        temporary_password: tempPassword,
+        emailed: true,
+      },
+    };
+    return delay(result, 400);
   },
 
-  async listBranches() {
-    return delay([...load().branches].sort((a, b) => a.name.localeCompare(b.name)));
-  },
-  async createBranch(body) {
-    const db = load();
-    const b: Branch = {
-      id: uuid(),
-      organization_id: String(body.organization_id ?? ORG_ID),
-      name: String(body.name ?? "New Branch"),
-      location: String(body.location ?? ""),
-      branch_type: (body.branch_type as Branch["branch_type"]) ?? "branch",
-      timings: (body.timings as Branch["timings"]) ?? [],
-      tax_percentage: (body.tax_percentage as number) ?? null,
-      tax_percentage_online: (body.tax_percentage_online as number) ?? null,
-      latitude: (body.latitude as number) ?? null,
-      longitude: (body.longitude as number) ?? null,
-      delivery_type: (body.delivery_type as string) ?? null,
-      geofence_placeholder: (body.geofence_placeholder as string) ?? null,
-      is_active: body.is_active ?? true,
-      created_at: now(),
+  async updateRestaurant(id, body) {
+    requireAuth();
+    const db = loadDb();
+    const idx = db.restaurants.findIndex((r) => r.id === id);
+    if (idx === -1) throw new ApiError("Restaurant not found", 404);
+
+    const current = db.restaurants[idx];
+    if (body.branch_limit !== undefined && body.branch_limit < current.branch_count) {
+      throw new ApiError(
+        `Branch limit cannot be below current branch count (${current.branch_count})`,
+        400,
+      );
+    }
+
+    const updated: Restaurant = {
+      ...current,
+      name: body.name ?? current.name,
+      plan_tier: body.plan_tier ?? current.plan_tier,
+      branch_limit: body.branch_limit ?? current.branch_limit,
+      admin: {
+        ...current.admin,
+        name: body.owner_name ?? current.admin.name,
+        email: body.owner_email ?? current.admin.email,
+        phone: body.owner_phone ?? current.admin.phone,
+      },
       updated_at: now(),
     };
-    db.branches.push(b);
-    save(db);
-    return delay(b, 400);
-  },
-  async updateBranch(id, body) {
-    const db = load();
-    const b = db.branches.find((x) => x.id === id);
-    if (!b) throw new ApiError("Branch not found", 404);
-    Object.assign(b, body, { updated_at: now() });
-    save(db);
-    return delay(b, 400);
+    db.restaurants[idx] = updated;
+    saveDb(db);
+    return delay(updated);
   },
 
-  async listUsers() {
+  async deleteRestaurant(id) {
+    requireAuth();
+    const db = loadDb();
+    const before = db.restaurants.length;
+    db.restaurants = db.restaurants.filter((r) => r.id !== id);
+    db.invoices = db.invoices.filter((i) => i.restaurant_id !== id);
+    if (db.restaurants.length === before) throw new ApiError("Restaurant not found", 404);
+    saveDb(db);
+    return delay(undefined);
+  },
+
+  async haltPlan(id) {
+    requireAuth();
+    const db = loadDb();
+    const r = findRestaurant(db, id);
+    if (r.plan_status === "halted") throw new ApiError("Plan is already halted", 400);
+    r.plan_status = "halted";
+    r.updated_at = now();
+    saveDb(db);
+    return delay({ ...r });
+  },
+
+  async activatePlan(id) {
+    requireAuth();
+    const db = loadDb();
+    const r = findRestaurant(db, id);
+    if (r.plan_status === "active") throw new ApiError("Plan is already active", 400);
+    if (r.admin.access_status === "revoked") {
+      throw new ApiError("Cannot activate plan while admin access is revoked", 403);
+    }
+    r.plan_status = "active";
+    r.updated_at = now();
+    saveDb(db);
+    return delay({ ...r });
+  },
+
+  async revokeAdminAccess(restaurantId) {
+    requireAuth();
+    const db = loadDb();
+    const r = findRestaurant(db, restaurantId);
+    if (r.admin.access_status === "revoked") {
+      throw new ApiError("Admin access is already revoked", 400);
+    }
+    r.admin.access_status = "revoked";
+    r.updated_at = now();
+    saveDb(db);
+    return delay({ ...r });
+  },
+
+  async restoreAdminAccess(restaurantId) {
+    requireAuth();
+    const db = loadDb();
+    const r = findRestaurant(db, restaurantId);
+    if (r.admin.access_status === "active") {
+      throw new ApiError("Admin access is already active", 400);
+    }
+    r.admin.access_status = "active";
+    r.updated_at = now();
+    saveDb(db);
+    return delay({ ...r });
+  },
+
+  async getBilling(restaurantId) {
+    requireAuth();
+    const db = loadDb();
+    const r = findRestaurant(db, restaurantId);
+    const summary: BillingSummary = {
+      restaurant_id: r.id,
+      plan_tier: r.plan_tier,
+      plan_status: r.plan_status,
+      plan_amount: PLAN_AMOUNTS[r.plan_tier],
+      next_billing_date: addMonths(new Date(), 1).toISOString().slice(0, 10),
+    };
+    return delay(summary);
+  },
+
+  async listInvoices(restaurantId) {
+    requireAuth();
+    const db = loadDb();
+    findRestaurant(db, restaurantId);
     return delay(
-      load().users
-        .map(({ password, ...u }) => u)
-        .sort((a, b) => a.id - b.id),
+      db.invoices
+        .filter((i) => i.restaurant_id === restaurantId)
+        .sort((a, b) => b.billing_date.localeCompare(a.billing_date)),
     );
   },
-  async createUser(body) {
-    const db = load();
-    if (db.users.some((u) => u.email === body.email))
-      throw new ApiError("Email already registered", 409);
-    const role = db.roles.find((r) => r.id === Number(body.role_id));
-    if (!role) throw new ApiError("Role not found", 404);
-    const user = {
-      id: nextId(db, "users", db.users),
-      name: String(body.name),
-      email: String(body.email),
-      role_id: role.id,
-      role_name: role.name,
-      branch_id: (body.branch_id as string) ?? null,
-      is_active: (body.is_active as boolean) ?? true,
-      password: String(body.password ?? TEST_PASSWORD),
-    };
-    db.users.push(user);
-    save(db);
-    const { password, ...rest } = user;
-    return delay(rest, 400);
-  },
-  async updateUser(id, body) {
-    const db = load();
-    const user = db.users.find((u) => u.id === id);
-    if (!user) throw new ApiError("User not found", 404);
-    if (body.email && db.users.some((u) => u.email === body.email && u.id !== id))
-      throw new ApiError("Email already registered", 409);
-    if (body.role_id) {
-      const role = db.roles.find((r) => r.id === Number(body.role_id));
-      if (!role) throw new ApiError("Role not found", 404);
-      user.role_name = role.name;
-    }
-    const { password, ...patch } = body as Record<string, unknown>;
-    Object.assign(user, patch);
-    if (password) user.password = String(password);
-    save(db);
-    const { password: _p, ...rest } = user;
-    return delay(rest, 400);
+
+  async shareInvoice(invoiceId) {
+    requireAuth();
+    const db = loadDb();
+    const inv = db.invoices.find((i) => i.id === invoiceId);
+    if (!inv) throw new ApiError("Invoice not found", 404);
+    inv.shared_with_admin = true;
+    saveDb(db);
+    return delay({ ...inv });
   },
 
-  async listRoles() {
-    return delay([...load().roles].sort((a, b) => a.id - b.id));
-  },
-  async createRole(name) {
-    const db = load();
-    if (db.roles.some((r) => r.name === name))
-      throw new ApiError("Role already exists", 409);
-    const role: Role = { id: nextId(db, "roles", db.roles), name, permissions: [] };
-    db.roles.push(role);
-    save(db);
-    return delay(role, 400);
-  },
-  async assignPermissions(roleId, codes) {
-    const db = load();
-    const role = db.roles.find((r) => r.id === roleId);
-    if (!role) throw new ApiError("Role not found", 404);
-    const unknown = codes.filter((c) => !PERMISSIONS.includes(c));
-    if (unknown.length) throw new ApiError(`Unknown permissions: ${unknown.join(", ")}`, 404);
-    role.permissions = [...codes].sort();
-    save(db);
-    return delay(role, 400);
-  },
-
-  async listMasterData<K extends MasterDataKey>(key: K) {
-    const db = load();
-    const list = (db.masterData[`master-data/${key}`] ?? []) as unknown as MasterDataTypeMap[K][];
-    return delay([...list].sort((a: any, b: any) => a.id - b.id));
-  },
-  async createMasterData<K extends MasterDataKey>(key: K, body: Record<string, unknown>) {
-    const db = load();
-    const path = `master-data/${key}`;
-    const list = db.masterData[path] ?? (db.masterData[path] = []);
-    const record = {
-      id: nextId(db, path, list),
-      ...body,
-      effective_date: (body.effective_date as string) || today(),
-    };
-    list.push(record);
-    save(db);
-    return delay(record as unknown as MasterDataTypeMap[K], 380);
-  },
-  async updateMasterData<K extends MasterDataKey>(
-    key: K,
-    id: number,
-    body: Record<string, unknown>,
-  ) {
-    const db = load();
-    const list = db.masterData[`master-data/${key}`] ?? [];
-    const record = list.find((r) => r.id === id);
-    if (!record) throw new ApiError("Record not found", 404);
-    Object.assign(record, body);
-    save(db);
-    return delay(record as unknown as MasterDataTypeMap[K], 380);
-  },
-  async deleteMasterData<K extends MasterDataKey>(key: K, id: number) {
-    const db = load();
-    const path = `master-data/${key}`;
-    db.masterData[path] = (db.masterData[path] ?? []).filter((r) => r.id !== id);
-    save(db);
-    return delay(undefined, 300);
+  async unshareInvoice(invoiceId) {
+    requireAuth();
+    const db = loadDb();
+    const inv = db.invoices.find((i) => i.id === invoiceId);
+    if (!inv) throw new ApiError("Invoice not found", 404);
+    inv.shared_with_admin = false;
+    saveDb(db);
+    return delay({ ...inv });
   },
 };

@@ -9,15 +9,16 @@ import {
   useState,
 } from "react";
 import { api, tokens } from "@/lib/api";
-import type { MeResponse } from "@/lib/types";
+import { canPerform, portalPathForRole, type AuthAction } from "@/lib/auth/actions";
+import type { MeResponse } from "@/lib/types/super-admin";
 
 interface AuthContextValue {
   user: MeResponse | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<string>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
-  can: (permission: string) => boolean;
+  can: (action: AuthAction) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await api.login(email, password);
     const me = await api.me();
     setUser(me);
+    return portalPathForRole(me.role);
   }, []);
 
   const logout = useCallback(async () => {
@@ -59,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const can = useCallback(
-    (permission: string) => !!user?.permissions.includes(permission),
+    (action: AuthAction) => canPerform(user?.role, action),
     [user],
   );
 

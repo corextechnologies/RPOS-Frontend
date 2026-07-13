@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
-import { ThemeProvider, themeInitScript } from "@/lib/theme";
+import { ThemeProvider } from "@/lib/theme";
+import { themeInitScript } from "@/lib/theme-init-script";
 import { AuthProvider } from "@/lib/auth";
-import { ToastProvider } from "@/components/ui/Toast";
+import { QueryProvider } from "@/lib/query-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,9 +21,8 @@ const grotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "ROS · Main Admin",
-  description:
-    "Restaurant Operating System — Main Admin control portal. One kitchen, infinite branches, zero blind spots.",
+  title: "Restaurant OS · Super Admin",
+  description: "Restaurant Operating System — Super Admin portal for multi-tenant management.",
 };
 
 export const viewport: Viewport = {
@@ -39,13 +40,26 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
       </head>
       <body className={`${inter.variable} ${grotesk.variable} font-sans antialiased`}>
         <ThemeProvider>
-          <AuthProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              {children}
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  classNames: {
+                    toast: "rounded-xl border border-line bg-surface text-content shadow-soft",
+                  },
+                }}
+              />
+            </AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

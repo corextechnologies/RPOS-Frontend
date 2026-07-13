@@ -1,37 +1,32 @@
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-type Tone = "brand" | "neutral" | "positive" | "warning" | "danger" | "outline";
+const badgeVariants = cva(
+  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+  {
+    variants: {
+      variant: {
+        default: "border-transparent bg-brand/10 text-brand",
+        secondary: "border-transparent bg-surface-2 text-muted",
+        success: "border-transparent bg-positive/10 text-positive",
+        warning: "border-transparent bg-warning/10 text-warning",
+        destructive: "border-transparent bg-danger/10 text-danger",
+        outline: "border-line text-muted",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  },
+);
 
-const TONES: Record<Tone, string> = {
-  brand: "bg-brand/12 text-brand border-brand/20",
-  neutral: "bg-surface-2 text-muted border-line",
-  positive: "bg-positive/12 text-positive border-positive/25",
-  warning: "bg-warning/12 text-warning border-warning/25",
-  danger: "bg-danger/12 text-danger border-danger/25",
-  outline: "bg-transparent text-muted border-line",
-};
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
 
-export function Badge({
-  children,
-  tone = "neutral",
-  className,
-  dot,
-}: {
-  children: React.ReactNode;
-  tone?: Tone;
-  className?: string;
-  dot?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        TONES[tone],
-        className,
-      )}
-    >
-      {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
-      {children}
-    </span>
-  );
+function Badge({ className, variant, ...props }: BadgeProps) {
+  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
+
+export { Badge, badgeVariants };

@@ -20,23 +20,6 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = "rpos-theme";
 
-/**
- * Inline script (stringified) injected before hydration to set the correct
- * theme class on <html> and avoid a flash of the wrong theme.
- */
-export const themeInitScript = `
-(function () {
-  try {
-    var stored = localStorage.getItem('${STORAGE_KEY}');
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var theme = stored || 'dark';
-    var root = document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-  } catch (e) {}
-})();
-`;
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
