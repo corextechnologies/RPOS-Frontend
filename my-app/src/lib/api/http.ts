@@ -1,3 +1,4 @@
+import { adminApi } from "./admin.api";
 import { authApi } from "./auth.api";
 import { restaurantsApi } from "./restaurants.api";
 import type { ApiClient } from "./contract";
@@ -6,4 +7,5 @@ import type { ApiClient } from "./contract";
 export const httpClient: ApiClient = {
   ...authApi,
   ...restaurantsApi,
+  ...adminApi,
 };

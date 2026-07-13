@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logomark } from "@/components/icons";
-import { SUPER_ADMIN_NAV, isNavActive, visibleNavItems } from "@/lib/nav/super-admin";
+import { isNavActive, visibleNavItems } from "@/lib/nav";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import type { NavItem } from "@/lib/nav/super-admin";
+import type { NavItem, NavSection } from "@/lib/nav";
 
 function NavLink({
   item,
@@ -34,7 +34,13 @@ function NavLink({
   );
 }
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+interface SidebarProps {
+  sections: NavSection[];
+  portalLabel: string;
+  onNavigate?: () => void;
+}
+
+export function Sidebar({ sections, portalLabel, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const { can } = useAuth();
 
@@ -44,12 +50,12 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <Logomark size={28} className="text-brand" />
         <div className="leading-tight">
           <p className="font-display text-sm font-semibold text-content">Restaurant OS</p>
-          <p className="text-xs text-faint">Super Admin</p>
+          <p className="text-xs text-faint">{portalLabel}</p>
         </div>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {SUPER_ADMIN_NAV.map((section) => {
+        {sections.map((section) => {
           const items = visibleNavItems(section.items, can);
           if (items.length === 0) return null;
           return (

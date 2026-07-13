@@ -16,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatPlanAmount, PLAN_AMOUNTS } from "@/lib/types/super-admin";
+import { formatPlanAmount } from "@/lib/types/super-admin";
+import { planAmountForTier } from "@/lib/plans/catalog";
 import { titleCase } from "@/lib/utils";
 
 export default function BillingOverviewPage() {
@@ -32,7 +33,7 @@ export default function BillingOverviewPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">All restaurants</CardTitle>
-          <CardDescription>Select a restaurant to view invoices and manage sharing.</CardDescription>
+          <CardDescription>Select a restaurant to view billing and invoice history.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {restaurants.isLoading && (
@@ -69,7 +70,7 @@ export default function BillingOverviewPage() {
                         <TableCell>
                           {r.plan_amount != null
                             ? `$${formatPlanAmount(r.plan_amount)}`
-                            : `$${PLAN_AMOUNTS[r.plan_tier] ?? "—"}`}
+                            : `$${formatPlanAmount(planAmountForTier(r.plan_tier) ?? null)}`}
                         </TableCell>
                         <TableCell>
                           <Badge variant={r.plan_status === "active" ? "success" : "warning"}>
@@ -99,7 +100,7 @@ export default function BillingOverviewPage() {
                           {titleCase(r.plan_tier)} · $
                           {r.plan_amount != null
                             ? formatPlanAmount(r.plan_amount)
-                            : PLAN_AMOUNTS[r.plan_tier] ?? "—"}
+                            : formatPlanAmount(planAmountForTier(r.plan_tier) ?? null)}
                           /mo
                         </p>
                       </div>

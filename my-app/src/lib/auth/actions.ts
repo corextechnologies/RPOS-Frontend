@@ -12,6 +12,10 @@ export type AuthAction =
 
 import type { UserRole } from "@/lib/types/super-admin";
 
+export { portalPathForRole, PORTAL_HOME, PORTAL_LABEL, PORTAL_PREFIX } from "./roles";
+export { postAuthPath, requiresPasswordChange, AUTH_ROUTES } from "./routes";
+export { roleFromAccessToken } from "./jwt";
+
 const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
   SUPER_ADMIN: [
     "restaurants:read",
@@ -21,7 +25,7 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "plans:activate",
     "billing:read",
   ],
-  ADMIN: [],
+  ADMIN: ["billing:read"],
   WAREHOUSE_MANAGER: [],
   KITCHEN_MANAGER: [],
   BRANCH_MANAGER: [],
@@ -34,17 +38,6 @@ export function isSuperAdmin(role: UserRole | undefined): boolean {
 export function canPerform(role: UserRole | undefined, action: AuthAction): boolean {
   if (!role) return false;
   return ROLE_ACTIONS[role]?.includes(action) ?? false;
-}
-
-export function portalPathForRole(role: UserRole): string {
-  switch (role) {
-    case "SUPER_ADMIN":
-      return "/super-admin/dashboard";
-    case "ADMIN":
-      return "/login";
-    default:
-      return "/login";
-  }
 }
 
 export const MOCK_ONLY_ACTIONS: AuthAction[] = [

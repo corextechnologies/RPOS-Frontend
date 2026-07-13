@@ -20,14 +20,16 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 const STORAGE_KEY = "rpos-theme";
 
+function readTheme(): Theme {
+  if (typeof window === "undefined") return "light";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>(readTheme);
 
   useEffect(() => {
     const root = document.documentElement;
-    const current = root.classList.contains("dark") ? "dark" : "light";
-    setThemeState(current);
-    // enable transitions only after first paint
     requestAnimationFrame(() => root.classList.add("theme-ready"));
   }, []);
 

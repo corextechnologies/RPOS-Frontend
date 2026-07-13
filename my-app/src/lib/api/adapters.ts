@@ -1,7 +1,10 @@
 import type {
+  BillingOut,
   BillingSummary,
   CreateRestaurantInput,
   CreateRestaurantResult,
+  Invoice,
+  InvoiceOut,
   PlanStatus,
   PlanTier,
   Restaurant,
@@ -14,11 +17,20 @@ function statusToPlanStatus(status: RestaurantOut["status"]): PlanStatus {
   return status === "ACTIVE" ? "active" : "halted";
 }
 
+export function invoiceFromApi(inv: InvoiceOut): Invoice {
+  return {
+    id: String(inv.id),
+    amount: inv.amount,
+    issued_on: inv.issued_on,
+    paid: inv.paid,
+  };
+}
+
 export function restaurantFromApi(r: RestaurantOut): Restaurant {
   return {
     id: String(r.id),
     name: r.name,
-    plan_tier: (r.plan_tier ?? "starter") as PlanTier,
+    plan_tier: (r.plan_tier ?? "standard") as PlanTier,
     plan_status: statusToPlanStatus(r.status),
     branch_limit: r.branch_limit ?? 0,
     branch_count: 0,
@@ -66,22 +78,13 @@ export function createResultFromApi(result: RestaurantCreateResult): CreateResta
   };
 }
 
-export function billingFromApi(
-  b: {
-    restaurant_id: number;
-    plan_tier: string | null;
-    plan_amount: string | null;
-    next_billing_date: string | null;
-    invoices: unknown[];
-  },
-  restaurant?: Restaurant,
-): BillingSummary {
+export function billingFromApi(b: BillingOut, restaurant?: Restaurant): BillingSummary {
   return {
     restaurant_id: String(b.restaurant_id),
-    plan_tier: (b.plan_tier ?? restaurant?.plan_tier ?? "starter") as PlanTier,
+    plan_tier: (b.plan_tier ?? restaurant?.plan_tier ?? "standard") as PlanTier,
     plan_status: restaurant?.plan_status ?? "active",
     plan_amount: b.plan_amount ?? restaurant?.plan_amount ?? null,
     next_billing_date: b.next_billing_date,
-    invoices: [],
+    invoices: (b.invoices ?? []).map(invoiceFromApi),
   };
 }

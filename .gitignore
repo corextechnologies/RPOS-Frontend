@@ -31,3 +31,5 @@ next-env.d.ts
 !.vscode/extensions.json
 .idea
 my-app/restaurant-os-phase-wise-implementation-plan (1).pdf
+my-app/restaurant-os-frontend-implementation-plan.pdf
+/my-app/docs

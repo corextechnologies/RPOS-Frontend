@@ -3,13 +3,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError } from "@/lib/types/super-admin";
-import { toast } from "sonner";
+import { notifyError } from "@/lib/toast";
 
 function handleQueryError(error: unknown) {
   if (error instanceof ApiError) {
-    toast.error(error.message);
-  } else if (error instanceof Error) {
-    toast.error(error.message);
+    notifyError(error, error.message);
+  } else {
+    notifyError(error);
   }
 }
 
