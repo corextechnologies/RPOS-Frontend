@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  /* Brand — Cyprus / Sand */
+  --color-cyprus-50: #e8f1ef;
+  --color-cyprus-100: #c6dedb;
+  --color-cyprus-200: #8fbfb9;
+  --color-cyprus-300: #4f9a91;
+  --color-cyprus-400: #1c766c;
+  --color-cyprus-500: #005a52;
+  --color-cyprus-600: #004741;
+  --color-cyprus-700: #013a35;
+  --color-cyprus-800: #012b28;
+  --color-cyprus-900: #01201d;
+  --color-cyprus: #004741;
+
+  --color-sand-50: #fbfaf6;
+  --color-sand-100: #f5f2ea;
+  --color-sand-200: #f0ede4;
+  --color-sand-300: #e4dfd0;
+  --color-sand-400: #d3ccb8;
+  --color-sand: #f0ede4;
+
+  /* Semantic tokens wired to CSS variables (theme-switchable) */
+  --color-bg: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-surface-2: rgb(var(--surface-2));
+  --color-line: rgb(var(--line));
+  --color-content: rgb(var(--content));
+  --color-muted: rgb(var(--muted));
+  --color-faint: rgb(var(--faint));
+  --color-brand: rgb(var(--brand));
+  --color-brand-strong: rgb(var(--brand-strong));
+  --color-brand-contrast: rgb(var(--brand-contrast));
+  --color-accent: rgb(var(--accent));
+  --color-positive: rgb(var(--positive));
+  --color-warning: rgb(var(--warning));
+  --color-danger: rgb(var(--danger));
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-grotesk), var(--font-inter), sans-serif;
+
+  --radius-xl: 0.9rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.18);
+  --shadow-lift: 0 24px 60px -24px rgb(0 0 0 / 0.35);
+  --shadow-glow: 0 0 0 1px rgb(var(--brand) / 0.35), 0 12px 40px -12px rgb(var(--brand) / 0.45);
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-spin-slow: spin-slow 14s linear infinite;
+
+  @keyframes fade-up {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes spin-slow {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+
+/* ============================================================
+   RPOS — Design tokens
+   Brand: Cyprus (#004741) / Sand (#F0EDE4)
+   Values are space-separated RGB channels for Tailwind alpha.
+   ============================================================ */
+
+:root {
+  /* Light theme — "Sand" */
+  --bg: 240 237 228; /* #F0EDE4 */
+  --surface: 251 250 246; /* #FBFAF6 */
+  --surface-2: 245 242 234; /* #F5F2EA */
+  --line: 214 208 192; /* #D6D0C0 */
+  --content: 11 31 27; /* #0B1F1B */
+  --muted: 74 92 86; /* #4A5C56 */
+  --faint: 126 138 132; /* #7E8A84 */
+  --brand: 0 71 65; /* #004741 */
+  --brand-contrast: 240 237 228; /* #F0EDE4 */
+  --accent: 28 118 108; /* #1C766C */
+  --positive: 21 128 96; /* #158060 */
+  --warning: 176 122 20; /* #B07A14 */
+  --danger: 176 45 45; /* #B02D2D */
+
+  --glass: 251 250 246;
+  --glass-alpha: 0.72;
+  --ring: 0 71 65; /* Cyprus */
+  --brand-strong: 0 71 65; /* #004741 */
+
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark theme — Black field · Sand type · Cyprus-green accent */
+  --bg: 8 8 8; /* #080808 */
+  --surface: 20 20 19; /* #141413 */
+  --surface-2: 30 30 28; /* #1E1E1C */
+  --line: 42 42 40; /* #2A2A28 */
+  --content: 240 237 228; /* #F0EDE4 */
+  --muted: 176 172 160; /* #B0ACA0 */
+  --faint: 122 118 108; /* #7A766C */
+  --brand: 20 168 140; /* #14A88C */
+  --brand-contrast: 240 237 228; /* #F0EDE4 */
+  --brand-strong: 0 71 65; /* #004741 */
+  --accent: 61 200 168; /* #3DC8A8 */
+  --positive: 74 200 150; /* #4AC896 */
+  --warning: 224 176 72; /* #E0B048 */
+  --danger: 236 116 108; /* #EC746C */
+
+  --glass: 16 16 15;
+  --glass-alpha: 0.6;
+  --ring: 20 168 140; /* #14A88C */
+
+  color-scheme: dark;
+}
+
+* {
+  border-color: rgb(var(--line));
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--content));
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+}
+
+.theme-ready,
+.theme-ready * {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.2s ease,
+    fill 0.2s ease;
+}
+
+@layer components {
+  .glass {
+    background-color: rgb(var(--glass) / var(--glass-alpha));
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid rgb(var(--line) / 0.7);
+  }
+
+  .card {
+    @apply rounded-2xl border bg-surface shadow-soft;
+    border-color: rgb(var(--line));
+  }
+
+  .input-base {
+    @apply w-full rounded-xl border bg-surface-2 px-3.5 py-2.5 text-sm text-content
+      placeholder:text-faint outline-none transition;
+    border-color: rgb(var(--line));
+  }
+  .input-base:focus {
+    border-color: rgb(var(--ring) / 0.9);
+    box-shadow: 0 0 0 3px rgb(var(--ring) / 0.16);
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl
+      text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none
+      disabled:opacity-50;
+  }
+
+  .focus-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--bg)), 0 0 0 4px rgb(var(--ring) / 0.7);
+  }
+
+  .hairline {
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      rgb(var(--line)),
+      transparent
+    );
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--faint));
+  background-clip: content-box;
+}
+
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
