@@ -7,5 +7,6 @@ export const queryKeys = {
   restaurant: (id: string) => ["restaurant", id] as const,
   restaurantStats: ["restaurant-stats"] as const,
   billing: (id: string) => ["billing", id] as const,
+  adminBilling: ["admin-billing"] as const,
   invoices: (id: string) => ["invoices", id] as const,
 };

@@ -25,7 +25,7 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "plans:activate",
     "billing:read",
   ],
-  ADMIN: [],
+  ADMIN: ["billing:read"],
   WAREHOUSE_MANAGER: [],
   KITCHEN_MANAGER: [],
   BRANCH_MANAGER: [],

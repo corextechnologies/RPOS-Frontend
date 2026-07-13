@@ -35,6 +35,7 @@ export interface ApiClient {
   restoreAdminAccess(restaurantId: string): Promise<Restaurant>;
 
   getBilling(restaurantId: string): Promise<BillingSummary>;
+  getMyBilling(): Promise<BillingSummary>;
   listInvoices(restaurantId: string): Promise<Invoice[]>;
   shareInvoice(invoiceId: string): Promise<Invoice>;
   unshareInvoice(invoiceId: string): Promise<Invoice>;

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Settings } from "lucide-react";
+import { LayoutDashboard, Receipt, Settings } from "lucide-react";
 import type { NavSection } from "./types";
 
 export const ADMIN_NAV: NavSection[] = [
@@ -9,6 +9,13 @@ export const ADMIN_NAV: NavSection[] = [
         label: "Dashboard",
         href: "/admin/dashboard",
         icon: LayoutDashboard,
+        match: "exact",
+      },
+      {
+        label: "Billing",
+        href: "/admin/billing",
+        icon: Receipt,
+        action: "billing:read",
         match: "exact",
       },
     ],

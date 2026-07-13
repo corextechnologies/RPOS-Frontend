@@ -3,7 +3,6 @@
  */
 import {
   ApiError,
-  PLAN_AMOUNTS,
   type BillingSummary,
   type ChangePasswordInput,
   type CreateRestaurantInput,
@@ -20,11 +19,20 @@ import {
 } from "@/lib/types/super-admin";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
+import { defaultNextBillingDate, planAmountForTier, planByTier } from "@/lib/plans/catalog";
 import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 2;
+const SEED_VERSION = 4;
+
+interface MockInvoiceRecord {
+  id: number;
+  restaurant_id: string;
+  amount: string;
+  issued_on: string;
+  paid: boolean;
+}
 
 const MOCK_SUPER_ADMIN_EMAIL = apiConfig.mockDemoEmail;
 const MOCK_SUPER_ADMIN_PASSWORD = apiConfig.mockDemoPassword;
@@ -43,7 +51,7 @@ interface MockResetToken {
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
-  invoices: Invoice[];
+  invoices: MockInvoiceRecord[];
   users: MockUserAccount[];
   resetTokens: Record<string, MockResetToken>;
 }
@@ -160,14 +168,28 @@ function seedUsers(): MockUserAccount[] {
   return users;
 }
 
+function invoicesForRestaurant(db: MockDb, restaurantId: string): Invoice[] {
+  return db.invoices
+    .filter((i) => i.restaurant_id === restaurantId)
+    .sort((a, b) => b.issued_on.localeCompare(a.issued_on))
+    .map((i) => ({
+      id: String(i.id),
+      amount: i.amount,
+      issued_on: i.issued_on,
+      paid: i.paid,
+    }));
+}
+
 function seedDb(): MockDb {
   const r1: Restaurant = {
     id: "rest-001",
     name: "Demo Restaurant Group",
-    plan_tier: "growth",
+    plan_tier: "premium",
     plan_status: "active",
     branch_limit: 10,
     branch_count: 4,
+    plan_amount: "499.00",
+    next_billing_date: defaultNextBillingDate(),
     admin: {
       id: "admin-001",
       name: "Alex Rivera",
@@ -186,6 +208,8 @@ function seedDb(): MockDb {
     plan_status: "halted",
     branch_limit: 25,
     branch_count: 8,
+    plan_amount: "999.00",
+    next_billing_date: defaultNextBillingDate(),
     admin: {
       id: "admin-002",
       name: "Jordan Lee",
@@ -200,10 +224,12 @@ function seedDb(): MockDb {
   const r3: Restaurant = {
     id: "rest-003",
     name: "Sunset Bistro",
-    plan_tier: "starter",
+    plan_tier: "standard",
     plan_status: "active",
     branch_limit: 3,
     branch_count: 2,
+    plan_amount: "199.00",
+    next_billing_date: defaultNextBillingDate(),
     admin: {
       id: "admin-003",
       name: "Morgan Chen",
@@ -217,51 +243,41 @@ function seedDb(): MockDb {
 
   const restaurants = [r1, r2, r3];
 
-  const invoices: Invoice[] = [
+  const invoices: MockInvoiceRecord[] = [
     {
-      id: "inv-001",
+      id: 1,
       restaurant_id: "rest-001",
-      amount: PLAN_AMOUNTS.growth,
-      billing_date: addMonths(new Date(), -2).toISOString().slice(0, 10),
-      period: "Jan 2026",
-      shared_with_admin: true,
-      status: "paid",
+      amount: planAmountForTier("premium") ?? "499.00",
+      issued_on: addMonths(new Date(), -2).toISOString().slice(0, 10),
+      paid: true,
     },
     {
-      id: "inv-002",
+      id: 2,
       restaurant_id: "rest-001",
-      amount: PLAN_AMOUNTS.growth,
-      billing_date: addMonths(new Date(), -1).toISOString().slice(0, 10),
-      period: "Feb 2026",
-      shared_with_admin: false,
-      status: "paid",
+      amount: planAmountForTier("premium") ?? "499.00",
+      issued_on: addMonths(new Date(), -1).toISOString().slice(0, 10),
+      paid: true,
     },
     {
-      id: "inv-003",
+      id: 3,
       restaurant_id: "rest-001",
-      amount: PLAN_AMOUNTS.growth,
-      billing_date: new Date().toISOString().slice(0, 10),
-      period: "Mar 2026",
-      shared_with_admin: false,
-      status: "pending",
+      amount: planAmountForTier("premium") ?? "499.00",
+      issued_on: new Date().toISOString().slice(0, 10),
+      paid: false,
     },
     {
-      id: "inv-004",
+      id: 4,
       restaurant_id: "rest-002",
-      amount: PLAN_AMOUNTS.enterprise,
-      billing_date: addMonths(new Date(), -1).toISOString().slice(0, 10),
-      period: "Feb 2026",
-      shared_with_admin: true,
-      status: "overdue",
+      amount: planAmountForTier("enterprise") ?? "999.00",
+      issued_on: addMonths(new Date(), -1).toISOString().slice(0, 10),
+      paid: false,
     },
     {
-      id: "inv-005",
+      id: 5,
       restaurant_id: "rest-003",
-      amount: PLAN_AMOUNTS.starter,
-      billing_date: addMonths(new Date(), -1).toISOString().slice(0, 10),
-      period: "Feb 2026",
-      shared_with_admin: false,
-      status: "paid",
+      amount: planAmountForTier("standard") ?? "199.00",
+      issued_on: addMonths(new Date(), -1).toISOString().slice(0, 10),
+      paid: true,
     },
   ];
 
@@ -469,13 +485,17 @@ export const mockClient: ApiClient = {
     const tempPassword = randomPassword();
     const adminEmail = `admin+${slug}@tenant.ros`;
 
+    const tier = body.plan_tier ?? "standard";
     const restaurant: Restaurant = {
       id,
       name: body.name,
-      plan_tier: body.plan_tier ?? "starter",
+      plan_tier: tier,
       plan_status: "active",
-      branch_limit: Math.max(body.branch_limit ?? 1, 3),
+      branch_limit: body.branch_limit ?? planByTier(tier)?.branchLimit ?? 1,
       branch_count: body.branch_limit ?? 1,
+      plan_amount:
+        body.plan_amount != null ? String(body.plan_amount) : planAmountForTier(tier) ?? null,
+      next_billing_date: body.next_billing_date ?? defaultNextBillingDate(),
       admin: {
         id: adminId,
         name: body.owner_name ?? "",
@@ -490,14 +510,16 @@ export const mockClient: ApiClient = {
     db.restaurants.push(restaurant);
 
     const nextBilling = addMonths(new Date(), 1).toISOString().slice(0, 10);
+    const nextInvoiceId = db.invoices.reduce((max, i) => Math.max(max, i.id), 0) + 1;
     db.invoices.push({
-      id: `inv-${Date.now()}`,
+      id: nextInvoiceId,
       restaurant_id: id,
-      amount: PLAN_AMOUNTS[body.plan_tier as PlanTier],
-      billing_date: nextBilling,
-      period: new Date().toLocaleString("en-US", { month: "short", year: "numeric" }),
-      shared_with_admin: false,
-      status: "pending",
+      amount:
+        body.plan_amount != null
+          ? String(body.plan_amount)
+          : planAmountForTier(tier) ?? "199.00",
+      issued_on: nextBilling,
+      paid: false,
     });
 
     saveDb(db);
@@ -613,8 +635,26 @@ export const mockClient: ApiClient = {
       restaurant_id: r.id,
       plan_tier: r.plan_tier,
       plan_status: r.plan_status,
-      plan_amount: PLAN_AMOUNTS[r.plan_tier],
-      next_billing_date: addMonths(new Date(), 1).toISOString().slice(0, 10),
+      plan_amount: r.plan_amount ?? planAmountForTier(r.plan_tier) ?? "0",
+      next_billing_date: r.next_billing_date ?? addMonths(new Date(), 1).toISOString().slice(0, 10),
+      invoices: invoicesForRestaurant(db, restaurantId),
+    };
+    return delay(summary);
+  },
+
+  async getMyBilling() {
+    const me = requireAuth();
+    const db = loadDb();
+    const restaurant = db.restaurants.find((r) => r.admin.email === me.email);
+    if (!restaurant) throw new ApiError("Restaurant not found", 404);
+    const summary: BillingSummary = {
+      restaurant_id: restaurant.id,
+      plan_tier: restaurant.plan_tier,
+      plan_status: restaurant.plan_status,
+      plan_amount: restaurant.plan_amount ?? planAmountForTier(restaurant.plan_tier) ?? "0",
+      next_billing_date:
+        restaurant.next_billing_date ?? addMonths(new Date(), 1).toISOString().slice(0, 10),
+      invoices: invoicesForRestaurant(db, restaurant.id),
     };
     return delay(summary);
   },
@@ -623,30 +663,14 @@ export const mockClient: ApiClient = {
     requireAuth();
     const db = loadDb();
     findRestaurant(db, restaurantId);
-    return delay(
-      db.invoices
-        .filter((i) => i.restaurant_id === restaurantId)
-        .sort((a, b) => b.billing_date.localeCompare(a.billing_date)),
-    );
+    return delay(invoicesForRestaurant(db, restaurantId));
   },
 
-  async shareInvoice(invoiceId) {
-    requireAuth();
-    const db = loadDb();
-    const inv = db.invoices.find((i) => i.id === invoiceId);
-    if (!inv) throw new ApiError("Invoice not found", 404);
-    inv.shared_with_admin = true;
-    saveDb(db);
-    return delay({ ...inv });
+  async shareInvoice() {
+    throw new ApiError("Invoice sharing is not available", 501);
   },
 
-  async unshareInvoice(invoiceId) {
-    requireAuth();
-    const db = loadDb();
-    const inv = db.invoices.find((i) => i.id === invoiceId);
-    if (!inv) throw new ApiError("Invoice not found", 404);
-    inv.shared_with_admin = false;
-    saveDb(db);
-    return delay({ ...inv });
+  async unshareInvoice() {
+    throw new ApiError("Invoice sharing is not available", 501);
   },
 };
