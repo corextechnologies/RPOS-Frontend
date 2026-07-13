@@ -17,14 +17,15 @@ import {
   type UpdateRestaurantInput,
 } from "@/lib/types/super-admin";
 import type { ApiClient } from "./contract";
+import { apiConfig } from "./config";
 import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
 const SEED_VERSION = 1;
 
-const SUPER_ADMIN_EMAIL = "superadmin@ros.test";
-const SUPER_ADMIN_PASSWORD = "Super@1234";
+const MOCK_SUPER_ADMIN_EMAIL = apiConfig.mockDemoEmail;
+const MOCK_SUPER_ADMIN_PASSWORD = apiConfig.mockDemoPassword;
 
 interface MockDb {
   _seed: number;
@@ -195,10 +196,12 @@ function delay<T>(value: T, ms = 280): Promise<T> {
 function requireAuth(): MeResponse {
   if (typeof window === "undefined") {
     return {
-      id: "sa-1",
-      name: "Super Admin",
-      email: SUPER_ADMIN_EMAIL,
-      role: "super_admin",
+      id: 1,
+      email: MOCK_SUPER_ADMIN_EMAIL,
+      full_name: "Super Admin",
+      role: "SUPER_ADMIN",
+      restaurant_id: null,
+      created_by_id: null,
       is_active: true,
     };
   }
@@ -248,12 +251,19 @@ function findRestaurant(db: MockDb, id: string): Restaurant {
 
 export const mockClient: ApiClient = {
   async login(email, password) {
-    if (email === SUPER_ADMIN_EMAIL && password === SUPER_ADMIN_PASSWORD) {
+    if (
+      MOCK_SUPER_ADMIN_EMAIL &&
+      MOCK_SUPER_ADMIN_PASSWORD &&
+      email === MOCK_SUPER_ADMIN_EMAIL &&
+      password === MOCK_SUPER_ADMIN_PASSWORD
+    ) {
       const me: MeResponse = {
-        id: "sa-1",
-        name: "Super Admin",
-        email: SUPER_ADMIN_EMAIL,
-        role: "super_admin",
+        id: 1,
+        email: MOCK_SUPER_ADMIN_EMAIL,
+        full_name: "Super Admin",
+        role: "SUPER_ADMIN",
+        restaurant_id: null,
+        created_by_id: null,
         is_active: true,
       };
       const tokens_: TokenResponse = {
@@ -310,15 +320,15 @@ export const mockClient: ApiClient = {
     const restaurant: Restaurant = {
       id,
       name: body.name,
-      plan_tier: body.plan_tier,
+      plan_tier: body.plan_tier ?? "starter",
       plan_status: "active",
-      branch_limit: Math.max(body.branch_count, 3),
-      branch_count: body.branch_count,
+      branch_limit: Math.max(body.branch_limit ?? 1, 3),
+      branch_count: body.branch_limit ?? 1,
       admin: {
         id: adminId,
-        name: body.owner_name,
+        name: body.owner_name ?? "",
         email: body.owner_email || adminEmail,
-        phone: body.owner_phone,
+        phone: body.owner_phone ?? "",
         access_status: "active",
       },
       created_at: now(),
@@ -342,11 +352,9 @@ export const mockClient: ApiClient = {
 
     const result: CreateRestaurantResult = {
       restaurant,
-      credentials: {
-        email: restaurant.admin.email,
-        temporary_password: tempPassword,
-        emailed: true,
-      },
+      admin_email: restaurant.admin.email,
+      credential_email_sent: true,
+      temporary_password: tempPassword,
     };
     return delay(result, 400);
   },

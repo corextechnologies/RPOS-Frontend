@@ -10,25 +10,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logomark } from "@/components/icons";
-import { USE_MOCK } from "@/lib/api";
+import { apiConfig, USE_MOCK } from "@/lib/api";
+import { isSuperAdmin } from "@/lib/auth/actions";
 import { ApiError } from "@/lib/types/super-admin";
 import { toast } from "sonner";
-
-const DEMO = [{ label: "Super Admin", email: "superadmin@ros.test", password: "Super@1234" }];
 
 export default function LoginPage() {
   const router = useRouter();
   const { login, user, loading } = useAuth();
 
-  const [email, setEmail] = useState("superadmin@ros.test");
-  const [password, setPassword] = useState("Super@1234");
+  const [email, setEmail] = useState(USE_MOCK ? apiConfig.mockDemoEmail : "");
+  const [password, setPassword] = useState(USE_MOCK ? apiConfig.mockDemoPassword : "");
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const showDemo =
+    USE_MOCK && apiConfig.mockDemoEmail.length > 0 && apiConfig.mockDemoPassword.length > 0;
+
   useEffect(() => {
-    if (!loading && user) {
-      router.replace(user.role === "super_admin" ? "/super-admin/dashboard" : "/login");
+    if (!loading && user && isSuperAdmin(user.role)) {
+      router.replace("/super-admin/dashboard");
     }
   }, [user, loading, router]);
 
@@ -41,8 +43,12 @@ export default function LoginPage() {
       toast.success("Welcome back");
       router.replace(path);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : "Something went wrong";
-      setError(msg);
+      if (err instanceof ApiError && err.code === "restaurant_halted") {
+        setError("This restaurant's plan is currently halted.");
+      } else {
+        const msg = err instanceof ApiError ? err.message : "Something went wrong";
+        setError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -133,7 +139,7 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   className="pl-10"
-                  placeholder="superadmin@ros.test"
+                  placeholder="you@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -178,26 +184,23 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {USE_MOCK && (
+          {showDemo && (
             <div className="mt-8 rounded-2xl border border-line bg-surface-2/60 p-4">
               <p className="mb-2.5 flex items-center gap-1.5 text-xs font-medium text-muted">
                 <Sparkles className="h-3.5 w-3.5 text-brand" />
                 Demo mode
               </p>
               <div className="flex flex-wrap gap-2">
-                {DEMO.map((d) => (
-                  <button
-                    key={d.email}
-                    type="button"
-                    onClick={() => {
-                      setEmail(d.email);
-                      setPassword(d.password);
-                    }}
-                    className="rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-muted transition hover:border-brand/40 hover:text-brand"
-                  >
-                    {d.label}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail(apiConfig.mockDemoEmail);
+                    setPassword(apiConfig.mockDemoPassword);
+                  }}
+                  className="rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-muted transition hover:border-brand/40 hover:text-brand"
+                >
+                  Super Admin
+                </button>
               </div>
             </div>
           )}

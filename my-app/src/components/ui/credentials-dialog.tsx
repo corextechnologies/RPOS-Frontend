@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Mail } from "lucide-react";
+import { Check, Copy, Mail, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,8 @@ interface CredentialsDialogProps {
   onOpenChange: (open: boolean) => void;
   restaurantName: string;
   email: string;
-  temporaryPassword: string;
-  emailed: boolean;
+  temporaryPassword?: string;
+  credentialEmailSent: boolean;
   onDone: () => void;
 }
 
@@ -30,14 +30,15 @@ export function CredentialsDialog({
   restaurantName,
   email,
   temporaryPassword,
-  emailed,
+  credentialEmailSent,
   onDone,
 }: CredentialsDialogProps) {
   const [copied, setCopied] = useState(false);
 
   const copyCredentials = async () => {
-    const text = `Restaurant: ${restaurantName}\nEmail: ${email}\nTemporary password: ${temporaryPassword}`;
-    await navigator.clipboard.writeText(text);
+    const lines = [`Restaurant: ${restaurantName}`, `Email: ${email}`];
+    if (temporaryPassword) lines.push(`Temporary password: ${temporaryPassword}`);
+    await navigator.clipboard.writeText(lines.join("\n"));
     setCopied(true);
     toast.success("Credentials copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
@@ -47,31 +48,40 @@ export function CredentialsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Admin credentials created</DialogTitle>
+          <DialogTitle>Restaurant created</DialogTitle>
           <DialogDescription>
-            Share these credentials with the restaurant admin. They will only be shown once.
+            {temporaryPassword
+              ? "Share these credentials with the restaurant admin. They will only be shown once."
+              : "The admin account has been provisioned. Login credentials were sent by email."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 rounded-xl border border-line bg-surface-2 p-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-faint">Login email</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-faint">Admin login email</p>
             <p className="mt-1 font-mono text-sm text-content">{email}</p>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-faint">Temporary password</p>
-            <p className="mt-1 font-mono text-sm text-content">{temporaryPassword}</p>
-          </div>
-          {emailed && (
+          {temporaryPassword && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-faint">Temporary password</p>
+              <p className="mt-1 font-mono text-sm text-content">{temporaryPassword}</p>
+            </div>
+          )}
+          {credentialEmailSent ? (
             <Badge variant="success" className="gap-1">
               <Mail className="h-3 w-3" />
               Credentials emailed
+            </Badge>
+          ) : (
+            <Badge variant="warning" className="gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              Email could not be sent — share credentials manually
             </Badge>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={copyCredentials}>
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied" : "Copy credentials"}
+            {copied ? "Copied" : "Copy details"}
           </Button>
           <Button
             onClick={() => {

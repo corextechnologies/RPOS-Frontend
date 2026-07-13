@@ -9,6 +9,7 @@ import { ArrowLeft, Receipt, ShieldOff, ShieldCheck, Trash2 } from "lucide-react
 import { updateRestaurantSchema, type UpdateRestaurantForm } from "@/lib/schemas/restaurant";
 import { useRestaurant, useRestaurantMutations } from "@/lib/hooks/use-restaurants";
 import { useAuth } from "@/lib/auth";
+import { USE_MOCK } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,36 +45,50 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
   const form = useForm<UpdateRestaurantForm>({
     resolver: zodResolver(updateRestaurantSchema),
     defaultValues: {
-      name: "",
       plan_tier: "starter",
       branch_limit: 1,
-      owner_name: "",
       owner_email: "",
       owner_phone: "",
+      plan_amount: "",
+      next_billing_date: "",
     },
   });
 
   useEffect(() => {
     if (restaurant.data) {
       form.reset({
-        name: restaurant.data.name,
-        plan_tier: restaurant.data.plan_tier,
+        plan_tier: (restaurant.data.plan_tier as UpdateRestaurantForm["plan_tier"]) ?? "starter",
         branch_limit: restaurant.data.branch_limit,
-        owner_name: restaurant.data.admin.name,
         owner_email: restaurant.data.admin.email,
         owner_phone: restaurant.data.admin.phone,
+        plan_amount: restaurant.data.plan_amount ?? "",
+        next_billing_date: restaurant.data.next_billing_date ?? "",
       });
     }
   }, [restaurant.data, form]);
 
   const onSubmit = async (values: UpdateRestaurantForm) => {
-    if (restaurant.data && values.branch_limit < restaurant.data.branch_count) {
+    if (
+      USE_MOCK &&
+      restaurant.data &&
+      values.branch_limit < restaurant.data.branch_count
+    ) {
       form.setError("branch_limit", {
         message: `Branch limit cannot be below current branch count (${restaurant.data.branch_count})`,
       });
       return;
     }
-    await mutations.updateRestaurant.mutateAsync({ id, body: values });
+    await mutations.updateRestaurant.mutateAsync({
+      id,
+      body: {
+        plan_tier: values.plan_tier,
+        branch_limit: values.branch_limit,
+        owner_email: values.owner_email,
+        owner_phone: values.owner_phone || undefined,
+        plan_amount: values.plan_amount || undefined,
+        next_billing_date: values.next_billing_date || undefined,
+      },
+    });
   };
 
   const handleConfirm = async () => {
@@ -117,9 +132,11 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
             <Badge variant={r.plan_status === "active" ? "success" : "warning"}>
               Plan: {titleCase(r.plan_status)}
             </Badge>
-            <Badge variant={r.admin.access_status === "active" ? "secondary" : "destructive"}>
-              Access: {titleCase(r.admin.access_status)}
-            </Badge>
+            {USE_MOCK && (
+              <Badge variant={r.admin.access_status === "active" ? "secondary" : "destructive"}>
+                Access: {titleCase(r.admin.access_status)}
+              </Badge>
+            )}
           </div>
         </div>
         {can("billing:read") && (
@@ -134,25 +151,12 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
 
       <Card>
         <CardHeader>
-          <CardTitle>Edit restaurant & admin</CardTitle>
-          <CardDescription>Update plan details and admin contact information.</CardDescription>
+          <CardTitle>Edit restaurant</CardTitle>
+          <CardDescription>Update plan details and owner contact information.</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Restaurant name</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -181,11 +185,14 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
                   name="branch_limit"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Branch limit (current: {r.branch_count})</FormLabel>
+                      <FormLabel>
+                        Branch limit
+                        {USE_MOCK && r.branch_count > 0 ? ` (current: ${r.branch_count})` : ""}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           type="number"
-                          min={r.branch_count}
+                          min={USE_MOCK ? r.branch_count : 1}
                           {...field}
                           onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
                         />
@@ -198,12 +205,12 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="owner_name"
+                  name="owner_email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Admin name</FormLabel>
+                      <FormLabel>Owner email</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input type="email" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -214,7 +221,7 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
                   name="owner_phone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Admin phone</FormLabel>
+                      <FormLabel>Owner phone</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -223,19 +230,34 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
                   )}
                 />
               </div>
-              <FormField
-                control={form.control}
-                name="owner_email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Admin email</FormLabel>
-                    <FormControl>
-                      <Input type="email" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="plan_amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Plan amount</FormLabel>
+                      <FormControl>
+                        <Input placeholder="199.00" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="next_billing_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Next billing date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               {can("restaurants:update") && (
                 <div className="flex justify-end">
                   <Button type="submit" disabled={mutations.updateRestaurant.isPending}>
@@ -248,65 +270,71 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Access management</CardTitle>
-          <CardDescription>
-            Revoking access suspends the admin&apos;s login without deleting the restaurant.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          {r.admin.access_status === "active" && can("admins:revoke") && (
-            <Button variant="outline" onClick={() => setConfirm("revoke")}>
-              <ShieldOff className="h-4 w-4" />
-              Revoke access
-            </Button>
-          )}
-          {r.admin.access_status === "revoked" && can("admins:restore") && (
-            <Button variant="outline" onClick={() => setConfirm("restore")}>
-              <ShieldCheck className="h-4 w-4" />
-              Restore access
-            </Button>
-          )}
-          {can("restaurants:delete") && (
-            <Button variant="destructive" onClick={() => setConfirm("delete")}>
-              <Trash2 className="h-4 w-4" />
-              Delete restaurant
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+      {USE_MOCK && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Access management</CardTitle>
+            <CardDescription>
+              Revoking access suspends the admin&apos;s login without deleting the restaurant.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            {r.admin.access_status === "active" && can("admins:revoke") && (
+              <Button variant="outline" onClick={() => setConfirm("revoke")}>
+                <ShieldOff className="h-4 w-4" />
+                Revoke access
+              </Button>
+            )}
+            {r.admin.access_status === "revoked" && can("admins:restore") && (
+              <Button variant="outline" onClick={() => setConfirm("restore")}>
+                <ShieldCheck className="h-4 w-4" />
+                Restore access
+              </Button>
+            )}
+            {can("restaurants:delete") && (
+              <Button variant="destructive" onClick={() => setConfirm("delete")}>
+                <Trash2 className="h-4 w-4" />
+                Delete restaurant
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      <ConfirmDialog
-        open={confirm === "revoke"}
-        onOpenChange={(open) => !open && setConfirm(null)}
-        title="Revoke admin access"
-        description={`Suspend login for ${r.admin.name}? The restaurant will remain but the admin cannot sign in.`}
-        destructive
-        confirmLabel="Revoke access"
-        onConfirm={handleConfirm}
-        loading={mutations.revokeAccess.isPending}
-      />
-      <ConfirmDialog
-        open={confirm === "restore"}
-        onOpenChange={(open) => !open && setConfirm(null)}
-        title="Restore admin access"
-        description={`Restore login access for ${r.admin.name}?`}
-        confirmLabel="Restore access"
-        onConfirm={handleConfirm}
-        loading={mutations.restoreAccess.isPending}
-      />
-      <ConfirmDialog
-        open={confirm === "delete"}
-        onOpenChange={(open) => !open && setConfirm(null)}
-        title="Delete restaurant"
-        description={`Permanently delete ${r.name} and remove its admin. This cannot be undone.`}
-        destructive
-        typeToConfirm={r.name}
-        confirmLabel="Delete"
-        onConfirm={handleConfirm}
-        loading={mutations.deleteRestaurant.isPending}
-      />
+      {USE_MOCK && (
+        <>
+          <ConfirmDialog
+            open={confirm === "revoke"}
+            onOpenChange={(open) => !open && setConfirm(null)}
+            title="Revoke admin access"
+            description={`Suspend login for ${r.admin.name || r.admin.email}? The restaurant will remain but the admin cannot sign in.`}
+            destructive
+            confirmLabel="Revoke access"
+            onConfirm={handleConfirm}
+            loading={mutations.revokeAccess.isPending}
+          />
+          <ConfirmDialog
+            open={confirm === "restore"}
+            onOpenChange={(open) => !open && setConfirm(null)}
+            title="Restore admin access"
+            description={`Restore login access for ${r.admin.name || r.admin.email}?`}
+            confirmLabel="Restore access"
+            onConfirm={handleConfirm}
+            loading={mutations.restoreAccess.isPending}
+          />
+          <ConfirmDialog
+            open={confirm === "delete"}
+            onOpenChange={(open) => !open && setConfirm(null)}
+            title="Delete restaurant"
+            description={`Permanently delete ${r.name} and remove its admin. This cannot be undone.`}
+            destructive
+            typeToConfirm={r.name}
+            confirmLabel="Delete"
+            onConfirm={handleConfirm}
+            loading={mutations.deleteRestaurant.isPending}
+          />
+        </>
+      )}
     </div>
   );
 }
