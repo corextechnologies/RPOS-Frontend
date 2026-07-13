@@ -5,6 +5,25 @@ import { tokens } from "./tokens";
 
 let refreshPromise: Promise<boolean> | null = null;
 
+/** Shared fetch headers — includes ngrok bypass for free-tier tunnels. */
+function buildHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...extra,
+  };
+
+  if (apiConfig.isNgrok) {
+    headers["ngrok-skip-browser-warning"] = "true";
+  }
+
+  const access = tokens.access;
+  if (access) {
+    headers.Authorization = `Bearer ${access}`;
+  }
+
+  return headers;
+}
+
 async function refreshTokens(): Promise<boolean> {
   const refresh = tokens.refresh;
   if (!refresh) return false;
@@ -12,7 +31,7 @@ async function refreshTokens(): Promise<boolean> {
   try {
     const res = await fetch(`${apiConfig.baseUrl}/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: buildHeaders(),
       body: JSON.stringify({ refresh_token: refresh }),
     });
     if (!res.ok) return false;
@@ -39,15 +58,8 @@ export async function request<T>(
   init?: RequestInit,
   retried = false,
 ): Promise<T> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(init?.headers as Record<string, string> | undefined),
-  };
-
-  const access = tokens.access;
-  if (access) {
-    headers.Authorization = `Bearer ${access}`;
-  }
+  const extra = init?.headers as Record<string, string> | undefined;
+  const headers = buildHeaders(extra);
 
   const res = await fetch(`${apiConfig.baseUrl}${path}`, {
     ...init,
