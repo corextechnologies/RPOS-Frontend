@@ -1,21 +1,59 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, queryKeys } from "@/lib/api";
-import type { Restaurant, RestaurantFilters } from "@/lib/types/super-admin";
+import { api, queryKeys, USE_MOCK } from "@/lib/api";
+import type { Restaurant, RestaurantFilters, RestaurantStats } from "@/lib/types/super-admin";
 import { toast } from "sonner";
+
+function computeStats(restaurants: Restaurant[]): RestaurantStats {
+  const active = restaurants.filter((r) => r.plan_status === "active").length;
+  const halted = restaurants.filter((r) => r.plan_status === "halted").length;
+  const revoked = restaurants.filter((r) => r.admin.access_status === "revoked").length;
+  return {
+    total: restaurants.length,
+    active_plans: active,
+    halted,
+    revoked,
+    by_plan_status: { active, halted },
+  };
+}
 
 export function useRestaurantStats() {
   return useQuery({
     queryKey: queryKeys.restaurantStats,
-    queryFn: () => api.getRestaurantStats(),
+    queryFn: async () => {
+      if (USE_MOCK) return api.getRestaurantStats();
+      const restaurants = await api.listRestaurants();
+      return computeStats(restaurants);
+    },
   });
 }
 
 export function useRestaurants(filters?: RestaurantFilters) {
   return useQuery({
     queryKey: queryKeys.restaurants(filters),
-    queryFn: () => api.listRestaurants(filters),
+    queryFn: async () => {
+      const all = await api.listRestaurants();
+      if (!filters) return all;
+
+      let result = [...all];
+      if (filters.search) {
+        const q = filters.search.toLowerCase();
+        result = result.filter(
+          (r) =>
+            r.name.toLowerCase().includes(q) ||
+            r.admin.email.toLowerCase().includes(q) ||
+            r.admin.phone.toLowerCase().includes(q),
+        );
+      }
+      if (filters.plan_status && filters.plan_status !== "all") {
+        result = result.filter((r) => r.plan_status === filters.plan_status);
+      }
+      if (filters.access_status && filters.access_status !== "all") {
+        result = result.filter((r) => r.admin.access_status === filters.access_status);
+      }
+      return result;
+    },
   });
 }
 
@@ -62,22 +100,8 @@ export function useRestaurantMutations() {
   const updateRestaurant = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Parameters<typeof api.updateRestaurant>[1] }) =>
       api.updateRestaurant(id, body),
-    onMutate: async ({ id, body }) => {
-      await qc.cancelQueries({ queryKey: queryKeys.restaurant(id) });
-      const prev = qc.getQueryData(queryKeys.restaurant(id));
-      if (prev) {
-        qc.setQueryData(queryKeys.restaurant(id), {
-          ...prev,
-          ...body,
-          admin: { ...(prev as { admin: object }).admin, ...body },
-        });
-      }
-      return { prev };
-    },
-    onError: (_err, { id }, ctx) => {
-      if (ctx?.prev) qc.setQueryData(queryKeys.restaurant(id), ctx.prev);
-    },
-    onSuccess: () => {
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.restaurant(id) });
       invalidate();
       toast.success("Restaurant updated");
     },
@@ -159,7 +183,7 @@ export function useRestaurantMutations() {
 
   const shareInvoice = useMutation({
     mutationFn: (invoiceId: string) => api.shareInvoice(invoiceId),
-    onSuccess: (_data, invoiceId) => {
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invoices"] });
       toast.success("Invoice shared with admin");
     },
