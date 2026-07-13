@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { initials } from "@/lib/utils";
+import { displayName } from "@/lib/types/super-admin";
 
 const LABELS: Record<string, string> = {
   dashboard: "Restaurants",
@@ -68,9 +69,9 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="gap-2 px-2">
               <span className="grid h-8 w-8 place-items-center rounded-full bg-brand/10 text-xs font-semibold text-brand">
-                {user ? initials(user.name) : "?"}
+                {user ? initials(displayName(user)) : "?"}
               </span>
-              <span className="hidden text-sm font-medium sm:inline">{user?.name}</span>
+              <span className="hidden text-sm font-medium sm:inline">{user ? displayName(user) : ""}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">

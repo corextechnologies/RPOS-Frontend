@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PLAN_AMOUNTS } from "@/lib/types/super-admin";
+import { formatPlanAmount, PLAN_AMOUNTS } from "@/lib/types/super-admin";
 import { titleCase } from "@/lib/utils";
 
 export default function BillingOverviewPage() {
@@ -66,7 +66,11 @@ export default function BillingOverviewPage() {
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{r.name}</TableCell>
                         <TableCell>{titleCase(r.plan_tier)}</TableCell>
-                        <TableCell>${PLAN_AMOUNTS[r.plan_tier]}</TableCell>
+                        <TableCell>
+                          {r.plan_amount != null
+                            ? `$${formatPlanAmount(r.plan_amount)}`
+                            : `$${PLAN_AMOUNTS[r.plan_tier] ?? "—"}`}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={r.plan_status === "active" ? "success" : "warning"}>
                             {titleCase(r.plan_status)}
@@ -92,7 +96,11 @@ export default function BillingOverviewPage() {
                       <div>
                         <p className="font-medium">{r.name}</p>
                         <p className="text-sm text-muted">
-                          {titleCase(r.plan_tier)} · ${PLAN_AMOUNTS[r.plan_tier]}/mo
+                          {titleCase(r.plan_tier)} · $
+                          {r.plan_amount != null
+                            ? formatPlanAmount(r.plan_amount)
+                            : PLAN_AMOUNTS[r.plan_tier] ?? "—"}
+                          /mo
                         </p>
                       </div>
                       <Button variant="outline" size="sm" asChild>

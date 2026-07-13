@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Logomark } from "@/components/icons";
+import { isSuperAdmin } from "@/lib/auth/actions";
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -16,7 +17,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
-    if (!loading && user && user.role !== "super_admin") router.replace("/login");
+    if (!loading && user && !isSuperAdmin(user.role)) router.replace("/login");
   }, [user, loading, router]);
 
   useEffect(() => {

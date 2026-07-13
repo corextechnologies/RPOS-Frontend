@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { USE_MOCK } from "@/lib/api";
+import { displayName } from "@/lib/types/super-admin";
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
@@ -22,9 +23,9 @@ export default function SettingsPage() {
           <CardDescription>Your Super Admin account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p><span className="text-muted">Name:</span> {user?.name}</p>
+          <p><span className="text-muted">Name:</span> {user ? displayName(user) : "—"}</p>
           <p><span className="text-muted">Email:</span> {user?.email}</p>
-          <p><span className="text-muted">Role:</span> Super Admin</p>
+          <p><span className="text-muted">Role:</span> {user?.role ?? "—"}</p>
         </CardContent>
       </Card>
 

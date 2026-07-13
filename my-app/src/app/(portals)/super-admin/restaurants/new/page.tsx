@@ -27,6 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CredentialsDialog } from "@/components/ui/credentials-dialog";
+import { ApiError } from "@/lib/types/super-admin";
+import { toast } from "sonner";
 
 export default function NewRestaurantPage() {
   const router = useRouter();
@@ -34,8 +36,8 @@ export default function NewRestaurantPage() {
   const [credentials, setCredentials] = useState<{
     restaurantName: string;
     email: string;
-    temporaryPassword: string;
-    emailed: boolean;
+    temporaryPassword?: string;
+    credentialEmailSent: boolean;
   } | null>(null);
 
   const form = useForm<CreateRestaurantForm>({
@@ -45,19 +47,40 @@ export default function NewRestaurantPage() {
       owner_name: "",
       owner_email: "",
       owner_phone: "",
-      branch_count: 1,
+      branch_limit: 1,
       plan_tier: "starter",
+      plan_amount: "",
+      next_billing_date: "",
     },
   });
 
   const onSubmit = async (values: CreateRestaurantForm) => {
-    const result = await createRestaurant.mutateAsync(values);
-    setCredentials({
-      restaurantName: result.restaurant.name,
-      email: result.credentials.email,
-      temporaryPassword: result.credentials.temporary_password,
-      emailed: result.credentials.emailed,
-    });
+    try {
+      const result = await createRestaurant.mutateAsync({
+        name: values.name,
+        owner_name: values.owner_name || undefined,
+        owner_email: values.owner_email,
+        owner_phone: values.owner_phone || undefined,
+        branch_limit: values.branch_limit,
+        plan_tier: values.plan_tier,
+        plan_amount: values.plan_amount || undefined,
+        next_billing_date: values.next_billing_date || undefined,
+      });
+      setCredentials({
+        restaurantName: result.restaurant.name,
+        email: result.admin_email,
+        temporaryPassword: result.temporary_password,
+        credentialEmailSent: result.credential_email_sent,
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "conflict") {
+        toast.error("A user with this email already exists.");
+      } else if (err instanceof ApiError) {
+        toast.error(err.message);
+      } else {
+        toast.error("Failed to create restaurant.");
+      }
+    }
   };
 
   return (
@@ -78,7 +101,7 @@ export default function NewRestaurantPage() {
         <CardHeader>
           <CardTitle>Restaurant & admin details</CardTitle>
           <CardDescription>
-            The admin account is created together with the restaurant. Login credentials are generated automatically.
+            The admin account is created together with the restaurant. Owner email becomes the admin login.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -103,7 +126,7 @@ export default function NewRestaurantPage() {
                   name="owner_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Owner name</FormLabel>
+                      <FormLabel>Admin full name</FormLabel>
                       <FormControl>
                         <Input placeholder="Alex Rivera" {...field} />
                       </FormControl>
@@ -130,7 +153,7 @@ export default function NewRestaurantPage() {
                 name="owner_email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Owner email</FormLabel>
+                    <FormLabel>Owner email (admin login)</FormLabel>
                     <FormControl>
                       <Input type="email" placeholder="owner@restaurant.com" {...field} />
                     </FormControl>
@@ -141,10 +164,10 @@ export default function NewRestaurantPage() {
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="branch_count"
+                  name="branch_limit"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Initial branch count</FormLabel>
+                      <FormLabel>Branch limit</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
@@ -163,18 +186,46 @@ export default function NewRestaurantPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Plan tier</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="starter">Starter — $49/mo</SelectItem>
-                          <SelectItem value="growth">Growth — $149/mo</SelectItem>
-                          <SelectItem value="enterprise">Enterprise — $399/mo</SelectItem>
+                          <SelectItem value="starter">Starter</SelectItem>
+                          <SelectItem value="growth">Growth</SelectItem>
+                          <SelectItem value="enterprise">Enterprise</SelectItem>
                         </SelectContent>
                       </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="plan_amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Plan amount</FormLabel>
+                      <FormControl>
+                        <Input placeholder="199.00" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="next_billing_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Next billing date</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} value={field.value ?? ""} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -200,7 +251,7 @@ export default function NewRestaurantPage() {
           restaurantName={credentials.restaurantName}
           email={credentials.email}
           temporaryPassword={credentials.temporaryPassword}
-          emailed={credentials.emailed}
+          credentialEmailSent={credentials.credentialEmailSent}
           onDone={() => router.push("/super-admin/dashboard")}
         />
       )}
