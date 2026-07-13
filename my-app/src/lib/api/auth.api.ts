@@ -1,4 +1,10 @@
-import type { MeResponse, TokenResponse } from "@/lib/types/super-admin";
+import type {
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  MeResponse,
+  ResetPasswordInput,
+  TokenResponse,
+} from "@/lib/types/super-admin";
 import { request } from "./client";
 import { tokens } from "./tokens";
 
@@ -28,5 +34,26 @@ export const authApi = {
     } finally {
       tokens.clear();
     }
+  },
+
+  async forgotPassword(input: ForgotPasswordInput): Promise<void> {
+    await request("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async resetPassword(input: ResetPasswordInput): Promise<void> {
+    await request("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async changePassword(input: ChangePasswordInput): Promise<void> {
+    await request("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
 };

@@ -1,7 +1,6 @@
-export type PlanTier = "starter" | "growth" | "enterprise" | string;
+export type PlanTier = "standard" | "premium" | "enterprise" | string;
 export type PlanStatus = "active" | "halted";
 export type AccessStatus = "active" | "revoked";
-export type InvoiceStatus = "paid" | "pending" | "overdue";
 export type RestaurantStatus = "ACTIVE" | "HALTED";
 
 export type UserRole =
@@ -68,14 +67,29 @@ export interface RestaurantStats {
   by_plan_status: { active: number; halted: number };
 }
 
+/** Raw backend `InvoiceOut` DTO. */
+export interface InvoiceOut {
+  id: number;
+  amount: string;
+  issued_on: string;
+  paid: boolean;
+}
+
+/** Normalized invoice used by UI components. */
 export interface Invoice {
   id: string;
-  restaurant_id: string;
-  amount: number;
-  billing_date: string;
-  period: string;
-  shared_with_admin: boolean;
-  status: InvoiceStatus;
+  amount: string;
+  issued_on: string;
+  paid: boolean;
+}
+
+/** Raw backend `BillingOut` DTO. */
+export interface BillingOut {
+  restaurant_id: number;
+  plan_tier: string | null;
+  plan_amount: string | null;
+  next_billing_date: string | null;
+  invoices: InvoiceOut[];
 }
 
 export interface BillingSummary {
@@ -132,6 +146,22 @@ export interface MeResponse {
   restaurant_id: number | null;
   created_by_id: number | null;
   is_active: boolean;
+  /** When true, user must set a new password before accessing any portal. */
+  must_change_password?: boolean;
+}
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ResetPasswordInput {
+  token: string;
+  password: string;
+}
+
+export interface ChangePasswordInput {
+  current_password: string;
+  new_password: string;
 }
 
 export function displayName(user: MeResponse): string {
@@ -150,9 +180,9 @@ export class ApiError extends Error {
 }
 
 export const PLAN_AMOUNTS: Record<string, number> = {
-  starter: 49,
-  growth: 149,
-  enterprise: 399,
+  standard: 199,
+  premium: 499,
+  enterprise: 999,
 };
 
 export function formatPlanAmount(amount: string | number | null | undefined): string {

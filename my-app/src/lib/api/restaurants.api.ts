@@ -1,4 +1,5 @@
 import type {
+  BillingOut,
   BillingSummary,
   CreateRestaurantInput,
   CreateRestaurantResult,
@@ -66,13 +67,7 @@ export const restaurantsApi = {
 
   async getBilling(restaurantId: string): Promise<BillingSummary> {
     const restaurant = await this.getRestaurant(restaurantId);
-    const data = await request<{
-      restaurant_id: number;
-      plan_tier: string | null;
-      plan_amount: string | null;
-      next_billing_date: string | null;
-      invoices: unknown[];
-    }>(`/super-admin/restaurants/${restaurantId}/billing`);
+    const data = await request<BillingOut>(`/super-admin/restaurants/${restaurantId}/billing`);
     return billingFromApi(data, restaurant);
   },
 
@@ -98,10 +93,10 @@ export const restaurantsApi = {
   },
 
   async shareInvoice(_invoiceId: string): Promise<never> {
-    throw new ApiError("Invoice sharing not available until Phase 8", 501);
+    throw new ApiError("Invoice sharing is not available", 501);
   },
 
   async unshareInvoice(_invoiceId: string): Promise<never> {
-    throw new ApiError("Invoice sharing not available until Phase 8", 501);
+    throw new ApiError("Invoice sharing is not available", 501);
   },
 };

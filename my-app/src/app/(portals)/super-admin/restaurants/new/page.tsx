@@ -6,8 +6,15 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { createRestaurantSchema, type CreateRestaurantForm } from "@/lib/schemas/restaurant";
+import {
+  createRestaurantDefaults,
+  createRestaurantSchema,
+  type CreateRestaurantForm,
+} from "@/lib/schemas/restaurant";
+import { applyPlanOnCreate } from "@/lib/plans/apply-plan";
 import { useRestaurantMutations } from "@/lib/hooks/use-restaurants";
+import { PlanDetailsCard } from "@/components/plans/PlanDetailsCard";
+import { PlanTierSelect } from "@/components/plans/PlanTierSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,13 +26,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { CredentialsDialog } from "@/components/ui/credentials-dialog";
 import { ApiError } from "@/lib/types/super-admin";
 import { toast } from "sonner";
@@ -42,17 +42,21 @@ export default function NewRestaurantPage() {
 
   const form = useForm<CreateRestaurantForm>({
     resolver: zodResolver(createRestaurantSchema),
-    defaultValues: {
-      name: "",
-      owner_name: "",
-      owner_email: "",
-      owner_phone: "",
-      branch_limit: 1,
-      plan_tier: "starter",
-      plan_amount: "",
-      next_billing_date: "",
-    },
+    defaultValues: createRestaurantDefaults,
   });
+
+  const planTier = form.watch("plan_tier");
+  const planAmount = form.watch("plan_amount");
+  const branchLimit = form.watch("branch_limit");
+  const nextBillingDate = form.watch("next_billing_date");
+
+  const handlePlanChange = (tier: string) => {
+    const fields = applyPlanOnCreate(tier);
+    form.setValue("plan_tier", fields.plan_tier as CreateRestaurantForm["plan_tier"]);
+    form.setValue("plan_amount", fields.plan_amount);
+    form.setValue("branch_limit", fields.branch_limit);
+    form.setValue("next_billing_date", fields.next_billing_date);
+  };
 
   const onSubmit = async (values: CreateRestaurantForm) => {
     try {
@@ -63,8 +67,8 @@ export default function NewRestaurantPage() {
         owner_phone: values.owner_phone || undefined,
         branch_limit: values.branch_limit,
         plan_tier: values.plan_tier,
-        plan_amount: values.plan_amount || undefined,
-        next_billing_date: values.next_billing_date || undefined,
+        plan_amount: values.plan_amount,
+        next_billing_date: values.next_billing_date,
       });
       setCredentials({
         restaurantName: result.restaurant.name,
@@ -161,76 +165,34 @@ export default function NewRestaurantPage() {
                   </FormItem>
                 )}
               />
-              <div className="grid gap-5 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="branch_limit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Branch limit</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.valueAsNumber || 1)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="plan_tier"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Plan tier</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="growth">Growth</SelectItem>
-                          <SelectItem value="enterprise">Enterprise</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="plan_amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Plan amount</FormLabel>
-                      <FormControl>
-                        <Input placeholder="199.00" {...field} value={field.value ?? ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="next_billing_date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Next billing date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} value={field.value ?? ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+
+              <FormField
+                control={form.control}
+                name="plan_tier"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Plan</FormLabel>
+                    <FormControl>
+                      <PlanTierSelect
+                        value={field.value}
+                        onValueChange={(tier) => {
+                          field.onChange(tier);
+                          handlePlanChange(tier);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <PlanDetailsCard
+                planTier={planTier}
+                planAmount={planAmount}
+                branchLimit={branchLimit}
+                nextBillingDate={nextBillingDate}
+              />
+
               <div className="flex justify-end gap-3 pt-2">
                 <Button type="button" variant="outline" asChild>
                   <Link href="/super-admin/dashboard">Cancel</Link>

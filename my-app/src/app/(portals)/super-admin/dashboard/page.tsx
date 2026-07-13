@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bar,
   BarChart,
@@ -163,6 +164,7 @@ function RestaurantMobileCard({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { can } = useAuth();
   const canAction = (action: string) => {
     if (!USE_MOCK && MOCK_ONLY_ACTIONS.includes(action as (typeof MOCK_ONLY_ACTIONS)[number])) {
@@ -219,11 +221,11 @@ export default function DashboardPage() {
 
   const handleAction = (action: string, restaurant: Restaurant) => {
     if (action === "edit") {
-      window.location.href = `/super-admin/restaurants/${restaurant.id}`;
+      router.push(`/super-admin/restaurants/${restaurant.id}`);
       return;
     }
     if (action === "billing") {
-      window.location.href = `/super-admin/restaurants/${restaurant.id}/billing`;
+      router.push(`/super-admin/restaurants/${restaurant.id}/billing`);
       return;
     }
     setConfirm({ type: action, restaurant });

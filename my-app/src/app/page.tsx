@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { portalPathForRole } from "@/lib/auth/actions";
+import { AUTH_ROUTES, postAuthPath } from "@/lib/auth/actions";
 import { Logomark } from "@/components/icons";
 
 export default function Home() {
@@ -12,7 +12,7 @@ export default function Home() {
 
   useEffect(() => {
     if (loading) return;
-    router.replace(user ? portalPathForRole(user.role) : "/login");
+    router.replace(user ? postAuthPath(user) : AUTH_ROUTES.login);
   }, [user, loading, router]);
 
   return (

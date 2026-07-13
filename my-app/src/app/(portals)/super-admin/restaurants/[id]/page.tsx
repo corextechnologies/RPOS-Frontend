@@ -7,9 +7,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { ArrowLeft, Receipt, ShieldOff, ShieldCheck, Trash2 } from "lucide-react";
 import { updateRestaurantSchema, type UpdateRestaurantForm } from "@/lib/schemas/restaurant";
+import { applyPlanOnEdit, resolvePlanTier } from "@/lib/plans/apply-plan";
+import { DEFAULT_PLAN_TIER } from "@/lib/plans/catalog";
 import { useRestaurant, useRestaurantMutations } from "@/lib/hooks/use-restaurants";
 import { useAuth } from "@/lib/auth";
 import { USE_MOCK } from "@/lib/api";
+import { PlanDetailsCard } from "@/components/plans/PlanDetailsCard";
+import { PlanTierSelect } from "@/components/plans/PlanTierSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,13 +29,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { titleCase } from "@/lib/utils";
 
 export default function EditRestaurantPage({ params }: { params: Promise<{ id: string }> }) {
@@ -45,7 +42,7 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
   const form = useForm<UpdateRestaurantForm>({
     resolver: zodResolver(updateRestaurantSchema),
     defaultValues: {
-      plan_tier: "starter",
+      plan_tier: DEFAULT_PLAN_TIER,
       branch_limit: 1,
       owner_email: "",
       owner_phone: "",
@@ -54,10 +51,16 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
     },
   });
 
+  const planTier = form.watch("plan_tier");
+  const planAmount = form.watch("plan_amount");
+  const branchLimit = form.watch("branch_limit");
+  const nextBillingDate = form.watch("next_billing_date");
+
   useEffect(() => {
     if (restaurant.data) {
+      const tier = resolvePlanTier(restaurant.data.plan_tier);
       form.reset({
-        plan_tier: (restaurant.data.plan_tier as UpdateRestaurantForm["plan_tier"]) ?? "starter",
+        plan_tier: tier,
         branch_limit: restaurant.data.branch_limit,
         owner_email: restaurant.data.admin.email,
         owner_phone: restaurant.data.admin.phone,
@@ -66,6 +69,13 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
       });
     }
   }, [restaurant.data, form]);
+
+  const handlePlanChange = (tier: string) => {
+    const fields = applyPlanOnEdit(tier, form.getValues("next_billing_date"));
+    form.setValue("plan_tier", fields.plan_tier as UpdateRestaurantForm["plan_tier"]);
+    form.setValue("plan_amount", fields.plan_amount);
+    form.setValue("branch_limit", fields.branch_limit);
+  };
 
   const onSubmit = async (values: UpdateRestaurantForm) => {
     if (
@@ -157,51 +167,33 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-              <div className="grid gap-5 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="plan_tier"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Plan tier</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="growth">Growth</SelectItem>
-                          <SelectItem value="enterprise">Enterprise</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="branch_limit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Branch limit
-                        {USE_MOCK && r.branch_count > 0 ? ` (current: ${r.branch_count})` : ""}
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={USE_MOCK ? r.branch_count : 1}
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={form.control}
+                name="plan_tier"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Plan</FormLabel>
+                    <FormControl>
+                      <PlanTierSelect
+                        value={field.value}
+                        onValueChange={(tier) => {
+                          field.onChange(tier);
+                          handlePlanChange(tier);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <PlanDetailsCard
+                planTier={planTier}
+                planAmount={planAmount}
+                branchLimit={branchLimit}
+                nextBillingDate={nextBillingDate}
+              />
+
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -224,34 +216,6 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
                       <FormLabel>Owner phone</FormLabel>
                       <FormControl>
                         <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid gap-5 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="plan_amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Plan amount</FormLabel>
-                      <FormControl>
-                        <Input placeholder="199.00" {...field} value={field.value ?? ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="next_billing_date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Next billing date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
