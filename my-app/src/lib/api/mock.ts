@@ -1,6 +1,7 @@
 /**
  * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
+import type { Branch, CreateLocationInput } from "@/lib/types/admin";
 import {
   ApiError,
   type BillingSummary,
@@ -24,7 +25,7 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 4;
+const SEED_VERSION = 6;
 
 interface MockInvoiceRecord {
   id: number;
@@ -54,6 +55,7 @@ interface MockDb {
   invoices: MockInvoiceRecord[];
   users: MockUserAccount[];
   resetTokens: Record<string, MockResetToken>;
+  branches: Branch[];
 }
 
 const now = () => new Date().toISOString();
@@ -204,8 +206,8 @@ function seedDb(): MockDb {
     name: "Demo Restaurant Group",
     plan_tier: "premium",
     plan_status: "active",
-    branch_limit: 10,
-    branch_count: 4,
+    branch_limit: 2,
+    branch_count: 1,
     plan_amount: "499.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
@@ -261,6 +263,16 @@ function seedDb(): MockDb {
 
   const restaurants = [r1, r2, r3];
 
+  const branches: Branch[] = [
+    {
+      id: "br-001",
+      restaurant_id: "rest-001",
+      name: "Downtown Branch",
+      location: "City Center",
+      created_at: now(),
+    },
+  ];
+
   const invoices: MockInvoiceRecord[] = [
     {
       id: 1,
@@ -299,7 +311,7 @@ function seedDb(): MockDb {
     },
   ];
 
-  return { _seed: SEED_VERSION, restaurants, invoices, users: seedUsers(), resetTokens: {} };
+  return { _seed: SEED_VERSION, restaurants, invoices, users: seedUsers(), resetTokens: {}, branches };
 }
 
 function loadDb(): MockDb {
@@ -385,6 +397,12 @@ function computeStats(restaurants: Restaurant[]): RestaurantStats {
 
 function findRestaurant(db: MockDb, id: string): Restaurant {
   const r = db.restaurants.find((x) => x.id === id);
+  if (!r) throw new ApiError("Restaurant not found", 404);
+  return r;
+}
+
+function resolveMyRestaurant(db: MockDb, me: MeResponse): Restaurant {
+  const r = db.restaurants.find((x) => x.admin.email === me.email);
   if (!r) throw new ApiError("Restaurant not found", 404);
   return r;
 }
@@ -788,5 +806,33 @@ export const mockClient: ApiClient = {
 
   async unshareInvoice() {
     throw new ApiError("Invoice sharing is not available", 501);
+  },
+
+  async listBranches() {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(db.branches.filter((b) => b.restaurant_id === r.id));
+  },
+
+  async createBranch(body: CreateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const count = db.branches.filter((b) => b.restaurant_id === r.id).length;
+    if (count >= r.branch_limit) {
+      throw new ApiError("Branch limit reached for your plan", 409, "branch_limit_reached");
+    }
+    const branch: Branch = {
+      id: `br-${Date.now()}`,
+      restaurant_id: r.id,
+      name: body.name,
+      location: body.location ?? null,
+      created_at: now(),
+    };
+    db.branches.push(branch);
+    r.branch_count = count + 1;
+    saveDb(db);
+    return delay(branch);
   },
 };

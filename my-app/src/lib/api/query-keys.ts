@@ -9,4 +9,5 @@ export const queryKeys = {
   billing: (id: string) => ["billing", id] as const,
   adminBilling: ["admin-billing"] as const,
   invoices: (id: string) => ["invoices", id] as const,
+  branches: ["admin-branches"] as const,
 };

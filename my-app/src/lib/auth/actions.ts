@@ -8,7 +8,21 @@ export type AuthAction =
   | "admins:revoke"
   | "admins:restore"
   | "billing:read"
-  | "billing:share";
+  | "billing:share"
+  // Admin (Phase 2)
+  | "branches:read"
+  | "branches:create"
+  | "kitchens:read"
+  | "kitchens:create"
+  | "warehouses:read"
+  | "warehouses:create"
+  | "employees:read"
+  | "users:create"
+  | "pricing:read"
+  | "pricing:update"
+  | "requests:read"
+  | "requests:update"
+  | "overview:read";
 
 import type { UserRole } from "@/lib/types/super-admin";
 
@@ -25,7 +39,22 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "plans:activate",
     "billing:read",
   ],
-  ADMIN: ["billing:read"],
+  ADMIN: [
+    "billing:read",
+    "branches:read",
+    "branches:create",
+    "kitchens:read",
+    "kitchens:create",
+    "warehouses:read",
+    "warehouses:create",
+    "employees:read",
+    "users:create",
+    "pricing:read",
+    "pricing:update",
+    "requests:read",
+    "requests:update",
+    "overview:read",
+  ],
   WAREHOUSE_MANAGER: [],
   KITCHEN_MANAGER: [],
   BRANCH_MANAGER: [],
