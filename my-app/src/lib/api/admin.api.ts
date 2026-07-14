@@ -4,11 +4,14 @@ import type {
   CreateAdminUserInput,
   CreateAdminUserResult,
   CreateLocationInput,
+  CreateSaleInput,
   Employee,
   Kitchen,
   Paginated,
   ProductPricing,
   RequestFilters,
+  SalesRecord,
+  SalesRecordFilters,
   StockRequest,
   UpdateAdminProfileInput,
   UpdateAdminUserInput,
@@ -31,6 +34,16 @@ function normalizeEmployee(e: Employee): Employee {
     branch_id: e.branch_id != null ? String(e.branch_id) : e.branch_id,
     kitchen_id: e.kitchen_id != null ? String(e.kitchen_id) : e.kitchen_id,
     warehouse_id: e.warehouse_id != null ? String(e.warehouse_id) : e.warehouse_id,
+  };
+}
+
+function normalizeSale(s: SalesRecord): SalesRecord {
+  return {
+    ...s,
+    id: String(s.id),
+    restaurant_id: String(s.restaurant_id),
+    branch_id: s.branch_id != null ? String(s.branch_id) : s.branch_id,
+    amount: String(s.amount),
   };
 }
 
@@ -369,5 +382,27 @@ export const adminApi = {
       body: JSON.stringify(body),
     });
     return normalizeStockRequest(data);
+  },
+
+  async recordSale(body: CreateSaleInput): Promise<SalesRecord> {
+    const data = await request<SalesRecord>("/admin/sales", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    return normalizeSale(data);
+  },
+
+  async listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>> {
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 50;
+    const qs = new URLSearchParams({
+      page: String(page),
+      page_size: String(page_size),
+    });
+    if (filters?.branch_id) qs.set("branch_id", filters.branch_id);
+    const { data, meta } = await adminGetEnvelope<SalesRecord[] | Paginated<SalesRecord>>(
+      `/admin/sales/records?${qs.toString()}`,
+    );
+    return toPaginated(data, normalizeSale, meta, page, page_size);
   },
 };

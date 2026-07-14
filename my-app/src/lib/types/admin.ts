@@ -80,6 +80,29 @@ export interface UpdateAdminProfileInput {
   image_url?: string;
 }
 
+export interface SalesRecord {
+  id: string;
+  restaurant_id: string;
+  branch_id?: string | null;
+  amount: string;
+  occurred_at: string;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface CreateSaleInput {
+  amount: string | number;
+  occurred_at?: string;
+  branch_id?: string;
+  note?: string;
+}
+
+export interface SalesRecordFilters {
+  branch_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export interface Employee {
   id: string;
   email: string;

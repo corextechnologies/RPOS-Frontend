@@ -12,6 +12,9 @@ import type {
   Paginated,
   ProductPricing,
   RequestFilters,
+  SalesRecord,
+  SalesRecordFilters,
+  CreateSaleInput,
   StockRequest,
   UpdateAdminProfileInput,
   UpdateAdminUserInput,
@@ -50,7 +53,7 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 10;
+const SEED_VERSION = 11;
 
 interface MockInvoiceRecord {
   id: number;
@@ -99,6 +102,7 @@ interface MockDb {
   employees: MockEmployee[];
   products: MockProduct[];
   requests: MockStockRequest[];
+  sales: SalesRecord[];
 }
 
 const now = () => new Date().toISOString();
@@ -562,6 +566,48 @@ function seedDb(): MockDb {
     },
   ];
 
+  const daysAgo = (n: number) =>
+    new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+
+  const sales: SalesRecord[] = [
+    {
+      id: "sale-001",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      amount: "420.00",
+      occurred_at: daysAgo(0),
+      note: "Dinner service",
+      created_at: daysAgo(0),
+    },
+    {
+      id: "sale-002",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      amount: "185.50",
+      occurred_at: daysAgo(1),
+      note: "Lunch service",
+      created_at: daysAgo(1),
+    },
+    {
+      id: "sale-003",
+      restaurant_id: "rest-001",
+      branch_id: null,
+      amount: "96.75",
+      occurred_at: daysAgo(2),
+      note: "Takeaway counter",
+      created_at: daysAgo(2),
+    },
+    {
+      id: "sale-004",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      amount: "512.20",
+      occurred_at: daysAgo(5),
+      note: null,
+      created_at: daysAgo(5),
+    },
+  ];
+
   return {
     _seed: SEED_VERSION,
     restaurants,
@@ -574,6 +620,7 @@ function seedDb(): MockDb {
     employees,
     products,
     requests,
+    sales,
   };
 }
 
@@ -1538,6 +1585,58 @@ export const mockClient: ApiClient = {
       role: account.me.role,
     };
     return delay(profile);
+  },
+
+  async recordSale(body: CreateSaleInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const amountNum = typeof body.amount === "string" ? parseFloat(body.amount) : body.amount;
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      throw new ApiError("Amount must be greater than 0", 422);
+    }
+    let branchId: string | null = null;
+    if (body.branch_id) {
+      const branch = db.branches.find(
+        (b) => b.id === body.branch_id && b.restaurant_id === r.id,
+      );
+      if (!branch) throw new ApiError("Branch not found", 404);
+      branchId = branch.id;
+    }
+    const sale: SalesRecord = {
+      id: `sale-${Date.now()}`,
+      restaurant_id: r.id,
+      branch_id: branchId,
+      amount: amountNum.toFixed(2),
+      occurred_at: body.occurred_at ?? now(),
+      note: body.note?.trim() || null,
+      created_at: now(),
+    };
+    db.sales.push(sale);
+    saveDb(db);
+    return delay(sale);
+  },
+
+  async listSalesRecords(filters?: SalesRecordFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 50;
+    let rows = db.sales.filter((s) => s.restaurant_id === r.id);
+    if (filters?.branch_id) {
+      rows = rows.filter((s) => s.branch_id === filters.branch_id);
+    }
+    rows = [...rows].sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+    const start = (page - 1) * page_size;
+    const items = rows.slice(start, start + page_size);
+    const result: Paginated<SalesRecord> = {
+      items,
+      page,
+      page_size,
+      total: rows.length,
+    };
+    return delay(result);
   },
 
   async listProductPricing() {

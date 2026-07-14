@@ -4,11 +4,14 @@ import type {
   CreateAdminUserInput,
   CreateAdminUserResult,
   CreateLocationInput,
+  CreateSaleInput,
   Employee,
   Kitchen,
   Paginated,
   ProductPricing,
   RequestFilters,
+  SalesRecord,
+  SalesRecordFilters,
   StockRequest,
   UpdateAdminProfileInput,
   UpdateAdminUserInput,
@@ -95,6 +98,9 @@ export interface ApiClient {
 
   getAdminSettings(): Promise<AdminProfile>;
   updateAdminSettings(body: UpdateAdminProfileInput): Promise<AdminProfile>;
+
+  recordSale(body: CreateSaleInput): Promise<SalesRecord>;
+  listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>>;
 
   listProductPricing(): Promise<ProductPricing[]>;
   updateProductPricing(
