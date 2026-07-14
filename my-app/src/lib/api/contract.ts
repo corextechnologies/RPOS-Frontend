@@ -36,8 +36,6 @@ import type {
   BillingCycleResult,
 } from "@/lib/types/super-admin";
 
-import type { Branch, CreateLocationInput } from "@/lib/types/admin";
-
 export interface ApiClient {
   login(email: string, password: string): Promise<TokenResponse>;
   me(): Promise<MeResponse>;

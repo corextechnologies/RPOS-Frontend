@@ -231,7 +231,7 @@ export default function NewEmployeePage() {
                   <FormItem>
                     <FormLabel>{locationLabel}</FormLabel>
                     <Select
-                      value={field.value || undefined}
+                      value={field.value ?? ""}
                       onValueChange={field.onChange}
                       disabled={locationOptions.length === 0}
                     >
