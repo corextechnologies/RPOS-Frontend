@@ -9,6 +9,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateAdminUserInput,
   UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
@@ -273,6 +274,14 @@ export const adminApi = {
       ...data,
       user_id: String(data.user_id),
     };
+  },
+
+  async updateUser(id: string, body: UpdateAdminUserInput): Promise<Employee> {
+    const data = await request<Employee>(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return normalizeEmployee(data);
   },
 
   async listProductPricing(): Promise<ProductPricing[]> {

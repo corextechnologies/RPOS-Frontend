@@ -59,6 +59,14 @@ export interface CreateAdminUserResult {
   temporary_password?: string;
 }
 
+export interface UpdateAdminUserInput {
+  full_name?: string;
+  is_active?: boolean;
+  branch_id?: string;
+  kitchen_id?: string;
+  warehouse_id?: string;
+}
+
 export interface Employee {
   id: string;
   email: string;

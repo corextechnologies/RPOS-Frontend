@@ -9,6 +9,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateAdminUserInput,
   UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
@@ -85,6 +86,7 @@ export interface ApiClient {
 
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
   createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
+  updateUser(id: string, body: UpdateAdminUserInput): Promise<Employee>;
 
   listProductPricing(): Promise<ProductPricing[]>;
   updateProductPricing(

@@ -12,6 +12,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateAdminUserInput,
   UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
@@ -1391,6 +1392,68 @@ export const mockClient: ApiClient = {
       temporary_password: tempPassword,
     };
     return delay(result, 400);
+  },
+
+  async updateUser(id: string, body: UpdateAdminUserInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+
+    if (body.branch_id !== undefined) {
+      if (employee.role !== "BRANCH_MANAGER") {
+        throw new ApiError("branch_id is only valid for a branch manager", 409, "conflict");
+      }
+      const branch = db.branches.find((b) => b.id === body.branch_id && b.restaurant_id === r.id);
+      if (!branch) throw new ApiError("Branch not found", 404);
+      employee.branch_id = branch.id;
+    }
+    if (body.kitchen_id !== undefined) {
+      if (employee.role !== "KITCHEN_MANAGER") {
+        throw new ApiError("kitchen_id is only valid for a kitchen manager", 409, "conflict");
+      }
+      const kitchen = db.kitchens.find((k) => k.id === body.kitchen_id && k.restaurant_id === r.id);
+      if (!kitchen) throw new ApiError("Kitchen not found", 404);
+      employee.kitchen_id = kitchen.id;
+    }
+    if (body.warehouse_id !== undefined) {
+      if (employee.role !== "WAREHOUSE_MANAGER") {
+        throw new ApiError("warehouse_id is only valid for a warehouse manager", 409, "conflict");
+      }
+      const warehouse = db.warehouses.find(
+        (w) => w.id === body.warehouse_id && w.restaurant_id === r.id,
+      );
+      if (!warehouse) throw new ApiError("Warehouse not found", 404);
+      employee.warehouse_id = warehouse.id;
+    }
+
+    if (body.full_name !== undefined) employee.full_name = body.full_name.trim();
+    if (body.is_active !== undefined) employee.is_active = body.is_active;
+
+    const account = findUser(db, employee.email);
+    if (account) {
+      account.me = {
+        ...account.me,
+        full_name: employee.full_name,
+        is_active: employee.is_active,
+      };
+    }
+
+    saveDb(db);
+
+    const updated: Employee = {
+      id: employee.id,
+      email: employee.email,
+      full_name: employee.full_name,
+      role: employee.role,
+      is_active: employee.is_active,
+      branch_id: employee.branch_id,
+      kitchen_id: employee.kitchen_id,
+      warehouse_id: employee.warehouse_id,
+      created_at: employee.created_at,
+    };
+    return delay(updated);
   },
 
   async listProductPricing() {

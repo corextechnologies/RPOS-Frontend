@@ -1,7 +1,15 @@
 "use client";
 
+import { MoreHorizontal, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import {
@@ -21,6 +29,7 @@ interface EmployeeListProps {
   isError: boolean;
   onRetry?: () => void;
   locationLabel: (employee: Employee) => string;
+  onEdit?: (id: string) => void;
 }
 
 export function EmployeeList({
@@ -29,7 +38,10 @@ export function EmployeeList({
   isError,
   onRetry,
   locationLabel,
+  onEdit,
 }: EmployeeListProps) {
+  const showActions = Boolean(onEdit);
+
   if (isLoading) {
     return (
       <Card>
@@ -77,6 +89,7 @@ export function EmployeeList({
               <TableHead>Active</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Created</TableHead>
+              {showActions && <TableHead className="w-[72px]" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -98,6 +111,24 @@ export function EmployeeList({
                 <TableCell className="text-muted">
                   {employee.created_at ? formatDate(employee.created_at) : "—"}
                 </TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Actions">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {onEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(employee.id)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

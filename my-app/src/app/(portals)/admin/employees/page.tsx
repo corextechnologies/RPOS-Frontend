@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { EmployeeList } from "@/components/admin/employees/EmployeeList";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locatio
 import type { Employee } from "@/lib/types/admin";
 
 export default function AdminEmployeesPage() {
+  const router = useRouter();
   const { can } = useAuth();
   const [page, setPage] = useState(1);
   const employees = useEmployees(page);
@@ -68,6 +70,11 @@ export default function AdminEmployeesPage() {
         isError={employees.isError}
         onRetry={() => employees.refetch()}
         locationLabel={locationLabel}
+        onEdit={
+          can("users:create")
+            ? (id) => router.push(`/admin/employees/${id}/edit`)
+            : undefined
+        }
       />
 
       {total > pageSize && (
