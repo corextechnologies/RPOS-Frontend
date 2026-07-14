@@ -1,4 +1,19 @@
 import type {
+  Branch,
+  CreateAdminUserInput,
+  CreateAdminUserResult,
+  CreateLocationInput,
+  Employee,
+  Kitchen,
+  Paginated,
+  ProductPricing,
+  RequestFilters,
+  StockRequest,
+  UpdateProductPricingInput,
+  UpdateRequestStatusInput,
+  Warehouse,
+} from "@/lib/types/admin";
+import type {
   IncomeForecast,
   IncomeForecastHorizon,
   IncomePeriodFilter,
@@ -20,8 +35,6 @@ import type {
   UpdateRestaurantInput,
   BillingCycleResult,
 } from "@/lib/types/super-admin";
-
-import type { Branch, CreateLocationInput } from "@/lib/types/admin";
 
 export interface ApiClient {
   login(email: string, password: string): Promise<TokenResponse>;
@@ -58,8 +71,29 @@ export interface ApiClient {
 
   listBranches(): Promise<Branch[]>;
   createBranch(body: CreateLocationInput): Promise<Branch>;
+  listKitchens(): Promise<Kitchen[]>;
+  createKitchen(body: CreateLocationInput): Promise<Kitchen>;
+  listWarehouses(): Promise<Warehouse[]>;
+  createWarehouse(body: CreateLocationInput): Promise<Warehouse>;
 
+  listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
+  createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
+
+  listProductPricing(): Promise<ProductPricing[]>;
+  updateProductPricing(
+    productId: string,
+    body: UpdateProductPricingInput,
+  ): Promise<ProductPricing>;
+
+  listProductRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
+  listDistributionRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
+  getRequest(requestId: string): Promise<StockRequest>;
+  updateRequestStatus(
+    requestId: string,
+    body: UpdateRequestStatusInput,
+  ): Promise<StockRequest>;
   getIncomeSummary(filter: IncomePeriodFilter): Promise<IncomeSummary>;
   getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
   downloadIncomeCsv(filter: IncomePeriodFilter): Promise<string>;
+
 }

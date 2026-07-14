@@ -1,7 +1,21 @@
 /**
  * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
-import type { Branch, CreateLocationInput } from "@/lib/types/admin";
+import type {
+  Branch,
+  CreateAdminUserInput,
+  CreateAdminUserResult,
+  CreateLocationInput,
+  Employee,
+  Kitchen,
+  Paginated,
+  ProductPricing,
+  RequestFilters,
+  StockRequest,
+  UpdateProductPricingInput,
+  UpdateRequestStatusInput,
+  Warehouse,
+} from "@/lib/types/admin";
 import {
   ApiError,
   type BillingSummary,
@@ -17,6 +31,7 @@ import {
   type RestaurantFilters,
   type RestaurantStats,
   type TokenResponse,
+  type UserRole,
 } from "@/lib/types/super-admin";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
@@ -27,10 +42,11 @@ import {
   buildMockIncomeSummary,
 } from "./mock-income";
 import { tokens } from "./tokens";
+import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 5;
+const SEED_VERSION = 10;
 
 interface MockInvoiceRecord {
   id: number;
@@ -54,6 +70,18 @@ interface MockResetToken {
   expires: number;
 }
 
+interface MockEmployee extends Employee {
+  restaurant_id: string;
+}
+
+interface MockProduct extends ProductPricing {
+  restaurant_id: string;
+}
+
+interface MockStockRequest extends StockRequest {
+  restaurant_id: string;
+}
+
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
@@ -61,6 +89,11 @@ interface MockDb {
   users: MockUserAccount[];
   resetTokens: Record<string, MockResetToken>;
   branches: Branch[];
+  kitchens: Kitchen[];
+  warehouses: Warehouse[];
+  employees: MockEmployee[];
+  products: MockProduct[];
+  requests: MockStockRequest[];
 }
 
 const now = () => new Date().toISOString();
@@ -290,6 +323,66 @@ function seedDb(): MockDb {
     },
   ];
 
+  const kitchens: Kitchen[] = [
+    {
+      id: "kit-001",
+      restaurant_id: "rest-001",
+      name: "Central Kitchen",
+      location: "Prep Floor",
+      created_at: now(),
+    },
+  ];
+
+  const warehouses: Warehouse[] = [
+    {
+      id: "wh-001",
+      restaurant_id: "rest-001",
+      name: "Main Warehouse",
+      location: "Storage Block A",
+      created_at: now(),
+    },
+  ];
+
+  const created = now();
+  const employees: MockEmployee[] = [
+    {
+      id: "emp-003",
+      restaurant_id: "rest-001",
+      email: "warehouse@demo.ros",
+      full_name: "Sam Warehouse",
+      role: "WAREHOUSE_MANAGER",
+      is_active: true,
+      warehouse_id: "wh-001",
+      branch_id: null,
+      kitchen_id: null,
+      created_at: created,
+    },
+    {
+      id: "emp-004",
+      restaurant_id: "rest-001",
+      email: "kitchen@demo.ros",
+      full_name: "Casey Kitchen",
+      role: "KITCHEN_MANAGER",
+      is_active: true,
+      kitchen_id: "kit-001",
+      branch_id: null,
+      warehouse_id: null,
+      created_at: created,
+    },
+    {
+      id: "emp-005",
+      restaurant_id: "rest-001",
+      email: "branch@demo.ros",
+      full_name: "Riley Branch",
+      role: "BRANCH_MANAGER",
+      is_active: true,
+      branch_id: "br-001",
+      kitchen_id: null,
+      warehouse_id: null,
+      created_at: created,
+    },
+  ];
+
   const invoices: MockInvoiceRecord[] = [
     {
       id: 1,
@@ -328,7 +421,155 @@ function seedDb(): MockDb {
     },
   ];
 
-  return { _seed: SEED_VERSION, restaurants, invoices, users: seedUsers(), resetTokens: {}, branches };
+  const products: MockProduct[] = [
+    {
+      id: "prod-001",
+      restaurant_id: "rest-001",
+      name: "House Blend Coffee Beans",
+      sku: "BN-COF-001",
+      cost_price: "18.50",
+    },
+    {
+      id: "prod-002",
+      restaurant_id: "rest-001",
+      name: "Tomato Sauce (Can)",
+      sku: "ING-TOM-02",
+      cost_price: null,
+    },
+    {
+      id: "prod-003",
+      restaurant_id: "rest-001",
+      name: "Mozzarella Block",
+      sku: "DAI-MOZ-10",
+      cost_price: "9.75",
+    },
+    {
+      id: "prod-004",
+      restaurant_id: "rest-001",
+      name: "Paper Napkins (Pack)",
+      sku: "SUP-NAP-50",
+      cost_price: null,
+    },
+  ];
+
+  const requestCreated = now();
+  const requests: MockStockRequest[] = [
+    {
+      id: "req-001",
+      restaurant_id: "rest-001",
+      type: "BRANCH_TO_ADMIN",
+      status: "PENDING",
+      notes: "Need restock for weekend rush",
+      from_label: "Downtown Branch",
+      created_at: requestCreated,
+      line_items: [
+        {
+          id: "li-001",
+          product_id: "prod-001",
+          product_name: "House Blend Coffee Beans",
+          quantity_requested: 10,
+        },
+        {
+          id: "li-002",
+          product_id: "prod-003",
+          product_name: "Mozzarella Block",
+          quantity_requested: 6,
+        },
+      ],
+    },
+    {
+      id: "req-002",
+      restaurant_id: "rest-001",
+      type: "BRANCH_TO_ADMIN",
+      status: "PENDING",
+      notes: null,
+      from_label: "Downtown Branch",
+      created_at: requestCreated,
+      line_items: [
+        {
+          id: "li-003",
+          product_id: "prod-002",
+          product_name: "Tomato Sauce (Can)",
+          quantity_requested: 24,
+        },
+      ],
+    },
+    {
+      id: "req-003",
+      restaurant_id: "rest-001",
+      type: "BRANCH_TO_ADMIN",
+      status: "APPROVED",
+      notes: "Approved earlier this week",
+      from_label: "Downtown Branch",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      line_items: [
+        {
+          id: "li-004",
+          product_id: "prod-004",
+          product_name: "Paper Napkins (Pack)",
+          quantity_requested: 15,
+          quantity_approved: 15,
+        },
+      ],
+    },
+    {
+      id: "req-004",
+      restaurant_id: "rest-001",
+      type: "WAREHOUSE_TO_ADMIN_PO",
+      status: "PENDING",
+      notes: "PO for dry goods replenishment",
+      from_label: "Main Warehouse",
+      created_at: requestCreated,
+      line_items: [
+        {
+          id: "li-005",
+          product_id: "prod-001",
+          product_name: "House Blend Coffee Beans",
+          quantity_requested: 40,
+        },
+        {
+          id: "li-006",
+          product_id: "prod-002",
+          product_name: "Tomato Sauce (Can)",
+          quantity_requested: 60,
+        },
+      ],
+    },
+    {
+      id: "req-005",
+      restaurant_id: "rest-001",
+      type: "WAREHOUSE_TO_ADMIN_PO",
+      status: "PARTIALLY_APPROVED",
+      notes: "Partial for budget control",
+      from_label: "Main Warehouse",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      line_items: [
+        {
+          id: "li-007",
+          product_id: "prod-003",
+          product_name: "Mozzarella Block",
+          quantity_requested: 20,
+          quantity_approved: 12,
+        },
+      ],
+    },
+  ];
+
+  return {
+    _seed: SEED_VERSION,
+    restaurants,
+    invoices,
+    users: seedUsers(),
+    resetTokens: {},
+    branches,
+    kitchens,
+    warehouses,
+    employees,
+    products,
+    requests,
+  };
 }
 
 function loadDb(): MockDb {
@@ -422,6 +663,40 @@ function resolveMyRestaurant(db: MockDb, me: MeResponse): Restaurant {
   const r = db.restaurants.find((x) => x.admin.email === me.email);
   if (!r) throw new ApiError("Restaurant not found", 404);
   return r;
+}
+
+function toPublicRequest(req: MockStockRequest): StockRequest {
+  return {
+    id: req.id,
+    type: req.type,
+    status: req.status,
+    notes: req.notes,
+    from_label: req.from_label,
+    line_items: req.line_items,
+    created_at: req.created_at,
+    updated_at: req.updated_at,
+  };
+}
+
+function paginateRequests(
+  db: MockDb,
+  restaurantId: string,
+  type: StockRequest["type"],
+  filters?: RequestFilters,
+): Paginated<StockRequest> {
+  const page = filters?.page ?? 1;
+  const page_size = filters?.page_size ?? 20;
+  let rows = db.requests.filter((req) => req.restaurant_id === restaurantId && req.type === type);
+  if (filters?.status && filters.status !== "all") {
+    rows = rows.filter((req) => req.status === filters.status);
+  }
+  const start = (page - 1) * page_size;
+  return {
+    items: rows.slice(start, start + page_size).map(toPublicRequest),
+    page,
+    page_size,
+    total: rows.length,
+  };
 }
 
 function findUser(db: MockDb, email: string): MockUserAccount | undefined {
@@ -882,5 +1157,291 @@ export const mockClient: ApiClient = {
     r.branch_count = count + 1;
     saveDb(db);
     return delay(branch);
+  },
+
+  async listKitchens() {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(db.kitchens.filter((k) => k.restaurant_id === r.id));
+  },
+
+  async createKitchen(body: CreateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const kitchen: Kitchen = {
+      id: `kit-${Date.now()}`,
+      restaurant_id: r.id,
+      name: body.name,
+      location: body.location ?? null,
+      created_at: now(),
+    };
+    db.kitchens.push(kitchen);
+    saveDb(db);
+    return delay(kitchen);
+  },
+
+  async listWarehouses() {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(db.warehouses.filter((w) => w.restaurant_id === r.id));
+  },
+
+  async createWarehouse(body: CreateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const warehouse: Warehouse = {
+      id: `wh-${Date.now()}`,
+      restaurant_id: r.id,
+      name: body.name,
+      location: body.location ?? null,
+      created_at: now(),
+    };
+    db.warehouses.push(warehouse);
+    saveDb(db);
+    return delay(warehouse);
+  },
+
+  async listEmployees(params) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const page = params?.page ?? 1;
+    const page_size = params?.page_size ?? 20;
+    const all = db.employees.filter((e) => e.restaurant_id === r.id);
+    const start = (page - 1) * page_size;
+    const items: Employee[] = all.slice(start, start + page_size).map((e) => ({
+      id: e.id,
+      email: e.email,
+      full_name: e.full_name,
+      role: e.role,
+      is_active: e.is_active,
+      branch_id: e.branch_id,
+      kitchen_id: e.kitchen_id,
+      warehouse_id: e.warehouse_id,
+      created_at: e.created_at,
+    }));
+    const result: Paginated<Employee> = {
+      items,
+      page,
+      page_size,
+      total: all.length,
+    };
+    return delay(result);
+  },
+
+  async createUser(body: CreateAdminUserInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+
+    const allowedRoles = ["BRANCH_MANAGER", "KITCHEN_MANAGER", "WAREHOUSE_MANAGER"] as const;
+    if (!allowedRoles.includes(body.role)) {
+      throw new ApiError("Cannot create this role", 400);
+    }
+
+    const email = body.email.trim().toLowerCase();
+    if (findUser(db, email)) {
+      throw new ApiError("A user with this email already exists", 409, "conflict");
+    }
+
+    let branchId: string | null = null;
+    let kitchenId: string | null = null;
+    let warehouseId: string | null = null;
+
+    if (body.role === "BRANCH_MANAGER") {
+      if (!body.branch_id) throw new ApiError("branch_id is required for BRANCH_MANAGER", 400);
+      const branch = db.branches.find(
+        (b) => b.id === body.branch_id && b.restaurant_id === r.id,
+      );
+      if (!branch) throw new ApiError("Branch not found", 404);
+      branchId = branch.id;
+    } else if (body.role === "KITCHEN_MANAGER") {
+      if (!body.kitchen_id) throw new ApiError("kitchen_id is required for KITCHEN_MANAGER", 400);
+      const kitchen = db.kitchens.find(
+        (k) => k.id === body.kitchen_id && k.restaurant_id === r.id,
+      );
+      if (!kitchen) throw new ApiError("Kitchen not found", 404);
+      kitchenId = kitchen.id;
+    } else {
+      if (!body.warehouse_id) {
+        throw new ApiError("warehouse_id is required for WAREHOUSE_MANAGER", 400);
+      }
+      const warehouse = db.warehouses.find(
+        (w) => w.id === body.warehouse_id && w.restaurant_id === r.id,
+      );
+      if (!warehouse) throw new ApiError("Warehouse not found", 404);
+      warehouseId = warehouse.id;
+    }
+
+    const tempPassword = randomPassword();
+    const nextId =
+      db.users.reduce((max, u) => Math.max(max, typeof u.me.id === "number" ? u.me.id : 0), 0) + 1;
+    const userId = String(nextId);
+    const role = body.role as UserRole;
+
+    db.users.push({
+      email,
+      password: tempPassword,
+      me: {
+        id: nextId,
+        email,
+        full_name: body.full_name.trim(),
+        role,
+        restaurant_id: me.restaurant_id ?? 1,
+        created_by_id: me.id,
+        is_active: true,
+      },
+    });
+
+    db.employees.push({
+      id: `emp-${nextId}`,
+      restaurant_id: r.id,
+      email,
+      full_name: body.full_name.trim(),
+      role: body.role,
+      is_active: true,
+      branch_id: branchId,
+      kitchen_id: kitchenId,
+      warehouse_id: warehouseId,
+      created_at: now(),
+    });
+
+    saveDb(db);
+
+    const result: CreateAdminUserResult = {
+      user_id: userId,
+      email,
+      role: body.role,
+      credential_email_sent: true,
+      temporary_password: tempPassword,
+    };
+    return delay(result, 400);
+  },
+
+  async listProductPricing() {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const items: ProductPricing[] = db.products
+      .filter((p) => p.restaurant_id === r.id)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        cost_price: p.cost_price,
+      }));
+    return delay(items);
+  },
+
+  async updateProductPricing(productId: string, body: UpdateProductPricingInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const product = db.products.find((p) => p.id === productId && p.restaurant_id === r.id);
+    if (!product) throw new ApiError("Product not found", 404);
+
+    const raw = typeof body.cost_price === "number" ? body.cost_price : Number(body.cost_price);
+    if (!Number.isFinite(raw) || raw < 0) {
+      throw new ApiError("cost_price must be 0 or greater", 400);
+    }
+
+    product.cost_price = raw.toFixed(2);
+    saveDb(db);
+
+    const result: ProductPricing = {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      cost_price: product.cost_price,
+    };
+    return delay(result);
+  },
+
+  async listProductRequests(filters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(paginateRequests(db, r.id, "BRANCH_TO_ADMIN", filters));
+  },
+
+  async listDistributionRequests(filters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(paginateRequests(db, r.id, "WAREHOUSE_TO_ADMIN_PO", filters));
+  },
+
+  async getRequest(requestId) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.requests.find((req) => req.id === requestId && req.restaurant_id === r.id);
+    if (!found) throw new ApiError("Request not found", 404);
+    if (found.type !== "BRANCH_TO_ADMIN" && found.type !== "WAREHOUSE_TO_ADMIN_PO") {
+      throw new ApiError("Request not found", 404);
+    }
+    return delay(toPublicRequest(found));
+  },
+
+  async updateRequestStatus(requestId: string, body: UpdateRequestStatusInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.requests.find((req) => req.id === requestId && req.restaurant_id === r.id);
+    if (!found) throw new ApiError("Request not found", 404);
+    if (found.type !== "BRANCH_TO_ADMIN" && found.type !== "WAREHOUSE_TO_ADMIN_PO") {
+      throw new ApiError("Request not found", 404);
+    }
+
+    const allowed = allowedTransitions(found.type, found.status);
+    if (!allowed.includes(body.to_status)) {
+      throw new ApiError(
+        `Cannot transition from ${found.status} to ${body.to_status}`,
+        400,
+      );
+    }
+
+    if (body.to_status === "PARTIALLY_APPROVED") {
+      const approvals = body.line_approvals ?? [];
+      if (approvals.length === 0) {
+        throw new ApiError("line_approvals are required for partial approval", 400);
+      }
+      for (const approval of approvals) {
+        const line = found.line_items.find((item) => item.id === approval.line_id);
+        if (!line) {
+          throw new ApiError(`Line item ${approval.line_id} not found`, 400);
+        }
+        if (
+          !Number.isFinite(approval.quantity_approved) ||
+          approval.quantity_approved < 0 ||
+          approval.quantity_approved > line.quantity_requested
+        ) {
+          throw new ApiError(
+            `Invalid quantity_approved for line ${approval.line_id}`,
+            400,
+          );
+        }
+        line.quantity_approved = approval.quantity_approved;
+      }
+    }
+
+    if (body.to_status === "APPROVED") {
+      found.line_items = found.line_items.map((line) => ({
+        ...line,
+        quantity_approved: line.quantity_approved ?? line.quantity_requested,
+      }));
+    }
+
+    found.status = body.to_status;
+    if (body.notes !== undefined) {
+      found.notes = body.notes;
+    }
+    found.updated_at = now();
+    saveDb(db);
+    return delay(toPublicRequest(found));
   },
 };
