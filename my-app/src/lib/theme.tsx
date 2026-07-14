@@ -12,6 +12,9 @@ type Theme = "light" | "dark";
 
 interface ThemeContextValue {
   theme: Theme;
+  /** False until after the first client paint. Theme-dependent UI should treat
+   *  the theme as unknown until this flips, to avoid hydration mismatches. */
+  mounted: boolean;
   toggle: () => void;
   setTheme: (t: Theme) => void;
 }
@@ -27,8 +30,13 @@ function readTheme(): Theme {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(readTheme);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // The pre-hydration inline script already set the theme class on <html>;
+    // sync React state to it and flag that client-only UI can now render.
+    setThemeState(readTheme());
+    setMounted(true);
     const root = document.documentElement;
     requestAnimationFrame(() => root.classList.add("theme-ready"));
   }, []);
@@ -49,7 +57,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle, setTheme: apply }}>
+    <ThemeContext.Provider value={{ theme, mounted, toggle, setTheme: apply }}>
       {children}
     </ThemeContext.Provider>
   );

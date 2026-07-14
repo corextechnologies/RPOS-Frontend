@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme";
 import { themeInitScript } from "@/lib/theme-init-script";
+import { InlineScript } from "@/components/inline-script";
 import { AuthProvider } from "@/lib/auth";
 import { QueryProvider } from "@/lib/query-provider";
 
@@ -40,10 +41,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script
-          suppressHydrationWarning
-          dangerouslySetInnerHTML={{ __html: themeInitScript }}
-        />
+        <InlineScript html={themeInitScript} />
       </head>
       <body className={`${inter.variable} ${grotesk.variable} font-sans antialiased`}>
         <ThemeProvider>

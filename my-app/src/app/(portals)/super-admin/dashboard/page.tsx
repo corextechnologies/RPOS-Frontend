@@ -2,16 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import {
   Building2,
   MoreHorizontal,
@@ -59,6 +51,16 @@ import { MOCK_ONLY_ACTIONS } from "@/lib/auth/actions";
 import type { Restaurant, RestaurantFilters } from "@/lib/types/super-admin";
 import { titleCase } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+
+// Lazy-load the chart (recharts) so it stays out of the dashboard's initial
+// bundle; a skeleton fills the fixed-height card while it streams in.
+const PlanStatusChart = dynamic(
+  () => import("@/components/dashboard/PlanStatusChart").then((m) => m.PlanStatusChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-full w-full rounded-xl" />,
+  },
+);
 
 function StatCard({
   label,
@@ -279,23 +281,7 @@ export default function DashboardPage() {
             <CardTitle className="text-base">Plan status overview</CardTitle>
           </CardHeader>
           <CardContent className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--line))" />
-                <XAxis dataKey="name" tick={{ fill: "rgb(var(--muted))", fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fill: "rgb(var(--muted))", fontSize: 12 }} />
-                <Tooltip
-                  cursor={{ fill: "transparent" }}
-                  contentStyle={{
-                    background: "rgb(var(--surface))",
-                    border: "1px solid rgb(var(--line))",
-                    borderRadius: "0.75rem",
-                    color: "rgb(var(--content))",
-                  }}
-                />
-                <Bar dataKey="count" fill="rgb(var(--brand))" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <PlanStatusChart data={chartData} />
           </CardContent>
         </Card>
       )}

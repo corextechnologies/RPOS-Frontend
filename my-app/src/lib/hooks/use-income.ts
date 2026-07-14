@@ -8,7 +8,6 @@ import {
   type IncomeInvoiceExportRow,
   type IncomeOnboardingExportRow,
 } from "@/lib/income/report-model";
-import { downloadIncomePdfReport } from "@/lib/income/download-pdf";
 import type {
   IncomeForecast,
   IncomeForecastHorizon,
@@ -183,6 +182,9 @@ export async function downloadIncomeStyledReport(
     tables.invoices,
     tables.onboardings.length ? tables.onboardings : undefined,
   );
+  // Lazy-load the PDF generator (jspdf) only when a report is actually exported,
+  // so it stays out of the eager bundle for every page that imports this hook.
+  const { downloadIncomePdfReport } = await import("@/lib/income/download-pdf");
   downloadIncomePdfReport(model);
 }
 

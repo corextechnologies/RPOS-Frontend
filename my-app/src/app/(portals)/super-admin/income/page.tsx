@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Download, FileSpreadsheet, FileText } from "lucide-react";
-import { IncomeCharts } from "@/components/income/IncomeCharts";
 import { IncomeKpiCard, moneyLabel } from "@/components/income/IncomeKpis";
 import { IncomeRestaurantTable } from "@/components/income/IncomeRestaurantTable";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,23 @@ import {
 } from "@/lib/types/income";
 import { ApiError } from "@/lib/types/super-admin";
 import { toast } from "sonner";
+
+// Lazy-load the charts (recharts) so the library is fetched only when this page
+// renders, instead of being bundled into the initial JS. Layout matches the
+// real chart grid so there's no layout shift while it streams in.
+const IncomeCharts = dynamic(
+  () => import("@/components/income/IncomeCharts").then((m) => m.IncomeCharts),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Skeleton className="h-72 rounded-2xl lg:col-span-2" />
+        <Skeleton className="h-64 rounded-2xl" />
+        <Skeleton className="h-64 rounded-2xl" />
+      </div>
+    ),
+  },
+);
 
 type FilterMode = "month" | "range";
 
