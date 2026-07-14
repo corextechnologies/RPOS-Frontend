@@ -1,3 +1,4 @@
+import type { Branch, CreateLocationInput } from "@/lib/types/admin";
 import type {
   BillingSummary,
   ChangePasswordInput,
@@ -39,4 +40,7 @@ export interface ApiClient {
   listInvoices(restaurantId: string): Promise<Invoice[]>;
   shareInvoice(invoiceId: string): Promise<Invoice>;
   unshareInvoice(invoiceId: string): Promise<Invoice>;
+
+  listBranches(): Promise<Branch[]>;
+  createBranch(body: CreateLocationInput): Promise<Branch>;
 }
