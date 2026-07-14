@@ -1,4 +1,4 @@
-import type { Branch, CreateLocationInput } from "@/lib/types/admin";
+import type { Branch, CreateLocationInput, Kitchen, Warehouse } from "@/lib/types/admin";
 import type {
   BillingSummary,
   ChangePasswordInput,
@@ -43,4 +43,8 @@ export interface ApiClient {
 
   listBranches(): Promise<Branch[]>;
   createBranch(body: CreateLocationInput): Promise<Branch>;
+  listKitchens(): Promise<Kitchen[]>;
+  createKitchen(body: CreateLocationInput): Promise<Kitchen>;
+  listWarehouses(): Promise<Warehouse[]>;
+  createWarehouse(body: CreateLocationInput): Promise<Warehouse>;
 }

@@ -1,7 +1,7 @@
 /**
  * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
-import type { Branch, CreateLocationInput } from "@/lib/types/admin";
+import type { Branch, CreateLocationInput, Kitchen, Warehouse } from "@/lib/types/admin";
 import {
   ApiError,
   type BillingSummary,
@@ -25,7 +25,7 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 6;
+const SEED_VERSION = 7;
 
 interface MockInvoiceRecord {
   id: number;
@@ -56,6 +56,8 @@ interface MockDb {
   users: MockUserAccount[];
   resetTokens: Record<string, MockResetToken>;
   branches: Branch[];
+  kitchens: Kitchen[];
+  warehouses: Warehouse[];
 }
 
 const now = () => new Date().toISOString();
@@ -255,6 +257,26 @@ function seedDb(): MockDb {
     },
   ];
 
+  const kitchens: Kitchen[] = [
+    {
+      id: "kit-001",
+      restaurant_id: "rest-001",
+      name: "Central Kitchen",
+      location: "Prep Floor",
+      created_at: now(),
+    },
+  ];
+
+  const warehouses: Warehouse[] = [
+    {
+      id: "wh-001",
+      restaurant_id: "rest-001",
+      name: "Main Warehouse",
+      location: "Storage Block A",
+      created_at: now(),
+    },
+  ];
+
   const invoices: MockInvoiceRecord[] = [
     {
       id: 1,
@@ -293,7 +315,16 @@ function seedDb(): MockDb {
     },
   ];
 
-  return { _seed: SEED_VERSION, restaurants, invoices, users: seedUsers(), resetTokens: {}, branches };
+  return {
+    _seed: SEED_VERSION,
+    restaurants,
+    invoices,
+    users: seedUsers(),
+    resetTokens: {},
+    branches,
+    kitchens,
+    warehouses,
+  };
 }
 
 function loadDb(): MockDb {
@@ -718,5 +749,51 @@ export const mockClient: ApiClient = {
     r.branch_count = count + 1;
     saveDb(db);
     return delay(branch);
+  },
+
+  async listKitchens() {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(db.kitchens.filter((k) => k.restaurant_id === r.id));
+  },
+
+  async createKitchen(body: CreateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const kitchen: Kitchen = {
+      id: `kit-${Date.now()}`,
+      restaurant_id: r.id,
+      name: body.name,
+      location: body.location ?? null,
+      created_at: now(),
+    };
+    db.kitchens.push(kitchen);
+    saveDb(db);
+    return delay(kitchen);
+  },
+
+  async listWarehouses() {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(db.warehouses.filter((w) => w.restaurant_id === r.id));
+  },
+
+  async createWarehouse(body: CreateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const warehouse: Warehouse = {
+      id: `wh-${Date.now()}`,
+      restaurant_id: r.id,
+      name: body.name,
+      location: body.location ?? null,
+      created_at: now(),
+    };
+    db.warehouses.push(warehouse);
+    saveDb(db);
+    return delay(warehouse);
   },
 };
