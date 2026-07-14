@@ -10,6 +10,7 @@ import type {
   RequestFilters,
   StockRequest,
   UpdateProductPricingInput,
+  UpdateRequestStatusInput,
   Warehouse,
 } from "@/lib/types/admin";
 import type { BillingOut, BillingSummary } from "@/lib/types/super-admin";
@@ -269,6 +270,17 @@ export const adminApi = {
 
   async getRequest(requestId: string): Promise<StockRequest> {
     const data = await request<StockRequest>(`/admin/requests/${requestId}`);
+    return normalizeStockRequest(data);
+  },
+
+  async updateRequestStatus(
+    requestId: string,
+    body: UpdateRequestStatusInput,
+  ): Promise<StockRequest> {
+    const data = await request<StockRequest>(`/admin/requests/${requestId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
     return normalizeStockRequest(data);
   },
 };

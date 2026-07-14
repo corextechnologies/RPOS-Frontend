@@ -3,16 +3,20 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { RequestActionPanel } from "@/components/admin/requests/RequestActionPanel";
 import { RequestDetail } from "@/components/admin/requests/RequestDetail";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/state";
-import { useRequest } from "@/lib/hooks/use-requests";
+import { useAuth } from "@/lib/auth";
+import { useRequest, useUpdateRequestStatus } from "@/lib/hooks/use-requests";
 
 export default function AdminRequestDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const { can } = useAuth();
   const request = useRequest(id);
+  const updateStatus = useUpdateRequestStatus(id);
 
   if (request.isLoading) {
     return (
@@ -53,11 +57,20 @@ export default function AdminRequestDetailPage() {
           <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
             Request
           </h1>
-          <p className="text-sm text-muted">Read-only view of request details and line items.</p>
+          <p className="text-sm text-muted">Review and act on this request.</p>
         </div>
       </div>
 
       <RequestDetail request={request.data} />
+
+      <RequestActionPanel
+        request={request.data}
+        canUpdate={can("requests:update")}
+        isSubmitting={updateStatus.isPending}
+        onSubmit={async (body) => {
+          await updateStatus.mutateAsync(body);
+        }}
+      />
     </div>
   );
 }

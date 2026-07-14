@@ -13,6 +13,7 @@ import type {
   RequestFilters,
   StockRequest,
   UpdateProductPricingInput,
+  UpdateRequestStatusInput,
   Warehouse,
 } from "@/lib/types/admin";
 import {
@@ -36,6 +37,7 @@ import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
 import { defaultNextBillingDate, planAmountForTier, planByTier } from "@/lib/plans/catalog";
 import { tokens } from "./tokens";
+import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
@@ -1218,6 +1220,64 @@ export const mockClient: ApiClient = {
     if (found.type !== "BRANCH_TO_ADMIN" && found.type !== "WAREHOUSE_TO_ADMIN_PO") {
       throw new ApiError("Request not found", 404);
     }
+    return delay(toPublicRequest(found));
+  },
+
+  async updateRequestStatus(requestId: string, body: UpdateRequestStatusInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.requests.find((req) => req.id === requestId && req.restaurant_id === r.id);
+    if (!found) throw new ApiError("Request not found", 404);
+    if (found.type !== "BRANCH_TO_ADMIN" && found.type !== "WAREHOUSE_TO_ADMIN_PO") {
+      throw new ApiError("Request not found", 404);
+    }
+
+    const allowed = allowedTransitions(found.type, found.status);
+    if (!allowed.includes(body.to_status)) {
+      throw new ApiError(
+        `Cannot transition from ${found.status} to ${body.to_status}`,
+        400,
+      );
+    }
+
+    if (body.to_status === "PARTIALLY_APPROVED") {
+      const approvals = body.line_approvals ?? [];
+      if (approvals.length === 0) {
+        throw new ApiError("line_approvals are required for partial approval", 400);
+      }
+      for (const approval of approvals) {
+        const line = found.line_items.find((item) => item.id === approval.line_id);
+        if (!line) {
+          throw new ApiError(`Line item ${approval.line_id} not found`, 400);
+        }
+        if (
+          !Number.isFinite(approval.quantity_approved) ||
+          approval.quantity_approved < 0 ||
+          approval.quantity_approved > line.quantity_requested
+        ) {
+          throw new ApiError(
+            `Invalid quantity_approved for line ${approval.line_id}`,
+            400,
+          );
+        }
+        line.quantity_approved = approval.quantity_approved;
+      }
+    }
+
+    if (body.to_status === "APPROVED") {
+      found.line_items = found.line_items.map((line) => ({
+        ...line,
+        quantity_approved: line.quantity_approved ?? line.quantity_requested,
+      }));
+    }
+
+    found.status = body.to_status;
+    if (body.notes !== undefined) {
+      found.notes = body.notes;
+    }
+    found.updated_at = now();
+    saveDb(db);
     return delay(toPublicRequest(found));
   },
 };

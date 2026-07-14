@@ -10,6 +10,7 @@ import type {
   RequestFilters,
   StockRequest,
   UpdateProductPricingInput,
+  UpdateRequestStatusInput,
   Warehouse,
 } from "@/lib/types/admin";
 import type {
@@ -73,4 +74,8 @@ export interface ApiClient {
   listProductRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
   listDistributionRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
   getRequest(requestId: string): Promise<StockRequest>;
+  updateRequestStatus(
+    requestId: string,
+    body: UpdateRequestStatusInput,
+  ): Promise<StockRequest>;
 }
