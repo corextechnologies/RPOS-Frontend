@@ -10,6 +10,11 @@ import type {
   IncomeSummary,
 } from "@/lib/types/income";
 import type { Restaurant } from "@/lib/types/super-admin";
+import {
+  buildIncomeCsvReport,
+  buildIncomeReportModel,
+} from "@/lib/income/report-model";
+import { titleCase } from "@/lib/utils";
 
 interface InvoiceLike {
   id: number;
@@ -17,6 +22,18 @@ interface InvoiceLike {
   amount: string;
   issued_on: string;
   paid: boolean;
+}
+
+function toLocalYmd(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isNaN(d.getTime()) && iso.includes("T")) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return iso.slice(0, 10);
 }
 
 function money(n: number): string {
@@ -99,7 +116,7 @@ function periodStats(
     }
   }
   const onboarded = restaurants.filter((r) => {
-    const created = r.created_at?.slice(0, 10);
+    const created = toLocalYmd(r.created_at);
     return created && created >= from && created <= to;
   }).length;
   return { collected, outstanding, paidCount, unpaidCount, onboarded, periodInvoices };
@@ -138,7 +155,7 @@ export function buildMockIncomeSummary(
         unpaid += 1;
       }
     }
-    const onboarded = restaurants.filter((r) => r.created_at?.slice(0, 10) === date).length;
+    const onboarded = restaurants.filter((r) => toLocalYmd(r.created_at) === date).length;
     return {
       date,
       collected: money(collected),
@@ -201,7 +218,7 @@ export function buildMockIncomeSummary(
     };
     row.restaurant_count += 1;
     if (r.plan_status === "active") row.mrr += parseAmount(String(r.plan_amount ?? 0));
-    const created = r.created_at?.slice(0, 10);
+    const created = toLocalYmd(r.created_at);
     if (created && created >= from && created <= to) row.onboarded += 1;
     for (const inv of current.periodInvoices.filter((i) => i.restaurant_id === r.id)) {
       const amt = parseAmount(inv.amount);
@@ -296,7 +313,7 @@ export function buildMockIncomeSummary(
         outstanding: money(outstanding),
         invoice_count_paid: paid,
         invoice_count_unpaid: unpaid,
-        onboarded_on: r.created_at?.slice(0, 10) ?? null,
+        onboarded_on: toLocalYmd(r.created_at),
       };
     }),
   };
@@ -329,6 +346,10 @@ export function buildMockIncomeForecast(
       projected_mrr: money(mrr),
     });
   }
+  const projectedCollectionsTotal = months.reduce(
+    (sum, m) => sum + parseAmount(m.projected_collections),
+    0,
+  );
   return {
     horizon_months: horizon,
     lookback_months_used: lookback,
@@ -336,30 +357,47 @@ export function buildMockIncomeForecast(
     avg_plan_amount_recent: money(avgPlan),
     current_mrr: money(currentMrr),
     projected_restaurants_added_total: (avgOnboarded * horizon).toFixed(2),
-    projected_collections_total: money(
-      months.reduce((sum, m) => sum + parseAmount(m.projected_collections), 0) / Math.max(horizon, 1),
-    ),
+    projected_collections_total: money(projectedCollectionsTotal),
     months,
   };
 }
 
-export function buildMockIncomeCsv(summary: IncomeSummary): string {
-  const lines = [
-    "restaurant_id,restaurant_name,owner_contact_email,plan_tier,status,collected,outstanding,invoice_count_paid,invoice_count_unpaid,onboarded_on",
-    ...summary.by_restaurant.map((r) =>
-      [
-        r.restaurant_id,
-        JSON.stringify(r.restaurant_name),
-        r.owner_contact_email ?? "",
-        r.plan_tier ?? "",
-        r.status,
-        r.collected,
-        r.outstanding,
-        r.invoice_count_paid,
-        r.invoice_count_unpaid,
-        r.onboarded_on ?? "",
-      ].join(","),
-    ),
-  ];
-  return lines.join("\n");
+export function buildMockInvoiceExportRows(
+  restaurants: Restaurant[],
+  invoices: InvoiceLike[],
+  from: string,
+  to: string,
+) {
+  const byId = new Map(restaurants.map((r) => [r.id, r]));
+  return invoices
+    .filter((i) => i.issued_on >= from && i.issued_on <= to)
+    .sort((a, b) => b.issued_on.localeCompare(a.issued_on))
+    .map((inv) => {
+      const r = byId.get(inv.restaurant_id);
+      return {
+        restaurant_name: r?.name ?? "Unknown",
+        owner_email: r?.admin.email ?? "",
+        plan: r?.plan_tier ? titleCase(String(r.plan_tier)) : "—",
+        issued_on: inv.issued_on,
+        amount: inv.amount,
+        payment_status: (inv.paid ? "Paid" : "Unpaid") as "Paid" | "Unpaid",
+        restaurant_status: r?.plan_status === "active" ? "Active" : "Halted",
+      };
+    });
+}
+
+export function buildMockIncomeCsv(
+  summary: IncomeSummary,
+  forecast6: IncomeForecast,
+  restaurants: Restaurant[],
+  invoices: InvoiceLike[],
+): string {
+  const invoiceRows = buildMockInvoiceExportRows(
+    restaurants,
+    invoices,
+    summary.from_date,
+    summary.to_date,
+  );
+  const model = buildIncomeReportModel(summary, forecast6, invoiceRows);
+  return buildIncomeCsvReport(model);
 }

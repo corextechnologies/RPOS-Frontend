@@ -29,7 +29,7 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 4;
+const SEED_VERSION = 5;
 
 interface MockInvoiceRecord {
   id: number;
@@ -62,6 +62,18 @@ interface MockDb {
 }
 
 const now = () => new Date().toISOString();
+
+/** Local calendar date as YYYY-MM-DD (avoids UTC off-by-one in onboarding counts). */
+function localYmd(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function localCreatedAt(d = new Date()): string {
+  return `${localYmd(d)}T12:00:00`;
+}
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
@@ -220,7 +232,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2001",
       access_status: "active",
     },
-    created_at: now(),
+    created_at: localCreatedAt(),
     updated_at: now(),
   };
 
@@ -240,7 +252,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2002",
       access_status: "active",
     },
-    created_at: now(),
+    created_at: localCreatedAt(),
     updated_at: now(),
   };
 
@@ -260,7 +272,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2003",
       access_status: "revoked",
     },
-    created_at: now(),
+    created_at: localCreatedAt(),
     updated_at: now(),
   };
 
@@ -530,7 +542,7 @@ export const mockClient: ApiClient = {
         phone: body.owner_phone ?? "",
         access_status: "active",
       },
-      created_at: now(),
+      created_at: localCreatedAt(),
       updated_at: now(),
     };
 
@@ -820,6 +832,7 @@ export const mockClient: ApiClient = {
     }
     const db = loadDb();
     const summary = buildMockIncomeSummary(db.restaurants, db.invoices, filter);
-    return delay(buildMockIncomeCsv(summary));
+    const forecast6 = buildMockIncomeForecast(db.restaurants, 6);
+    return delay(buildMockIncomeCsv(summary, forecast6, db.restaurants, db.invoices));
   },
 };

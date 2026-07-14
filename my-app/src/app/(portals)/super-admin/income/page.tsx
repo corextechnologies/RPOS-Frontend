@@ -1,12 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, FileSpreadsheet, FileText } from "lucide-react";
 import { IncomeCharts } from "@/components/income/IncomeCharts";
 import { IncomeKpiCard, moneyLabel } from "@/components/income/IncomeKpis";
 import { IncomeRestaurantTable } from "@/components/income/IncomeRestaurantTable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,7 +25,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import {
-  downloadIncomeCsvFile,
+  downloadIncomeCsvReport,
+  downloadIncomeStyledReport,
   useIncomeForecast,
   useIncomeSummary,
 } from "@/lib/hooks/use-income";
@@ -52,14 +59,34 @@ export default function SuperAdminIncomePage() {
 
   const summaryQuery = useIncomeSummary(filter);
   const forecastQuery = useIncomeForecast(horizon);
+  const forecast6Query = useIncomeForecast(6);
 
-  const onExport = async () => {
+  const onExportReport = async () => {
     setExporting(true);
     try {
-      await downloadIncomeCsvFile(filter);
+      await downloadIncomeStyledReport(filter, summaryQuery.data, forecast6Query.data);
+      toast.success("PDF report downloaded");
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Export failed",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+
+  const onExportCsv = async () => {
+    setExporting(true);
+    try {
+      await downloadIncomeCsvReport(filter, summaryQuery.data, forecast6Query.data);
       toast.success("CSV downloaded");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Export failed");
+      toast.error(err instanceof ApiError ? err.message : "CSV export failed");
     } finally {
       setExporting(false);
     }
@@ -88,14 +115,24 @@ export default function SuperAdminIncomePage() {
               <SelectItem value="12">Forecast 12 mo</SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            onClick={onExport}
-            disabled={exporting || summaryQuery.isLoading}
-          >
-            <Download className="h-4 w-4" />
-            {exporting ? "Exporting…" : "Download CSV"}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button disabled={exporting || summaryQuery.isLoading || !summaryQuery.data}>
+                <Download className="h-4 w-4" />
+                {exporting ? "Exporting…" : "Export"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem disabled={exporting} onClick={() => void onExportReport()}>
+                <FileText className="mr-2 h-4 w-4" />
+                Download PDF report
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={exporting} onClick={() => void onExportCsv()}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Download CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
