@@ -22,6 +22,9 @@ interface CredentialsDialogProps {
   temporaryPassword?: string;
   credentialEmailSent: boolean;
   onDone: () => void;
+  title?: string;
+  description?: string;
+  contextLabel?: string;
 }
 
 export function CredentialsDialog({
@@ -32,11 +35,20 @@ export function CredentialsDialog({
   temporaryPassword,
   credentialEmailSent,
   onDone,
+  title = "Restaurant created",
+  description,
+  contextLabel = "Restaurant",
 }: CredentialsDialogProps) {
   const [copied, setCopied] = useState(false);
 
+  const resolvedDescription =
+    description ??
+    (temporaryPassword
+      ? "Share these credentials with the restaurant admin. They will only be shown once."
+      : "The admin account has been provisioned. Login credentials were sent by email.");
+
   const copyCredentials = async () => {
-    const lines = [`Restaurant: ${restaurantName}`, `Email: ${email}`];
+    const lines = [`${contextLabel}: ${restaurantName}`, `Email: ${email}`];
     if (temporaryPassword) lines.push(`Temporary password: ${temporaryPassword}`);
     await navigator.clipboard.writeText(lines.join("\n"));
     setCopied(true);
@@ -48,21 +60,25 @@ export function CredentialsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Restaurant created</DialogTitle>
-          <DialogDescription>
-            {temporaryPassword
-              ? "Share these credentials with the restaurant admin. They will only be shown once."
-              : "The admin account has been provisioned. Login credentials were sent by email."}
-          </DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{resolvedDescription}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 rounded-xl border border-line bg-surface-2 p-4">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-faint">Admin login email</p>
+            <p className="text-xs font-medium uppercase tracking-wider text-faint">
+              {contextLabel}
+            </p>
+            <p className="mt-1 font-medium text-content">{restaurantName}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-faint">Login email</p>
             <p className="mt-1 font-mono text-sm text-content">{email}</p>
           </div>
           {temporaryPassword && (
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-faint">Temporary password</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-faint">
+                Temporary password
+              </p>
               <p className="mt-1 font-mono text-sm text-content">{temporaryPassword}</p>
             </div>
           )}

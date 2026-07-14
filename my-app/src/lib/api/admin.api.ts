@@ -1,5 +1,7 @@
 import type {
   Branch,
+  CreateAdminUserInput,
+  CreateAdminUserResult,
   CreateLocationInput,
   Employee,
   Kitchen,
@@ -163,5 +165,16 @@ export const adminApi = {
       `/admin/employees?${qs.toString()}`,
     );
     return toPaginatedEmployees(data, meta, page, page_size);
+  },
+
+  async createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult> {
+    const data = await request<CreateAdminUserResult>("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      user_id: String(data.user_id),
+    };
   },
 };

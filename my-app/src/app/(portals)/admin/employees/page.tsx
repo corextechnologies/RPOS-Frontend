@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { EmployeeList } from "@/components/admin/employees/EmployeeList";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import type { Employee } from "@/lib/types/admin";
 
 export default function AdminEmployeesPage() {
+  const { can } = useAuth();
   const [page, setPage] = useState(1);
   const employees = useEmployees(page);
   const branches = useBranches();
@@ -39,13 +43,23 @@ export default function AdminEmployeesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-          Employees
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          All restaurant employees across branches, kitchens, and warehouses.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
+            Employees
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            All restaurant employees across branches, kitchens, and warehouses.
+          </p>
+        </div>
+        {can("users:create") && (
+          <Button asChild>
+            <Link href="/admin/employees/new">
+              <Plus className="h-4 w-4" />
+              Add manager
+            </Link>
+          </Button>
+        )}
       </div>
 
       <EmployeeList

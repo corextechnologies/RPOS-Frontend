@@ -3,6 +3,8 @@
  */
 import type {
   Branch,
+  CreateAdminUserInput,
+  CreateAdminUserResult,
   CreateLocationInput,
   Employee,
   Kitchen,
@@ -24,6 +26,7 @@ import {
   type RestaurantFilters,
   type RestaurantStats,
   type TokenResponse,
+  type UserRole,
 } from "@/lib/types/super-admin";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
@@ -876,5 +879,94 @@ export const mockClient: ApiClient = {
       total: all.length,
     };
     return delay(result);
+  },
+
+  async createUser(body: CreateAdminUserInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+
+    const allowedRoles = ["BRANCH_MANAGER", "KITCHEN_MANAGER", "WAREHOUSE_MANAGER"] as const;
+    if (!allowedRoles.includes(body.role)) {
+      throw new ApiError("Cannot create this role", 400);
+    }
+
+    const email = body.email.trim().toLowerCase();
+    if (findUser(db, email)) {
+      throw new ApiError("A user with this email already exists", 409, "conflict");
+    }
+
+    let branchId: string | null = null;
+    let kitchenId: string | null = null;
+    let warehouseId: string | null = null;
+
+    if (body.role === "BRANCH_MANAGER") {
+      if (!body.branch_id) throw new ApiError("branch_id is required for BRANCH_MANAGER", 400);
+      const branch = db.branches.find(
+        (b) => b.id === body.branch_id && b.restaurant_id === r.id,
+      );
+      if (!branch) throw new ApiError("Branch not found", 404);
+      branchId = branch.id;
+    } else if (body.role === "KITCHEN_MANAGER") {
+      if (!body.kitchen_id) throw new ApiError("kitchen_id is required for KITCHEN_MANAGER", 400);
+      const kitchen = db.kitchens.find(
+        (k) => k.id === body.kitchen_id && k.restaurant_id === r.id,
+      );
+      if (!kitchen) throw new ApiError("Kitchen not found", 404);
+      kitchenId = kitchen.id;
+    } else {
+      if (!body.warehouse_id) {
+        throw new ApiError("warehouse_id is required for WAREHOUSE_MANAGER", 400);
+      }
+      const warehouse = db.warehouses.find(
+        (w) => w.id === body.warehouse_id && w.restaurant_id === r.id,
+      );
+      if (!warehouse) throw new ApiError("Warehouse not found", 404);
+      warehouseId = warehouse.id;
+    }
+
+    const tempPassword = randomPassword();
+    const nextId =
+      db.users.reduce((max, u) => Math.max(max, typeof u.me.id === "number" ? u.me.id : 0), 0) + 1;
+    const userId = String(nextId);
+    const role = body.role as UserRole;
+
+    db.users.push({
+      email,
+      password: tempPassword,
+      me: {
+        id: nextId,
+        email,
+        full_name: body.full_name.trim(),
+        role,
+        restaurant_id: me.restaurant_id ?? 1,
+        created_by_id: me.id,
+        is_active: true,
+      },
+    });
+
+    db.employees.push({
+      id: `emp-${nextId}`,
+      restaurant_id: r.id,
+      email,
+      full_name: body.full_name.trim(),
+      role: body.role,
+      is_active: true,
+      branch_id: branchId,
+      kitchen_id: kitchenId,
+      warehouse_id: warehouseId,
+      created_at: now(),
+    });
+
+    saveDb(db);
+
+    const result: CreateAdminUserResult = {
+      user_id: userId,
+      email,
+      role: body.role,
+      credential_email_sent: true,
+      temporary_password: tempPassword,
+    };
+    return delay(result, 400);
   },
 };

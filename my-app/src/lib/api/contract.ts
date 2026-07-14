@@ -1,5 +1,7 @@
 import type {
   Branch,
+  CreateAdminUserInput,
+  CreateAdminUserResult,
   CreateLocationInput,
   Employee,
   Kitchen,
@@ -56,4 +58,5 @@ export interface ApiClient {
   createWarehouse(body: CreateLocationInput): Promise<Warehouse>;
 
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
+  createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
 }
