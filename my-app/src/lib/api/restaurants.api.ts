@@ -4,6 +4,7 @@ import type {
   CreateRestaurantInput,
   CreateRestaurantResult,
   Invoice,
+  InvoiceOut,
   Restaurant,
   RestaurantCreateResult,
   RestaurantFilters,
@@ -15,6 +16,7 @@ import {
   billingFromApi,
   createInputToApi,
   createResultFromApi,
+  invoiceFromApi,
   restaurantFromApi,
   updateInputToApi,
 } from "./adapters";
@@ -69,6 +71,31 @@ export const restaurantsApi = {
     const restaurant = await this.getRestaurant(restaurantId);
     const data = await request<BillingOut>(`/super-admin/restaurants/${restaurantId}/billing`);
     return billingFromApi(data, restaurant);
+  },
+
+  async runBillingCycle(): Promise<{ generated: number }> {
+    return request<{ generated: number }>("/super-admin/billing/run-cycle", {
+      method: "POST",
+    });
+  },
+
+  async recordRestaurantPayment(restaurantId: string): Promise<BillingSummary> {
+    await request(`/super-admin/restaurants/${restaurantId}/billing/record-payment`, {
+      method: "POST",
+    });
+    return this.getBilling(restaurantId);
+  },
+
+  async updateInvoice(
+    restaurantId: string,
+    invoiceId: string,
+    body: { paid: boolean },
+  ): Promise<Invoice> {
+    const data = await request<InvoiceOut>(
+      `/super-admin/restaurants/${restaurantId}/invoices/${invoiceId}`,
+      { method: "PATCH", body: JSON.stringify(body) },
+    );
+    return invoiceFromApi(data);
   },
 
   async getRestaurantStats(): Promise<never> {

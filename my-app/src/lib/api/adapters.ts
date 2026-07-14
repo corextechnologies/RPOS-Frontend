@@ -23,6 +23,9 @@ export function invoiceFromApi(inv: InvoiceOut): Invoice {
     amount: inv.amount,
     issued_on: inv.issued_on,
     paid: inv.paid,
+    restaurant_id: String(inv.restaurant_id),
+    restaurant_name: inv.restaurant_name,
+    owner_contact_email: inv.owner_contact_email,
   };
 }
 
@@ -54,7 +57,9 @@ export function createInputToApi(body: CreateRestaurantInput) {
     branch_limit: body.branch_limit,
     plan_tier: body.plan_tier,
     plan_amount: body.plan_amount,
-    next_billing_date: body.next_billing_date,
+    // Backend ignores next_billing_date on create and sets today + 1 month when a plan is set.
+    // Always include payment_received as a real boolean (never omit / never string/"1").
+    payment_received: body.payment_received === true,
   };
 }
 
@@ -81,6 +86,9 @@ export function createResultFromApi(result: RestaurantCreateResult): CreateResta
 export function billingFromApi(b: BillingOut, restaurant?: Restaurant): BillingSummary {
   return {
     restaurant_id: String(b.restaurant_id),
+    restaurant_name: b.restaurant_name ?? restaurant?.name ?? "",
+    owner_contact_email:
+      b.owner_contact_email ?? restaurant?.admin.email ?? null,
     plan_tier: (b.plan_tier ?? restaurant?.plan_tier ?? "standard") as PlanTier,
     plan_status: restaurant?.plan_status ?? "active",
     plan_amount: b.plan_amount ?? restaurant?.plan_amount ?? null,

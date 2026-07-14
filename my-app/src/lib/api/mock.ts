@@ -19,7 +19,7 @@ import {
 } from "@/lib/types/super-admin";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
-import { defaultNextBillingDate, planAmountForTier, planByTier } from "@/lib/plans/catalog";
+import { addOneBillingMonth, defaultNextBillingDate, planAmountForTier, planByTier, todayBillingDate } from "@/lib/plans/catalog";
 import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
@@ -169,6 +169,7 @@ function seedUsers(): MockUserAccount[] {
 }
 
 function invoicesForRestaurant(db: MockDb, restaurantId: string): Invoice[] {
+  const restaurant = db.restaurants.find((r) => r.id === restaurantId);
   return db.invoices
     .filter((i) => i.restaurant_id === restaurantId)
     .sort((a, b) => b.issued_on.localeCompare(a.issued_on))
@@ -177,7 +178,24 @@ function invoicesForRestaurant(db: MockDb, restaurantId: string): Invoice[] {
       amount: i.amount,
       issued_on: i.issued_on,
       paid: i.paid,
+      restaurant_id: restaurantId,
+      restaurant_name: restaurant?.name ?? "",
+      owner_contact_email: restaurant?.admin.email ?? null,
     }));
+}
+
+function billingSummaryForRestaurant(db: MockDb, restaurant: Restaurant): BillingSummary {
+  return {
+    restaurant_id: restaurant.id,
+    restaurant_name: restaurant.name,
+    owner_contact_email: restaurant.admin.email || null,
+    plan_tier: restaurant.plan_tier,
+    plan_status: restaurant.plan_status,
+    plan_amount: restaurant.plan_amount ?? planAmountForTier(restaurant.plan_tier) ?? "0",
+    next_billing_date:
+      restaurant.next_billing_date ?? addMonths(new Date(), 1).toISOString().slice(0, 10),
+    invoices: invoicesForRestaurant(db, restaurant.id),
+  };
 }
 
 function seedDb(): MockDb {
@@ -486,6 +504,11 @@ export const mockClient: ApiClient = {
     const adminEmail = `admin+${slug}@tenant.ros`;
 
     const tier = body.plan_tier ?? "standard";
+    const amount =
+      body.plan_amount != null ? String(body.plan_amount) : planAmountForTier(tier) ?? "199.00";
+    const nextBilling = defaultNextBillingDate();
+    const today = todayBillingDate();
+
     const restaurant: Restaurant = {
       id,
       name: body.name,
@@ -493,9 +516,8 @@ export const mockClient: ApiClient = {
       plan_status: "active",
       branch_limit: body.branch_limit ?? planByTier(tier)?.branchLimit ?? 1,
       branch_count: body.branch_limit ?? 1,
-      plan_amount:
-        body.plan_amount != null ? String(body.plan_amount) : planAmountForTier(tier) ?? null,
-      next_billing_date: body.next_billing_date ?? defaultNextBillingDate(),
+      plan_amount: amount,
+      next_billing_date: nextBilling,
       admin: {
         id: adminId,
         name: body.owner_name ?? "",
@@ -509,18 +531,25 @@ export const mockClient: ApiClient = {
 
     db.restaurants.push(restaurant);
 
-    const nextBilling = addMonths(new Date(), 1).toISOString().slice(0, 10);
-    const nextInvoiceId = db.invoices.reduce((max, i) => Math.max(max, i.id), 0) + 1;
-    db.invoices.push({
-      id: nextInvoiceId,
-      restaurant_id: id,
-      amount:
-        body.plan_amount != null
-          ? String(body.plan_amount)
-          : planAmountForTier(tier) ?? "199.00",
-      issued_on: nextBilling,
-      paid: false,
-    });
+    if (body.payment_received === true) {
+      let nextInvoiceId = db.invoices.reduce((max, i) => Math.max(max, i.id), 0);
+      nextInvoiceId += 1;
+      db.invoices.push({
+        id: nextInvoiceId,
+        restaurant_id: id,
+        amount,
+        issued_on: today,
+        paid: true,
+      });
+      nextInvoiceId += 1;
+      db.invoices.push({
+        id: nextInvoiceId,
+        restaurant_id: id,
+        amount,
+        issued_on: nextBilling,
+        paid: false,
+      });
+    }
 
     saveDb(db);
 
@@ -631,15 +660,7 @@ export const mockClient: ApiClient = {
     requireAuth();
     const db = loadDb();
     const r = findRestaurant(db, restaurantId);
-    const summary: BillingSummary = {
-      restaurant_id: r.id,
-      plan_tier: r.plan_tier,
-      plan_status: r.plan_status,
-      plan_amount: r.plan_amount ?? planAmountForTier(r.plan_tier) ?? "0",
-      next_billing_date: r.next_billing_date ?? addMonths(new Date(), 1).toISOString().slice(0, 10),
-      invoices: invoicesForRestaurant(db, restaurantId),
-    };
-    return delay(summary);
+    return delay(billingSummaryForRestaurant(db, r));
   },
 
   async getMyBilling() {
@@ -647,16 +668,111 @@ export const mockClient: ApiClient = {
     const db = loadDb();
     const restaurant = db.restaurants.find((r) => r.admin.email === me.email);
     if (!restaurant) throw new ApiError("Restaurant not found", 404);
-    const summary: BillingSummary = {
-      restaurant_id: restaurant.id,
-      plan_tier: restaurant.plan_tier,
-      plan_status: restaurant.plan_status,
-      plan_amount: restaurant.plan_amount ?? planAmountForTier(restaurant.plan_tier) ?? "0",
-      next_billing_date:
-        restaurant.next_billing_date ?? addMonths(new Date(), 1).toISOString().slice(0, 10),
-      invoices: invoicesForRestaurant(db, restaurant.id),
-    };
-    return delay(summary);
+    return delay(billingSummaryForRestaurant(db, restaurant));
+  },
+
+  async runBillingCycle() {
+    requireAuth();
+    const db = loadDb();
+    const today = todayBillingDate();
+    let generated = 0;
+    let nextId = db.invoices.reduce((max, i) => Math.max(max, i.id), 0);
+
+    for (const r of db.restaurants) {
+      if (r.plan_status !== "active") continue;
+      const due = r.next_billing_date;
+      const amount = r.plan_amount ?? planAmountForTier(r.plan_tier);
+      if (!due || !amount) continue;
+      if (due > today) continue;
+
+      nextId += 1;
+      db.invoices.push({
+        id: nextId,
+        restaurant_id: r.id,
+        amount: String(amount),
+        issued_on: due,
+        paid: false,
+      });
+      r.next_billing_date = addOneBillingMonth(due);
+      r.updated_at = now();
+      generated += 1;
+    }
+
+    saveDb(db);
+    return delay({ generated });
+  },
+
+  async recordRestaurantPayment(restaurantId) {
+    requireAuth();
+    const db = loadDb();
+    const r = findRestaurant(db, restaurantId);
+    const existing = db.invoices.filter((i) => i.restaurant_id === restaurantId);
+    if (existing.length > 0) {
+      throw new ApiError("Signup invoices already exist", 409, "conflict");
+    }
+    const amount = r.plan_amount ?? planAmountForTier(r.plan_tier) ?? "199.00";
+    const nextBilling = r.next_billing_date ?? defaultNextBillingDate();
+    const today = todayBillingDate();
+    let nextId = db.invoices.reduce((max, i) => Math.max(max, i.id), 0);
+    nextId += 1;
+    db.invoices.push({
+      id: nextId,
+      restaurant_id: restaurantId,
+      amount: String(amount),
+      issued_on: today,
+      paid: true,
+    });
+    nextId += 1;
+    db.invoices.push({
+      id: nextId,
+      restaurant_id: restaurantId,
+      amount: String(amount),
+      issued_on: nextBilling,
+      paid: false,
+    });
+    r.next_billing_date = nextBilling;
+    r.updated_at = now();
+    saveDb(db);
+    return mockClient.getBilling(restaurantId);
+  },
+
+  async updateInvoice(restaurantId, invoiceId, body) {
+    requireAuth();
+    const db = loadDb();
+    const inv = db.invoices.find(
+      (i) => i.restaurant_id === restaurantId && String(i.id) === String(invoiceId),
+    );
+    if (!inv) throw new ApiError("Invoice not found", 404);
+    const wasPaid = inv.paid;
+    inv.paid = body.paid;
+
+    if (!wasPaid && body.paid) {
+      const r = findRestaurant(db, restaurantId);
+      const amount = inv.amount;
+      const nextIssued = addOneBillingMonth(inv.issued_on);
+      const nextId = db.invoices.reduce((max, i) => Math.max(max, i.id), 0) + 1;
+      db.invoices.push({
+        id: nextId,
+        restaurant_id: restaurantId,
+        amount,
+        issued_on: nextIssued,
+        paid: false,
+      });
+      r.next_billing_date = nextIssued;
+      r.updated_at = now();
+    }
+
+    saveDb(db);
+    const r = findRestaurant(db, restaurantId);
+    return delay({
+      id: String(inv.id),
+      amount: inv.amount,
+      issued_on: inv.issued_on,
+      paid: inv.paid,
+      restaurant_id: restaurantId,
+      restaurant_name: r.name,
+      owner_contact_email: r.admin.email || null,
+    });
   },
 
   async listInvoices(restaurantId) {

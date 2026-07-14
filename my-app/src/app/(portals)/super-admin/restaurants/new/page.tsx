@@ -26,6 +26,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { CredentialsDialog } from "@/components/ui/credentials-dialog";
 import { ApiError } from "@/lib/types/super-admin";
 import { toast } from "sonner";
@@ -68,7 +69,7 @@ export default function NewRestaurantPage() {
         branch_limit: values.branch_limit,
         plan_tier: values.plan_tier,
         plan_amount: values.plan_amount,
-        next_billing_date: values.next_billing_date,
+        payment_received: values.payment_received === true,
       });
       setCredentials({
         restaurantName: result.restaurant.name,
@@ -191,6 +192,25 @@ export default function NewRestaurantPage() {
                 planAmount={planAmount}
                 branchLimit={branchLimit}
                 nextBillingDate={nextBillingDate}
+              />
+
+              <FormField
+                control={form.control}
+                name="payment_received"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-xl border border-line bg-surface-2/40 px-4 py-3">
+                    <div className="space-y-0.5 pr-4">
+                      <FormLabel className="text-base">Payment received</FormLabel>
+                      <p className="text-sm text-muted">
+                        Tick if the customer has already paid. Creates a paid invoice for today and
+                        an unpaid invoice for next month.
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
               />
 
               <div className="flex justify-end gap-3 pt-2">
