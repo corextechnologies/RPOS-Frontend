@@ -21,14 +21,43 @@ export const PLAN_CATALOG: PlanOption[] = [
 ];
 
 /**
- * First billing eligibility: `next_billing_date` = today.
- * Backend generates an invoice when `next_billing_date <= today`, then advances +1 month.
+ * First `next_billing_date` on create: today + 1 calendar month.
+ * Matches backend default so create preview is not overridden by sending "today".
+ * Backend generates an invoice when `next_billing_date <= today`, then advances +1 month again.
  */
 export function defaultNextBillingDate(from: Date = new Date()): string {
-  const y = from.getFullYear();
-  const m = String(from.getMonth() + 1).padStart(2, "0");
-  const d = String(from.getDate()).padStart(2, "0");
+  const date = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const day = date.getDate();
+  date.setMonth(date.getMonth() + 1);
+  // Clamp month-end overflow (e.g. Jan 31 → last day of February)
+  if (date.getDate() !== day) {
+    date.setDate(0);
+  }
+  return formatISODate(date);
+}
+
+/** Today's date as YYYY-MM-DD (local calendar). Used to mark a restaurant bill as due. */
+export function todayBillingDate(from: Date = new Date()): string {
+  return formatISODate(new Date(from.getFullYear(), from.getMonth(), from.getDate()));
+}
+
+function formatISODate(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/** Advance a YYYY-MM-DD date by one calendar month (backend-style). */
+export function addOneBillingMonth(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const day = date.getDate();
+  date.setMonth(date.getMonth() + 1);
+  if (date.getDate() !== day) {
+    date.setDate(0);
+  }
+  return formatISODate(date);
 }
 
 export function planByTier(tier: string | null | undefined): PlanOption | undefined {

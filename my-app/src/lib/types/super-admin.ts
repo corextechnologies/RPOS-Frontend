@@ -73,6 +73,9 @@ export interface InvoiceOut {
   amount: string;
   issued_on: string;
   paid: boolean;
+  restaurant_id: number;
+  restaurant_name: string;
+  owner_contact_email: string | null;
 }
 
 /** Normalized invoice used by UI components. */
@@ -81,11 +84,16 @@ export interface Invoice {
   amount: string;
   issued_on: string;
   paid: boolean;
+  restaurant_id: string;
+  restaurant_name: string;
+  owner_contact_email: string | null;
 }
 
 /** Raw backend `BillingOut` DTO. */
 export interface BillingOut {
   restaurant_id: number;
+  restaurant_name: string;
+  owner_contact_email: string | null;
   plan_tier: string | null;
   plan_amount: string | null;
   next_billing_date: string | null;
@@ -94,11 +102,17 @@ export interface BillingOut {
 
 export interface BillingSummary {
   restaurant_id: string;
+  restaurant_name: string;
+  owner_contact_email: string | null;
   plan_tier: PlanTier;
   plan_status?: PlanStatus;
   plan_amount: string | number | null;
   next_billing_date: string | null;
   invoices?: Invoice[];
+}
+
+export interface BillingCycleResult {
+  generated: number;
 }
 
 export interface CreateRestaurantInput {
@@ -110,6 +124,11 @@ export interface CreateRestaurantInput {
   plan_tier?: string;
   plan_amount?: string | number;
   next_billing_date?: string;
+  /**
+   * Always send an explicit boolean. When true and a plan is set, backend seeds
+   * paid (today) + unpaid (next month) invoices. Unchecked must be `false`, not omitted.
+   */
+  payment_received: boolean;
 }
 
 export interface UpdateRestaurantInput {

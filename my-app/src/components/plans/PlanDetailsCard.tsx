@@ -43,7 +43,7 @@ export function PlanDetailsCard({
           <p className="mt-1 font-medium text-content">
             {nextBillingDate ? formatDate(nextBillingDate) : "—"}
           </p>
-          <p className="mt-0.5 text-xs text-muted">Auto-set from the selected plan</p>
+          <p className="mt-0.5 text-xs text-muted">Set automatically on save (today + 1 month)</p>
         </div>
       </CardContent>
     </Card>

@@ -12,6 +12,7 @@ import type {
   RestaurantStats,
   TokenResponse,
   UpdateRestaurantInput,
+  BillingCycleResult,
 } from "@/lib/types/super-admin";
 
 export interface ApiClient {
@@ -36,6 +37,13 @@ export interface ApiClient {
 
   getBilling(restaurantId: string): Promise<BillingSummary>;
   getMyBilling(): Promise<BillingSummary>;
+  runBillingCycle(): Promise<BillingCycleResult>;
+  recordRestaurantPayment(restaurantId: string): Promise<BillingSummary>;
+  updateInvoice(
+    restaurantId: string,
+    invoiceId: string,
+    body: { paid: boolean },
+  ): Promise<Invoice>;
   listInvoices(restaurantId: string): Promise<Invoice[]>;
   shareInvoice(invoiceId: string): Promise<Invoice>;
   unshareInvoice(invoiceId: string): Promise<Invoice>;

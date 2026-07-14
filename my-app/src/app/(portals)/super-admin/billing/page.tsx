@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Receipt, ChevronRight } from "lucide-react";
+import { Receipt, ChevronRight, Play } from "lucide-react";
 import { useRestaurants } from "@/lib/hooks/use-restaurants";
+import { useBillingOps } from "@/lib/hooks/use-billing";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,12 +23,24 @@ import { titleCase } from "@/lib/utils";
 
 export default function BillingOverviewPage() {
   const restaurants = useRestaurants();
+  const { runBillingCycle } = useBillingOps();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-content">Billing</h1>
-        <p className="mt-1 text-sm text-muted">Cross-tenant billing overview for all restaurants.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-content">Billing</h1>
+          <p className="mt-1 text-sm text-muted">Cross-tenant billing overview for all restaurants.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={runBillingCycle.isPending}
+          onClick={() => runBillingCycle.mutate()}
+        >
+          <Play className="h-4 w-4" />
+          {runBillingCycle.isPending ? "Running…" : "Run billing cycle"}
+        </Button>
       </div>
 
       <Card>
