@@ -9,6 +9,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
   Warehouse,
@@ -71,6 +72,8 @@ export interface ApiClient {
 
   listBranches(): Promise<Branch[]>;
   createBranch(body: CreateLocationInput): Promise<Branch>;
+  updateBranch(id: string, body: UpdateLocationInput): Promise<Branch>;
+  deleteBranch(id: string): Promise<void>;
   listKitchens(): Promise<Kitchen[]>;
   createKitchen(body: CreateLocationInput): Promise<Kitchen>;
   listWarehouses(): Promise<Warehouse[]>;

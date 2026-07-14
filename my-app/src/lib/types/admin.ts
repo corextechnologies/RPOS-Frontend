@@ -31,6 +31,11 @@ export interface CreateLocationInput {
   location?: string;
 }
 
+export interface UpdateLocationInput {
+  name?: string;
+  location?: string;
+}
+
 // ---- Users / employees ----
 export type AdminCreatableRole =
   | "BRANCH_MANAGER"

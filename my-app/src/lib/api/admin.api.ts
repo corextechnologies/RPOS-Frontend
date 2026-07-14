@@ -9,6 +9,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
   Warehouse,
@@ -155,6 +156,22 @@ export const adminApi = {
       id: String(data.id),
       restaurant_id: String(data.restaurant_id),
     };
+  },
+
+  async updateBranch(id: string, body: UpdateLocationInput): Promise<Branch> {
+    const data = await request<Branch>(`/admin/branches/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      id: String(data.id),
+      restaurant_id: String(data.restaurant_id),
+    };
+  },
+
+  async deleteBranch(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/branches/${id}`, { method: "DELETE" });
   },
 
   async listKitchens(): Promise<Kitchen[]> {

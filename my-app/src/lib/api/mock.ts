@@ -12,6 +12,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
   Warehouse,
@@ -1157,6 +1158,30 @@ export const mockClient: ApiClient = {
     r.branch_count = count + 1;
     saveDb(db);
     return delay(branch);
+  },
+
+  async updateBranch(id: string, body: UpdateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const branch = db.branches.find((b) => b.id === id && b.restaurant_id === r.id);
+    if (!branch) throw new ApiError("Branch not found", 404);
+    if (body.name !== undefined) branch.name = body.name;
+    if (body.location !== undefined) branch.location = body.location;
+    saveDb(db);
+    return delay({ ...branch });
+  },
+
+  async deleteBranch(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const exists = db.branches.some((b) => b.id === id && b.restaurant_id === r.id);
+    if (!exists) throw new ApiError("Branch not found", 404);
+    db.branches = db.branches.filter((b) => b.id !== id);
+    r.branch_count = Math.max(0, r.branch_count - 1);
+    saveDb(db);
+    return delay(undefined);
   },
 
   async listKitchens() {

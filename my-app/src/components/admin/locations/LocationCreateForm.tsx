@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,8 @@ interface LocationCreateFormProps {
   onSubmit: (values: LocationForm) => void;
   isSubmitting: boolean;
   errorMessage?: string;
+  defaultValues?: Partial<LocationForm>;
+  submitLabel?: string;
 }
 
 export function LocationCreateForm({
@@ -37,13 +40,25 @@ export function LocationCreateForm({
   onSubmit,
   isSubmitting,
   errorMessage,
+  defaultValues,
+  submitLabel,
 }: LocationCreateFormProps) {
+  const label = KIND_LABELS[kind];
+  const resolvedSubmitLabel = submitLabel ?? `Create ${label}`;
+  const isEdit = Boolean(defaultValues);
+
   const form = useForm<LocationForm>({
     resolver: zodResolver(locationSchema),
-    defaultValues: locationDefaults,
+    defaultValues: { ...locationDefaults, ...defaultValues },
   });
 
-  const label = KIND_LABELS[kind];
+  useEffect(() => {
+    if (!defaultValues) return;
+    form.reset({
+      name: defaultValues.name ?? "",
+      location: defaultValues.location ?? "",
+    });
+  }, [defaultValues, form]);
 
   return (
     <Form {...form}>
@@ -75,7 +90,7 @@ export function LocationCreateForm({
           )}
         />
 
-        {kind === "branch" && (
+        {kind === "branch" && !isEdit && (
           <p className="text-sm text-muted">
             Your plan enforces a branch limit. Creating beyond the limit will be rejected.
           </p>
@@ -85,7 +100,7 @@ export function LocationCreateForm({
 
         <div className="flex justify-end gap-3 pt-2">
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Creating…" : `Create ${label}`}
+            {isSubmitting ? (isEdit ? "Saving…" : "Creating…") : resolvedSubmitLabel}
           </Button>
         </div>
       </form>

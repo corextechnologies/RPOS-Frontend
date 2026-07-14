@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
-import type { CreateLocationInput } from "@/lib/types/admin";
+import type { CreateLocationInput, UpdateLocationInput } from "@/lib/types/admin";
 import { toast } from "sonner";
 
 export function useBranches() {
@@ -23,6 +23,39 @@ export function useCreateBranch() {
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to create branch";
+      toast.error(message);
+    },
+  });
+}
+
+export function useUpdateBranch() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateLocationInput }) =>
+      api.updateBranch(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.branches });
+      toast.success("Branch updated");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to update branch";
+      toast.error(message);
+    },
+  });
+}
+
+export function useDeleteBranch() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => api.deleteBranch(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.branches });
+      toast.success("Branch deleted");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to delete branch";
       toast.error(message);
     },
   });

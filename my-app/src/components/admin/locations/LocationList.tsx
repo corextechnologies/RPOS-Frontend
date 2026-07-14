@@ -1,6 +1,15 @@
 "use client";
 
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import {
@@ -34,10 +43,21 @@ interface LocationListProps {
   isLoading: boolean;
   isError: boolean;
   onRetry?: () => void;
+  onEdit?: (id: string) => void;
+  onDelete?: (item: { id: string; name: string }) => void;
 }
 
-export function LocationList({ kind, items, isLoading, isError, onRetry }: LocationListProps) {
+export function LocationList({
+  kind,
+  items,
+  isLoading,
+  isError,
+  onRetry,
+  onEdit,
+  onDelete,
+}: LocationListProps) {
   const labels = KIND_LABELS[kind];
+  const showActions = Boolean(onEdit || onDelete);
 
   if (isLoading) {
     return (
@@ -83,6 +103,7 @@ export function LocationList({ kind, items, isLoading, isError, onRetry }: Locat
               <TableHead>Name</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Created</TableHead>
+              {showActions && <TableHead className="w-[72px]" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -95,6 +116,33 @@ export function LocationList({ kind, items, isLoading, isError, onRetry }: Locat
                 <TableCell className="text-muted">
                   {item.created_at ? formatDate(item.created_at) : "—"}
                 </TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Actions">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {onEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(item.id)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                        )}
+                        {onEdit && onDelete && <DropdownMenuSeparator />}
+                        {onDelete && (
+                          <DropdownMenuItem
+                            className="text-danger"
+                            onClick={() => onDelete({ id: item.id, name: item.name })}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
