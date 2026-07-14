@@ -10,6 +10,8 @@ export const queryKeys = {
   billing: (id: string) => ["billing", id] as const,
   adminBilling: ["admin-billing"] as const,
   invoices: (id: string) => ["invoices", id] as const,
+  branches: ["admin-branches"] as const,
   incomeSummary: (filter: IncomePeriodFilter) => ["income-summary", filter] as const,
   incomeForecast: (horizon: IncomeForecastHorizon) => ["income-forecast", horizon] as const,
+
 };

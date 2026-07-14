@@ -21,6 +21,8 @@ import type {
   BillingCycleResult,
 } from "@/lib/types/super-admin";
 
+import type { Branch, CreateLocationInput } from "@/lib/types/admin";
+
 export interface ApiClient {
   login(email: string, password: string): Promise<TokenResponse>;
   me(): Promise<MeResponse>;
@@ -53,6 +55,9 @@ export interface ApiClient {
   listInvoices(restaurantId: string): Promise<Invoice[]>;
   shareInvoice(invoiceId: string): Promise<Invoice>;
   unshareInvoice(invoiceId: string): Promise<Invoice>;
+
+  listBranches(): Promise<Branch[]>;
+  createBranch(body: CreateLocationInput): Promise<Branch>;
 
   getIncomeSummary(filter: IncomePeriodFilter): Promise<IncomeSummary>;
   getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
