@@ -1,3 +1,4 @@
+import type { RequestFilters } from "@/lib/types/admin";
 import type { RestaurantFilters } from "@/lib/types/super-admin";
 
 export const queryKeys = {
@@ -14,4 +15,13 @@ export const queryKeys = {
   warehouses: ["admin-warehouses"] as const,
   employees: (page?: number) => ["admin-employees", page] as const,
   productPricing: ["admin-product-pricing"] as const,
+  productRequests: (filters?: RequestFilters) =>
+    filters
+      ? (["admin-requests-products", filters] as const)
+      : (["admin-requests-products"] as const),
+  distributionRequests: (filters?: RequestFilters) =>
+    filters
+      ? (["admin-requests-distribution", filters] as const)
+      : (["admin-requests-distribution"] as const),
+  request: (id: string) => ["admin-request", id] as const,
 };

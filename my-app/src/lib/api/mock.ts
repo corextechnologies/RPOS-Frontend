@@ -10,6 +10,8 @@ import type {
   Kitchen,
   Paginated,
   ProductPricing,
+  RequestFilters,
+  StockRequest,
   UpdateProductPricingInput,
   Warehouse,
 } from "@/lib/types/admin";
@@ -37,7 +39,7 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 9;
+const SEED_VERSION = 10;
 
 interface MockInvoiceRecord {
   id: number;
@@ -69,6 +71,10 @@ interface MockProduct extends ProductPricing {
   restaurant_id: string;
 }
 
+interface MockStockRequest extends StockRequest {
+  restaurant_id: string;
+}
+
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
@@ -80,6 +86,7 @@ interface MockDb {
   warehouses: Warehouse[];
   employees: MockEmployee[];
   products: MockProduct[];
+  requests: MockStockRequest[];
 }
 
 const now = () => new Date().toISOString();
@@ -408,6 +415,111 @@ function seedDb(): MockDb {
     },
   ];
 
+  const requestCreated = now();
+  const requests: MockStockRequest[] = [
+    {
+      id: "req-001",
+      restaurant_id: "rest-001",
+      type: "BRANCH_TO_ADMIN",
+      status: "PENDING",
+      notes: "Need restock for weekend rush",
+      from_label: "Downtown Branch",
+      created_at: requestCreated,
+      line_items: [
+        {
+          id: "li-001",
+          product_id: "prod-001",
+          product_name: "House Blend Coffee Beans",
+          quantity_requested: 10,
+        },
+        {
+          id: "li-002",
+          product_id: "prod-003",
+          product_name: "Mozzarella Block",
+          quantity_requested: 6,
+        },
+      ],
+    },
+    {
+      id: "req-002",
+      restaurant_id: "rest-001",
+      type: "BRANCH_TO_ADMIN",
+      status: "PENDING",
+      notes: null,
+      from_label: "Downtown Branch",
+      created_at: requestCreated,
+      line_items: [
+        {
+          id: "li-003",
+          product_id: "prod-002",
+          product_name: "Tomato Sauce (Can)",
+          quantity_requested: 24,
+        },
+      ],
+    },
+    {
+      id: "req-003",
+      restaurant_id: "rest-001",
+      type: "BRANCH_TO_ADMIN",
+      status: "APPROVED",
+      notes: "Approved earlier this week",
+      from_label: "Downtown Branch",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      line_items: [
+        {
+          id: "li-004",
+          product_id: "prod-004",
+          product_name: "Paper Napkins (Pack)",
+          quantity_requested: 15,
+          quantity_approved: 15,
+        },
+      ],
+    },
+    {
+      id: "req-004",
+      restaurant_id: "rest-001",
+      type: "WAREHOUSE_TO_ADMIN_PO",
+      status: "PENDING",
+      notes: "PO for dry goods replenishment",
+      from_label: "Main Warehouse",
+      created_at: requestCreated,
+      line_items: [
+        {
+          id: "li-005",
+          product_id: "prod-001",
+          product_name: "House Blend Coffee Beans",
+          quantity_requested: 40,
+        },
+        {
+          id: "li-006",
+          product_id: "prod-002",
+          product_name: "Tomato Sauce (Can)",
+          quantity_requested: 60,
+        },
+      ],
+    },
+    {
+      id: "req-005",
+      restaurant_id: "rest-001",
+      type: "WAREHOUSE_TO_ADMIN_PO",
+      status: "PARTIALLY_APPROVED",
+      notes: "Partial for budget control",
+      from_label: "Main Warehouse",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      line_items: [
+        {
+          id: "li-007",
+          product_id: "prod-003",
+          product_name: "Mozzarella Block",
+          quantity_requested: 20,
+          quantity_approved: 12,
+        },
+      ],
+    },
+  ];
+
   return {
     _seed: SEED_VERSION,
     restaurants,
@@ -419,6 +531,7 @@ function seedDb(): MockDb {
     warehouses,
     employees,
     products,
+    requests,
   };
 }
 
@@ -513,6 +626,40 @@ function resolveMyRestaurant(db: MockDb, me: MeResponse): Restaurant {
   const r = db.restaurants.find((x) => x.admin.email === me.email);
   if (!r) throw new ApiError("Restaurant not found", 404);
   return r;
+}
+
+function toPublicRequest(req: MockStockRequest): StockRequest {
+  return {
+    id: req.id,
+    type: req.type,
+    status: req.status,
+    notes: req.notes,
+    from_label: req.from_label,
+    line_items: req.line_items,
+    created_at: req.created_at,
+    updated_at: req.updated_at,
+  };
+}
+
+function paginateRequests(
+  db: MockDb,
+  restaurantId: string,
+  type: StockRequest["type"],
+  filters?: RequestFilters,
+): Paginated<StockRequest> {
+  const page = filters?.page ?? 1;
+  const page_size = filters?.page_size ?? 20;
+  let rows = db.requests.filter((req) => req.restaurant_id === restaurantId && req.type === type);
+  if (filters?.status && filters.status !== "all") {
+    rows = rows.filter((req) => req.status === filters.status);
+  }
+  const start = (page - 1) * page_size;
+  return {
+    items: rows.slice(start, start + page_size).map(toPublicRequest),
+    page,
+    page_size,
+    total: rows.length,
+  };
 }
 
 function findUser(db: MockDb, email: string): MockUserAccount | undefined {
@@ -1046,5 +1193,31 @@ export const mockClient: ApiClient = {
       cost_price: product.cost_price,
     };
     return delay(result);
+  },
+
+  async listProductRequests(filters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(paginateRequests(db, r.id, "BRANCH_TO_ADMIN", filters));
+  },
+
+  async listDistributionRequests(filters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(paginateRequests(db, r.id, "WAREHOUSE_TO_ADMIN_PO", filters));
+  },
+
+  async getRequest(requestId) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.requests.find((req) => req.id === requestId && req.restaurant_id === r.id);
+    if (!found) throw new ApiError("Request not found", 404);
+    if (found.type !== "BRANCH_TO_ADMIN" && found.type !== "WAREHOUSE_TO_ADMIN_PO") {
+      throw new ApiError("Request not found", 404);
+    }
+    return delay(toPublicRequest(found));
   },
 };

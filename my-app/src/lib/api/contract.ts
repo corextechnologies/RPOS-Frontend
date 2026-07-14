@@ -7,6 +7,8 @@ import type {
   Kitchen,
   Paginated,
   ProductPricing,
+  RequestFilters,
+  StockRequest,
   UpdateProductPricingInput,
   Warehouse,
 } from "@/lib/types/admin";
@@ -67,4 +69,8 @@ export interface ApiClient {
     productId: string,
     body: UpdateProductPricingInput,
   ): Promise<ProductPricing>;
+
+  listProductRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
+  listDistributionRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
+  getRequest(requestId: string): Promise<StockRequest>;
 }

@@ -1,6 +1,7 @@
 import {
   Building2,
   CookingPot,
+  Inbox,
   LayoutDashboard,
   Receipt,
   Settings,
@@ -76,6 +77,13 @@ export const ADMIN_NAV: NavSection[] = [
         icon: Tag,
         action: "pricing:read",
         match: "exact",
+      },
+      {
+        label: "Requests",
+        href: "/admin/requests",
+        icon: Inbox,
+        action: "requests:read",
+        match: "prefix",
       },
     ],
   },
