@@ -284,6 +284,20 @@ export const adminApi = {
     return normalizeEmployee(data);
   },
 
+  async revokeUser(id: string): Promise<Employee> {
+    const data = await request<Employee>(`/admin/users/${id}/revoke`, { method: "POST" });
+    return normalizeEmployee(data);
+  },
+
+  async restoreUser(id: string): Promise<Employee> {
+    const data = await request<Employee>(`/admin/users/${id}/restore`, { method: "POST" });
+    return normalizeEmployee(data);
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/users/${id}`, { method: "DELETE" });
+  },
+
   async listProductPricing(): Promise<ProductPricing[]> {
     const data = await request<ProductPricing[]>("/admin/products/pricing");
     return data.map((p) => ({

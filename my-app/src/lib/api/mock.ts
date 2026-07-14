@@ -705,6 +705,20 @@ function findUser(db: MockDb, email: string): MockUserAccount | undefined {
   return db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 }
 
+function toEmployeeOut(e: MockEmployee): Employee {
+  return {
+    id: e.id,
+    email: e.email,
+    full_name: e.full_name,
+    role: e.role,
+    is_active: e.is_active,
+    branch_id: e.branch_id,
+    kitchen_id: e.kitchen_id,
+    warehouse_id: e.warehouse_id,
+    created_at: e.created_at,
+  };
+}
+
 function setSession(me: MeResponse) {
   if (typeof window !== "undefined") {
     localStorage.setItem(SESSION_KEY, JSON.stringify(me));
@@ -728,6 +742,9 @@ export const mockClient: ApiClient = {
     const user = findUser(db, email);
     if (!user || user.password !== password) {
       throw new ApiError("Invalid email or password", 401);
+    }
+    if (user.me.is_active === false) {
+      throw new ApiError("This account has been deactivated", 401);
     }
     return delay(issueTokens({ ...user.me }));
   },
@@ -1442,18 +1459,45 @@ export const mockClient: ApiClient = {
 
     saveDb(db);
 
-    const updated: Employee = {
-      id: employee.id,
-      email: employee.email,
-      full_name: employee.full_name,
-      role: employee.role,
-      is_active: employee.is_active,
-      branch_id: employee.branch_id,
-      kitchen_id: employee.kitchen_id,
-      warehouse_id: employee.warehouse_id,
-      created_at: employee.created_at,
-    };
-    return delay(updated);
+    return delay(toEmployeeOut(employee));
+  },
+
+  async revokeUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+    employee.is_active = false;
+    const account = findUser(db, employee.email);
+    if (account) account.me = { ...account.me, is_active: false };
+    saveDb(db);
+    return delay(toEmployeeOut(employee));
+  },
+
+  async restoreUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+    employee.is_active = true;
+    const account = findUser(db, employee.email);
+    if (account) account.me = { ...account.me, is_active: true };
+    saveDb(db);
+    return delay(toEmployeeOut(employee));
+  },
+
+  async deleteUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+    db.employees = db.employees.filter((e) => e.id !== id);
+    db.users = db.users.filter((u) => u.email.toLowerCase() !== employee.email.toLowerCase());
+    saveDb(db);
+    return delay(undefined);
   },
 
   async listProductPricing() {

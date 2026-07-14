@@ -6,8 +6,14 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { EmployeeList } from "@/components/admin/employees/EmployeeList";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useAuth } from "@/lib/auth";
-import { useEmployees } from "@/lib/hooks/use-employees";
+import {
+  useDeleteEmployee,
+  useEmployees,
+  useRestoreEmployee,
+  useRevokeEmployee,
+} from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import type { Employee } from "@/lib/types/admin";
 
@@ -19,6 +25,14 @@ export default function AdminEmployeesPage() {
   const branches = useBranches();
   const kitchens = useKitchens();
   const warehouses = useWarehouses();
+  const revokeEmployee = useRevokeEmployee();
+  const restoreEmployee = useRestoreEmployee();
+  const deleteEmployee = useDeleteEmployee();
+  const canManage = can("users:create");
+  const [confirm, setConfirm] = useState<{
+    type: "revoke" | "delete";
+    employee: Employee;
+  } | null>(null);
 
   const locationLabel = useMemo(() => {
     const branchNames = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
@@ -42,6 +56,16 @@ export default function AdminEmployeesPage() {
   const total = employees.data?.total ?? 0;
   const pageSize = employees.data?.page_size ?? 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const handleConfirm = async () => {
+    if (!confirm) return;
+    if (confirm.type === "revoke") {
+      await revokeEmployee.mutateAsync(confirm.employee.id);
+    } else {
+      await deleteEmployee.mutateAsync(confirm.employee.id);
+    }
+    setConfirm(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -71,9 +95,18 @@ export default function AdminEmployeesPage() {
         onRetry={() => employees.refetch()}
         locationLabel={locationLabel}
         onEdit={
-          can("users:create")
-            ? (id) => router.push(`/admin/employees/${id}/edit`)
+          canManage ? (id) => router.push(`/admin/employees/${id}/edit`) : undefined
+        }
+        onRevoke={
+          canManage ? (employee) => setConfirm({ type: "revoke", employee }) : undefined
+        }
+        onRestore={
+          canManage
+            ? (employee) => restoreEmployee.mutateAsync(employee.id)
             : undefined
+        }
+        onDelete={
+          canManage ? (employee) => setConfirm({ type: "delete", employee }) : undefined
         }
       />
 
@@ -100,6 +133,25 @@ export default function AdminEmployeesPage() {
           </Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+        title={confirm?.type === "delete" ? "Delete employee?" : "Revoke access?"}
+        description={
+          confirm?.type === "delete"
+            ? `Permanently delete “${confirm.employee.full_name}”? This cannot be undone.`
+            : confirm
+              ? `Revoke login access for “${confirm.employee.full_name}”? They will not be able to sign in until restored.`
+              : ""
+        }
+        confirmLabel={confirm?.type === "delete" ? "Delete employee" : "Revoke access"}
+        destructive
+        loading={revokeEmployee.isPending || deleteEmployee.isPending}
+        onConfirm={handleConfirm}
+      />
     </div>
   );
 }

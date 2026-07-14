@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, Pencil } from "lucide-react";
+import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +31,9 @@ interface EmployeeListProps {
   onRetry?: () => void;
   locationLabel: (employee: Employee) => string;
   onEdit?: (id: string) => void;
+  onRevoke?: (employee: Employee) => void;
+  onRestore?: (employee: Employee) => void;
+  onDelete?: (employee: Employee) => void;
 }
 
 export function EmployeeList({
@@ -39,8 +43,11 @@ export function EmployeeList({
   onRetry,
   locationLabel,
   onEdit,
+  onRevoke,
+  onRestore,
+  onDelete,
 }: EmployeeListProps) {
-  const showActions = Boolean(onEdit);
+  const showActions = Boolean(onEdit || onRevoke || onRestore || onDelete);
 
   if (isLoading) {
     return (
@@ -124,6 +131,27 @@ export function EmployeeList({
                           <DropdownMenuItem onClick={() => onEdit(employee.id)}>
                             <Pencil className="mr-2 h-4 w-4" /> Edit
                           </DropdownMenuItem>
+                        )}
+                        {onRevoke && employee.is_active && (
+                          <DropdownMenuItem onClick={() => onRevoke(employee)}>
+                            <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
+                          </DropdownMenuItem>
+                        )}
+                        {onRestore && !employee.is_active && (
+                          <DropdownMenuItem onClick={() => onRestore(employee)}>
+                            <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
+                          </DropdownMenuItem>
+                        )}
+                        {onDelete && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-danger"
+                              onClick={() => onDelete(employee)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>

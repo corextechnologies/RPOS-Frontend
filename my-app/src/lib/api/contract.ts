@@ -87,6 +87,9 @@ export interface ApiClient {
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
   createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
   updateUser(id: string, body: UpdateAdminUserInput): Promise<Employee>;
+  revokeUser(id: string): Promise<Employee>;
+  restoreUser(id: string): Promise<Employee>;
+  deleteUser(id: string): Promise<void>;
 
   listProductPricing(): Promise<ProductPricing[]>;
   updateProductPricing(
