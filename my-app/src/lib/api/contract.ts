@@ -76,8 +76,12 @@ export interface ApiClient {
   deleteBranch(id: string): Promise<void>;
   listKitchens(): Promise<Kitchen[]>;
   createKitchen(body: CreateLocationInput): Promise<Kitchen>;
+  updateKitchen(id: string, body: UpdateLocationInput): Promise<Kitchen>;
+  deleteKitchen(id: string): Promise<void>;
   listWarehouses(): Promise<Warehouse[]>;
   createWarehouse(body: CreateLocationInput): Promise<Warehouse>;
+  updateWarehouse(id: string, body: UpdateLocationInput): Promise<Warehouse>;
+  deleteWarehouse(id: string): Promise<void>;
 
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
   createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;

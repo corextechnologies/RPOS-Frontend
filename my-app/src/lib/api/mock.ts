@@ -1207,6 +1207,29 @@ export const mockClient: ApiClient = {
     return delay(kitchen);
   },
 
+  async updateKitchen(id: string, body: UpdateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const kitchen = db.kitchens.find((k) => k.id === id && k.restaurant_id === r.id);
+    if (!kitchen) throw new ApiError("Kitchen not found", 404);
+    if (body.name !== undefined) kitchen.name = body.name;
+    if (body.location !== undefined) kitchen.location = body.location;
+    saveDb(db);
+    return delay({ ...kitchen });
+  },
+
+  async deleteKitchen(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const exists = db.kitchens.some((k) => k.id === id && k.restaurant_id === r.id);
+    if (!exists) throw new ApiError("Kitchen not found", 404);
+    db.kitchens = db.kitchens.filter((k) => k.id !== id);
+    saveDb(db);
+    return delay(undefined);
+  },
+
   async listWarehouses() {
     const me = requireAuth();
     const db = loadDb();
@@ -1228,6 +1251,29 @@ export const mockClient: ApiClient = {
     db.warehouses.push(warehouse);
     saveDb(db);
     return delay(warehouse);
+  },
+
+  async updateWarehouse(id: string, body: UpdateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const warehouse = db.warehouses.find((w) => w.id === id && w.restaurant_id === r.id);
+    if (!warehouse) throw new ApiError("Warehouse not found", 404);
+    if (body.name !== undefined) warehouse.name = body.name;
+    if (body.location !== undefined) warehouse.location = body.location;
+    saveDb(db);
+    return delay({ ...warehouse });
+  },
+
+  async deleteWarehouse(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const exists = db.warehouses.some((w) => w.id === id && w.restaurant_id === r.id);
+    if (!exists) throw new ApiError("Warehouse not found", 404);
+    db.warehouses = db.warehouses.filter((w) => w.id !== id);
+    saveDb(db);
+    return delay(undefined);
   },
 
   async listEmployees(params) {

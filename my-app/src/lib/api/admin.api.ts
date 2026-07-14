@@ -195,6 +195,22 @@ export const adminApi = {
     };
   },
 
+  async updateKitchen(id: string, body: UpdateLocationInput): Promise<Kitchen> {
+    const data = await request<Kitchen>(`/admin/kitchens/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      id: String(data.id),
+      restaurant_id: String(data.restaurant_id),
+    };
+  },
+
+  async deleteKitchen(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/kitchens/${id}`, { method: "DELETE" });
+  },
+
   async listWarehouses(): Promise<Warehouse[]> {
     const data = await request<Warehouse[]>("/admin/warehouses");
     return data.map((w) => ({
@@ -214,6 +230,22 @@ export const adminApi = {
       id: String(data.id),
       restaurant_id: String(data.restaurant_id),
     };
+  },
+
+  async updateWarehouse(id: string, body: UpdateLocationInput): Promise<Warehouse> {
+    const data = await request<Warehouse>(`/admin/warehouses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      id: String(data.id),
+      restaurant_id: String(data.restaurant_id),
+    };
+  },
+
+  async deleteWarehouse(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/warehouses/${id}`, { method: "DELETE" });
   },
 
   async listEmployees(params?: {
