@@ -21,11 +21,16 @@ import {
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
 import { addOneBillingMonth, defaultNextBillingDate, planAmountForTier, planByTier, todayBillingDate } from "@/lib/plans/catalog";
+import {
+  buildMockIncomeCsv,
+  buildMockIncomeForecast,
+  buildMockIncomeSummary,
+} from "./mock-income";
 import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 6;
+const SEED_VERSION = 5;
 
 interface MockInvoiceRecord {
   id: number;
@@ -59,6 +64,18 @@ interface MockDb {
 }
 
 const now = () => new Date().toISOString();
+
+/** Local calendar date as YYYY-MM-DD (avoids UTC off-by-one in onboarding counts). */
+function localYmd(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function localCreatedAt(d = new Date()): string {
+  return `${localYmd(d)}T12:00:00`;
+}
 
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
@@ -217,7 +234,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2001",
       access_status: "active",
     },
-    created_at: now(),
+    created_at: localCreatedAt(),
     updated_at: now(),
   };
 
@@ -237,7 +254,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2002",
       access_status: "active",
     },
-    created_at: now(),
+    created_at: localCreatedAt(),
     updated_at: now(),
   };
 
@@ -257,7 +274,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2003",
       access_status: "revoked",
     },
-    created_at: now(),
+    created_at: localCreatedAt(),
     updated_at: now(),
   };
 
@@ -543,7 +560,7 @@ export const mockClient: ApiClient = {
         phone: body.owner_phone ?? "",
         access_status: "active",
       },
-      created_at: now(),
+      created_at: localCreatedAt(),
       updated_at: now(),
     };
 
@@ -807,6 +824,37 @@ export const mockClient: ApiClient = {
   async unshareInvoice() {
     throw new ApiError("Invoice sharing is not available", 501);
   },
+
+  async getIncomeSummary(filter) {
+    requireAuth();
+    if (!("month" in filter) && (!filter.from_date || !filter.to_date)) {
+      throw new ApiError("Provide month or from_date and to_date", 409);
+    }
+    const db = loadDb();
+    return delay(buildMockIncomeSummary(db.restaurants, db.invoices, filter));
+  },
+
+  async getIncomeForecast(horizon) {
+    requireAuth();
+    if (horizon !== 1 && horizon !== 6 && horizon !== 12) {
+      throw new ApiError("horizon must be 1, 6, or 12", 409);
+    }
+    const db = loadDb();
+    return delay(buildMockIncomeForecast(db.restaurants, horizon));
+  },
+
+  async downloadIncomeCsv(filter) {
+    requireAuth();
+    if (!("month" in filter) && (!filter.from_date || !filter.to_date)) {
+      throw new ApiError("Provide month or from_date and to_date", 409);
+    }
+    const db = loadDb();
+    const summary = buildMockIncomeSummary(db.restaurants, db.invoices, filter);
+    const forecast6 = buildMockIncomeForecast(db.restaurants, 6);
+    return delay(buildMockIncomeCsv(summary, forecast6, db.restaurants, db.invoices));
+  },
+
+
 
   async listBranches() {
     const me = requireAuth();

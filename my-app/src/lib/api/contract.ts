@@ -1,4 +1,9 @@
-import type { Branch, CreateLocationInput } from "@/lib/types/admin";
+import type {
+  IncomeForecast,
+  IncomeForecastHorizon,
+  IncomePeriodFilter,
+  IncomeSummary,
+} from "@/lib/types/income";
 import type {
   BillingSummary,
   ChangePasswordInput,
@@ -15,6 +20,8 @@ import type {
   UpdateRestaurantInput,
   BillingCycleResult,
 } from "@/lib/types/super-admin";
+
+import type { Branch, CreateLocationInput } from "@/lib/types/admin";
 
 export interface ApiClient {
   login(email: string, password: string): Promise<TokenResponse>;
@@ -51,4 +58,8 @@ export interface ApiClient {
 
   listBranches(): Promise<Branch[]>;
   createBranch(body: CreateLocationInput): Promise<Branch>;
+
+  getIncomeSummary(filter: IncomePeriodFilter): Promise<IncomeSummary>;
+  getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
+  downloadIncomeCsv(filter: IncomePeriodFilter): Promise<string>;
 }

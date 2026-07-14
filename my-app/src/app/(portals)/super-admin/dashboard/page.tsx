@@ -285,10 +285,12 @@ export default function DashboardPage() {
                 <XAxis dataKey="name" tick={{ fill: "rgb(var(--muted))", fontSize: 12 }} />
                 <YAxis allowDecimals={false} tick={{ fill: "rgb(var(--muted))", fontSize: 12 }} />
                 <Tooltip
+                  cursor={{ fill: "transparent" }}
                   contentStyle={{
                     background: "rgb(var(--surface))",
                     border: "1px solid rgb(var(--line))",
                     borderRadius: "0.75rem",
+                    color: "rgb(var(--content))",
                   }}
                 />
                 <Bar dataKey="count" fill="rgb(var(--brand))" radius={[6, 6, 0, 0]} />

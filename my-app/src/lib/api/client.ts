@@ -81,3 +81,32 @@ export async function request<T>(
   const json = await res.json();
   return unwrapData<T>(json);
 }
+
+/** Fetch non-JSON responses (e.g. CSV export) with the same auth/refresh behavior. */
+export async function requestText(
+  path: string,
+  init?: RequestInit,
+  retried = false,
+): Promise<string> {
+  const extra = init?.headers as Record<string, string> | undefined;
+  const headers = buildHeaders({ Accept: "text/csv, text/plain, */*", ...extra });
+  delete headers["Content-Type"];
+
+  const res = await fetch(`${apiConfig.baseUrl}${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (res.status === 401 && !retried && tokens.refresh) {
+    const refreshed = await refreshOnce();
+    if (refreshed) return requestText(path, init, true);
+    tokens.clear();
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw parseApiError(body, res.status);
+  }
+
+  return res.text();
+}

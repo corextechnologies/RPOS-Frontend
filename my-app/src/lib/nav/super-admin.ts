@@ -1,4 +1,4 @@
-import { LayoutDashboard, Plus, Settings, Receipt } from "lucide-react";
+import { LayoutDashboard, Plus, Settings, Receipt, TrendingUp } from "lucide-react";
 import type { NavSection } from "./types";
 
 export const SUPER_ADMIN_NAV: NavSection[] = [
@@ -11,6 +11,12 @@ export const SUPER_ADMIN_NAV: NavSection[] = [
         icon: LayoutDashboard,
         action: "restaurants:read",
         match: "exact",
+      },
+      {
+        label: "Income",
+        href: "/super-admin/income",
+        icon: TrendingUp,
+        match: "prefix",
       },
       {
         label: "Billing",
