@@ -2,6 +2,7 @@
  * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
 import type {
+  AdminProfile,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -12,6 +13,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateAdminProfileInput,
   UpdateAdminUserInput,
   UpdateLocationInput,
   UpdateProductPricingInput,
@@ -65,6 +67,7 @@ interface MockUserAccount {
   email: string;
   password: string;
   me: MeResponse;
+  image_url?: string | null;
 }
 
 interface MockResetToken {
@@ -1498,6 +1501,43 @@ export const mockClient: ApiClient = {
     db.users = db.users.filter((u) => u.email.toLowerCase() !== employee.email.toLowerCase());
     saveDb(db);
     return delay(undefined);
+  },
+
+  async getAdminSettings() {
+    const me = requireAuth();
+    const db = loadDb();
+    const account = findUser(db, me.email);
+    const profile: AdminProfile = {
+      id: String(me.id),
+      email: me.email,
+      full_name: me.full_name,
+      image_url: account?.image_url ?? null,
+      role: me.role,
+    };
+    return delay(profile);
+  },
+
+  async updateAdminSettings(body: UpdateAdminProfileInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const account = findUser(db, me.email);
+    if (!account) throw new ApiError("Account not found", 404);
+    if (body.full_name !== undefined) {
+      account.me = { ...account.me, full_name: body.full_name.trim() };
+    }
+    if (body.image_url !== undefined) {
+      account.image_url = body.image_url === "" ? null : body.image_url;
+    }
+    saveDb(db);
+    setSession(account.me);
+    const profile: AdminProfile = {
+      id: String(account.me.id),
+      email: account.me.email,
+      full_name: account.me.full_name,
+      image_url: account.image_url ?? null,
+      role: account.me.role,
+    };
+    return delay(profile);
   },
 
   async listProductPricing() {

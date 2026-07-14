@@ -67,6 +67,19 @@ export interface UpdateAdminUserInput {
   warehouse_id?: string;
 }
 
+export interface AdminProfile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  image_url: string | null;
+  role: string;
+}
+
+export interface UpdateAdminProfileInput {
+  full_name?: string;
+  image_url?: string;
+}
+
 export interface Employee {
   id: string;
   email: string;

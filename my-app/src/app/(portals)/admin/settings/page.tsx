@@ -1,5 +1,5 @@
-import { PortalSettings } from "@/components/layout/PortalSettings";
+import { AdminSettingsView } from "@/components/admin/settings/AdminSettingsView";
 
 export default function AdminSettingsPage() {
-  return <PortalSettings role="ADMIN" />;
+  return <AdminSettingsView />;
 }

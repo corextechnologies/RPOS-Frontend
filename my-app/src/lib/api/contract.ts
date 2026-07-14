@@ -1,4 +1,5 @@
 import type {
+  AdminProfile,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -9,6 +10,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateAdminProfileInput,
   UpdateAdminUserInput,
   UpdateLocationInput,
   UpdateProductPricingInput,
@@ -90,6 +92,9 @@ export interface ApiClient {
   revokeUser(id: string): Promise<Employee>;
   restoreUser(id: string): Promise<Employee>;
   deleteUser(id: string): Promise<void>;
+
+  getAdminSettings(): Promise<AdminProfile>;
+  updateAdminSettings(body: UpdateAdminProfileInput): Promise<AdminProfile>;
 
   listProductPricing(): Promise<ProductPricing[]>;
   updateProductPricing(

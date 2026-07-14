@@ -1,4 +1,5 @@
 import type {
+  AdminProfile,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -9,6 +10,7 @@ import type {
   ProductPricing,
   RequestFilters,
   StockRequest,
+  UpdateAdminProfileInput,
   UpdateAdminUserInput,
   UpdateLocationInput,
   UpdateProductPricingInput,
@@ -296,6 +298,19 @@ export const adminApi = {
 
   async deleteUser(id: string): Promise<void> {
     await request<{ detail: string }>(`/admin/users/${id}`, { method: "DELETE" });
+  },
+
+  async getAdminSettings(): Promise<AdminProfile> {
+    const data = await request<AdminProfile>("/admin/settings");
+    return { ...data, id: String(data.id) };
+  },
+
+  async updateAdminSettings(body: UpdateAdminProfileInput): Promise<AdminProfile> {
+    const data = await request<AdminProfile>("/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return { ...data, id: String(data.id) };
   },
 
   async listProductPricing(): Promise<ProductPricing[]> {

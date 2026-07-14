@@ -29,5 +29,6 @@ export const queryKeys = {
       ? (["admin-requests-distribution", filters] as const)
       : (["admin-requests-distribution"] as const),
   request: (id: string) => ["admin-request", id] as const,
+  adminSettings: ["admin-settings"] as const,
 };
 
