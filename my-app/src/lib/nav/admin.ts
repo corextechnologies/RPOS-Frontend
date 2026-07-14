@@ -1,4 +1,14 @@
-import { Building2, LayoutDashboard, Receipt, Settings } from "lucide-react";
+import {
+  Building2,
+  CookingPot,
+  Inbox,
+  LayoutDashboard,
+  Receipt,
+  Settings,
+  Tag,
+  Users,
+  Warehouse,
+} from "lucide-react";
 import type { NavSection } from "./types";
 
 export const ADMIN_NAV: NavSection[] = [
@@ -28,6 +38,51 @@ export const ADMIN_NAV: NavSection[] = [
         href: "/admin/branches",
         icon: Building2,
         action: "branches:read",
+        match: "prefix",
+      },
+      {
+        label: "Kitchens",
+        href: "/admin/kitchens",
+        icon: CookingPot,
+        action: "kitchens:read",
+        match: "prefix",
+      },
+      {
+        label: "Warehouses",
+        href: "/admin/warehouses",
+        icon: Warehouse,
+        action: "warehouses:read",
+        match: "prefix",
+      },
+    ],
+  },
+  {
+    title: "People",
+    items: [
+      {
+        label: "Employees",
+        href: "/admin/employees",
+        icon: Users,
+        action: "employees:read",
+        match: "prefix",
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        label: "Pricing",
+        href: "/admin/pricing",
+        icon: Tag,
+        action: "pricing:read",
+        match: "exact",
+      },
+      {
+        label: "Requests",
+        href: "/admin/requests",
+        icon: Inbox,
+        action: "requests:read",
         match: "prefix",
       },
     ],
