@@ -12,4 +12,5 @@ export const queryKeys = {
   branches: ["admin-branches"] as const,
   kitchens: ["admin-kitchens"] as const,
   warehouses: ["admin-warehouses"] as const,
+  employees: (page?: number) => ["admin-employees", page] as const,
 };

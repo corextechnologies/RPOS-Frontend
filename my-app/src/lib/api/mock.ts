@@ -1,7 +1,14 @@
 /**
  * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
-import type { Branch, CreateLocationInput, Kitchen, Warehouse } from "@/lib/types/admin";
+import type {
+  Branch,
+  CreateLocationInput,
+  Employee,
+  Kitchen,
+  Paginated,
+  Warehouse,
+} from "@/lib/types/admin";
 import {
   ApiError,
   type BillingSummary,
@@ -25,7 +32,7 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 7;
+const SEED_VERSION = 8;
 
 interface MockInvoiceRecord {
   id: number;
@@ -49,6 +56,10 @@ interface MockResetToken {
   expires: number;
 }
 
+interface MockEmployee extends Employee {
+  restaurant_id: string;
+}
+
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
@@ -58,6 +69,7 @@ interface MockDb {
   branches: Branch[];
   kitchens: Kitchen[];
   warehouses: Warehouse[];
+  employees: MockEmployee[];
 }
 
 const now = () => new Date().toISOString();
@@ -277,6 +289,46 @@ function seedDb(): MockDb {
     },
   ];
 
+  const created = now();
+  const employees: MockEmployee[] = [
+    {
+      id: "emp-003",
+      restaurant_id: "rest-001",
+      email: "warehouse@demo.ros",
+      full_name: "Sam Warehouse",
+      role: "WAREHOUSE_MANAGER",
+      is_active: true,
+      warehouse_id: "wh-001",
+      branch_id: null,
+      kitchen_id: null,
+      created_at: created,
+    },
+    {
+      id: "emp-004",
+      restaurant_id: "rest-001",
+      email: "kitchen@demo.ros",
+      full_name: "Casey Kitchen",
+      role: "KITCHEN_MANAGER",
+      is_active: true,
+      kitchen_id: "kit-001",
+      branch_id: null,
+      warehouse_id: null,
+      created_at: created,
+    },
+    {
+      id: "emp-005",
+      restaurant_id: "rest-001",
+      email: "branch@demo.ros",
+      full_name: "Riley Branch",
+      role: "BRANCH_MANAGER",
+      is_active: true,
+      branch_id: "br-001",
+      kitchen_id: null,
+      warehouse_id: null,
+      created_at: created,
+    },
+  ];
+
   const invoices: MockInvoiceRecord[] = [
     {
       id: 1,
@@ -324,6 +376,7 @@ function seedDb(): MockDb {
     branches,
     kitchens,
     warehouses,
+    employees,
   };
 }
 
@@ -795,5 +848,33 @@ export const mockClient: ApiClient = {
     db.warehouses.push(warehouse);
     saveDb(db);
     return delay(warehouse);
+  },
+
+  async listEmployees(params) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const page = params?.page ?? 1;
+    const page_size = params?.page_size ?? 20;
+    const all = db.employees.filter((e) => e.restaurant_id === r.id);
+    const start = (page - 1) * page_size;
+    const items: Employee[] = all.slice(start, start + page_size).map((e) => ({
+      id: e.id,
+      email: e.email,
+      full_name: e.full_name,
+      role: e.role,
+      is_active: e.is_active,
+      branch_id: e.branch_id,
+      kitchen_id: e.kitchen_id,
+      warehouse_id: e.warehouse_id,
+      created_at: e.created_at,
+    }));
+    const result: Paginated<Employee> = {
+      items,
+      page,
+      page_size,
+      total: all.length,
+    };
+    return delay(result);
   },
 };

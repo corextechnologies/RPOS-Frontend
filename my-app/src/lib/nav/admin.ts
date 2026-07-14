@@ -1,4 +1,12 @@
-import { Building2, CookingPot, LayoutDashboard, Receipt, Settings, Warehouse } from "lucide-react";
+import {
+  Building2,
+  CookingPot,
+  LayoutDashboard,
+  Receipt,
+  Settings,
+  Users,
+  Warehouse,
+} from "lucide-react";
 import type { NavSection } from "./types";
 
 export const ADMIN_NAV: NavSection[] = [
@@ -42,6 +50,18 @@ export const ADMIN_NAV: NavSection[] = [
         href: "/admin/warehouses",
         icon: Warehouse,
         action: "warehouses:read",
+        match: "prefix",
+      },
+    ],
+  },
+  {
+    title: "People",
+    items: [
+      {
+        label: "Employees",
+        href: "/admin/employees",
+        icon: Users,
+        action: "employees:read",
         match: "prefix",
       },
     ],
