@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Receipt,
   Settings,
+  Tag,
   Users,
   Warehouse,
 } from "lucide-react";
@@ -63,6 +64,18 @@ export const ADMIN_NAV: NavSection[] = [
         icon: Users,
         action: "employees:read",
         match: "prefix",
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        label: "Pricing",
+        href: "/admin/pricing",
+        icon: Tag,
+        action: "pricing:read",
+        match: "exact",
       },
     ],
   },

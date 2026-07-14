@@ -9,6 +9,8 @@ import type {
   Employee,
   Kitchen,
   Paginated,
+  ProductPricing,
+  UpdateProductPricingInput,
   Warehouse,
 } from "@/lib/types/admin";
 import {
@@ -35,7 +37,7 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 8;
+const SEED_VERSION = 9;
 
 interface MockInvoiceRecord {
   id: number;
@@ -63,6 +65,10 @@ interface MockEmployee extends Employee {
   restaurant_id: string;
 }
 
+interface MockProduct extends ProductPricing {
+  restaurant_id: string;
+}
+
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
@@ -73,6 +79,7 @@ interface MockDb {
   kitchens: Kitchen[];
   warehouses: Warehouse[];
   employees: MockEmployee[];
+  products: MockProduct[];
 }
 
 const now = () => new Date().toISOString();
@@ -370,6 +377,37 @@ function seedDb(): MockDb {
     },
   ];
 
+  const products: MockProduct[] = [
+    {
+      id: "prod-001",
+      restaurant_id: "rest-001",
+      name: "House Blend Coffee Beans",
+      sku: "BN-COF-001",
+      cost_price: "18.50",
+    },
+    {
+      id: "prod-002",
+      restaurant_id: "rest-001",
+      name: "Tomato Sauce (Can)",
+      sku: "ING-TOM-02",
+      cost_price: null,
+    },
+    {
+      id: "prod-003",
+      restaurant_id: "rest-001",
+      name: "Mozzarella Block",
+      sku: "DAI-MOZ-10",
+      cost_price: "9.75",
+    },
+    {
+      id: "prod-004",
+      restaurant_id: "rest-001",
+      name: "Paper Napkins (Pack)",
+      sku: "SUP-NAP-50",
+      cost_price: null,
+    },
+  ];
+
   return {
     _seed: SEED_VERSION,
     restaurants,
@@ -380,6 +418,7 @@ function seedDb(): MockDb {
     kitchens,
     warehouses,
     employees,
+    products,
   };
 }
 
@@ -968,5 +1007,44 @@ export const mockClient: ApiClient = {
       temporary_password: tempPassword,
     };
     return delay(result, 400);
+  },
+
+  async listProductPricing() {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const items: ProductPricing[] = db.products
+      .filter((p) => p.restaurant_id === r.id)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        cost_price: p.cost_price,
+      }));
+    return delay(items);
+  },
+
+  async updateProductPricing(productId: string, body: UpdateProductPricingInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const product = db.products.find((p) => p.id === productId && p.restaurant_id === r.id);
+    if (!product) throw new ApiError("Product not found", 404);
+
+    const raw = typeof body.cost_price === "number" ? body.cost_price : Number(body.cost_price);
+    if (!Number.isFinite(raw) || raw < 0) {
+      throw new ApiError("cost_price must be 0 or greater", 400);
+    }
+
+    product.cost_price = raw.toFixed(2);
+    saveDb(db);
+
+    const result: ProductPricing = {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      cost_price: product.cost_price,
+    };
+    return delay(result);
   },
 };

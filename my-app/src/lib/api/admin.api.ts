@@ -6,6 +6,8 @@ import type {
   Employee,
   Kitchen,
   Paginated,
+  ProductPricing,
+  UpdateProductPricingInput,
   Warehouse,
 } from "@/lib/types/admin";
 import type { BillingOut, BillingSummary } from "@/lib/types/super-admin";
@@ -175,6 +177,30 @@ export const adminApi = {
     return {
       ...data,
       user_id: String(data.user_id),
+    };
+  },
+
+  async listProductPricing(): Promise<ProductPricing[]> {
+    const data = await request<ProductPricing[]>("/admin/products/pricing");
+    return data.map((p) => ({
+      ...p,
+      id: String(p.id),
+      cost_price: p.cost_price == null ? null : String(p.cost_price),
+    }));
+  },
+
+  async updateProductPricing(
+    productId: string,
+    body: UpdateProductPricingInput,
+  ): Promise<ProductPricing> {
+    const data = await request<ProductPricing>(`/admin/products/${productId}/pricing`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      id: String(data.id),
+      cost_price: data.cost_price == null ? null : String(data.cost_price),
     };
   },
 };

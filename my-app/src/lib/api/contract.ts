@@ -6,6 +6,8 @@ import type {
   Employee,
   Kitchen,
   Paginated,
+  ProductPricing,
+  UpdateProductPricingInput,
   Warehouse,
 } from "@/lib/types/admin";
 import type {
@@ -59,4 +61,10 @@ export interface ApiClient {
 
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
   createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
+
+  listProductPricing(): Promise<ProductPricing[]>;
+  updateProductPricing(
+    productId: string,
+    body: UpdateProductPricingInput,
+  ): Promise<ProductPricing>;
 }

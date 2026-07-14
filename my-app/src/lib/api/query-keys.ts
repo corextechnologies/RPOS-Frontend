@@ -13,4 +13,5 @@ export const queryKeys = {
   kitchens: ["admin-kitchens"] as const,
   warehouses: ["admin-warehouses"] as const,
   employees: (page?: number) => ["admin-employees", page] as const,
+  productPricing: ["admin-product-pricing"] as const,
 };
