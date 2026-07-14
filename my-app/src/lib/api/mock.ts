@@ -20,6 +20,11 @@ import {
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
 import { addOneBillingMonth, defaultNextBillingDate, planAmountForTier, planByTier, todayBillingDate } from "@/lib/plans/catalog";
+import {
+  buildMockIncomeCsv,
+  buildMockIncomeForecast,
+  buildMockIncomeSummary,
+} from "./mock-income";
 import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
@@ -788,5 +793,33 @@ export const mockClient: ApiClient = {
 
   async unshareInvoice() {
     throw new ApiError("Invoice sharing is not available", 501);
+  },
+
+  async getIncomeSummary(filter) {
+    requireAuth();
+    if (!("month" in filter) && (!filter.from_date || !filter.to_date)) {
+      throw new ApiError("Provide month or from_date and to_date", 409);
+    }
+    const db = loadDb();
+    return delay(buildMockIncomeSummary(db.restaurants, db.invoices, filter));
+  },
+
+  async getIncomeForecast(horizon) {
+    requireAuth();
+    if (horizon !== 1 && horizon !== 6 && horizon !== 12) {
+      throw new ApiError("horizon must be 1, 6, or 12", 409);
+    }
+    const db = loadDb();
+    return delay(buildMockIncomeForecast(db.restaurants, horizon));
+  },
+
+  async downloadIncomeCsv(filter) {
+    requireAuth();
+    if (!("month" in filter) && (!filter.from_date || !filter.to_date)) {
+      throw new ApiError("Provide month or from_date and to_date", 409);
+    }
+    const db = loadDb();
+    const summary = buildMockIncomeSummary(db.restaurants, db.invoices, filter);
+    return delay(buildMockIncomeCsv(summary));
   },
 };

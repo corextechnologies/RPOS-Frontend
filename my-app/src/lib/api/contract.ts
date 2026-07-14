@@ -1,4 +1,10 @@
 import type {
+  IncomeForecast,
+  IncomeForecastHorizon,
+  IncomePeriodFilter,
+  IncomeSummary,
+} from "@/lib/types/income";
+import type {
   BillingSummary,
   ChangePasswordInput,
   CreateRestaurantInput,
@@ -47,4 +53,8 @@ export interface ApiClient {
   listInvoices(restaurantId: string): Promise<Invoice[]>;
   shareInvoice(invoiceId: string): Promise<Invoice>;
   unshareInvoice(invoiceId: string): Promise<Invoice>;
+
+  getIncomeSummary(filter: IncomePeriodFilter): Promise<IncomeSummary>;
+  getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
+  downloadIncomeCsv(filter: IncomePeriodFilter): Promise<string>;
 }

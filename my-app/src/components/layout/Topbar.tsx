@@ -22,6 +22,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   restaurants: "Restaurants",
   new: "Add Restaurant",
+  income: "Income",
   billing: "Billing",
   settings: "Settings",
 };
