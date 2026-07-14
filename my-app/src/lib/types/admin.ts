@@ -103,6 +103,28 @@ export interface SalesRecordFilters {
   page_size?: number;
 }
 
+export type SalesPeriod = "daily" | "weekly" | "monthly";
+
+export interface SalesSummaryBucket {
+  period_start: string;
+  total_amount: string;
+  count: number;
+}
+
+export interface SalesSummary {
+  period: SalesPeriod;
+  buckets: SalesSummaryBucket[];
+  total_amount: string;
+  total_count: number;
+}
+
+export interface SalesSummaryFilters {
+  period?: SalesPeriod;
+  start?: string;
+  end?: string;
+  branch_id?: string;
+}
+
 export interface Employee {
   id: string;
   email: string;

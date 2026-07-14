@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import { RecordSaleDialog } from "@/components/admin/sales/RecordSaleDialog";
+import { SalesSummaryPanel } from "@/components/admin/sales/SalesSummaryPanel";
 import { SalesTable } from "@/components/admin/sales/SalesTable";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,14 +18,18 @@ import { useBranches } from "@/lib/hooks/use-locations";
 import { useRecordSale, useSalesRecords } from "@/lib/hooks/use-sales";
 import type { RecordSaleForm } from "@/lib/schemas/sale";
 import type { CreateSaleInput, SalesRecord } from "@/lib/types/admin";
+import { cn } from "@/lib/utils";
 
 const ALL_BRANCHES = "all";
 const PAGE_SIZE = 50;
+
+type SalesTab = "summary" | "records";
 
 export default function AdminSalesPage() {
   const { can } = useAuth();
   const branches = useBranches();
   const recordSale = useRecordSale();
+  const [tab, setTab] = useState<SalesTab>("summary");
   const [page, setPage] = useState(1);
   const [branchFilter, setBranchFilter] = useState<string>(ALL_BRANCHES);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -82,58 +87,83 @@ export default function AdminSalesPage() {
         )}
       </div>
 
-      <div className="flex justify-end">
-        <Select
-          value={branchFilter}
-          onValueChange={(value) => {
-            setBranchFilter(value);
-            setPage(1);
-          }}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant={tab === "summary" ? "default" : "outline"}
+          className={cn(tab === "summary" && "pointer-events-none")}
+          onClick={() => setTab("summary")}
         >
-          <SelectTrigger className="sm:w-56">
-            <SelectValue placeholder="All branches" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_BRANCHES}>All branches</SelectItem>
-            {(branches.data ?? []).map((branch) => (
-              <SelectItem key={branch.id} value={branch.id}>
-                {branch.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          Summary
+        </Button>
+        <Button
+          type="button"
+          variant={tab === "records" ? "default" : "outline"}
+          className={cn(tab === "records" && "pointer-events-none")}
+          onClick={() => setTab("records")}
+        >
+          Records
+        </Button>
       </div>
 
-      <SalesTable
-        items={sales.data?.items}
-        isLoading={sales.isLoading}
-        isError={sales.isError}
-        onRetry={() => sales.refetch()}
-        branchLabel={branchLabel}
-      />
+      {tab === "summary" ? (
+        <SalesSummaryPanel branches={branches.data ?? []} />
+      ) : (
+        <>
+          <div className="flex justify-end">
+            <Select
+              value={branchFilter}
+              onValueChange={(value) => {
+                setBranchFilter(value);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="sm:w-56">
+                <SelectValue placeholder="All branches" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_BRANCHES}>All branches</SelectItem>
+                {(branches.data ?? []).map((branch) => (
+                  <SelectItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      {total > pageSize && (
-        <div className="flex items-center justify-end gap-3">
-          <p className="text-sm text-muted">
-            Page {page} of {totalPages}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={page <= 1 || sales.isFetching}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Previous
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={page >= totalPages || sales.isFetching}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Next
-          </Button>
-        </div>
+          <SalesTable
+            items={sales.data?.items}
+            isLoading={sales.isLoading}
+            isError={sales.isError}
+            onRetry={() => sales.refetch()}
+            branchLabel={branchLabel}
+          />
+
+          {total > pageSize && (
+            <div className="flex items-center justify-end gap-3">
+              <p className="text-sm text-muted">
+                Page {page} of {totalPages}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page <= 1 || sales.isFetching}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page >= totalPages || sales.isFetching}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
       )}
 
       <RecordSaleDialog

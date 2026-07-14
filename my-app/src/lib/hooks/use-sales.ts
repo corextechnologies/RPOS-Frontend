@@ -2,13 +2,24 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
-import type { CreateSaleInput, SalesRecordFilters } from "@/lib/types/admin";
+import type {
+  CreateSaleInput,
+  SalesRecordFilters,
+  SalesSummaryFilters,
+} from "@/lib/types/admin";
 import { toast } from "sonner";
 
 export function useSalesRecords(filters?: SalesRecordFilters) {
   return useQuery({
     queryKey: queryKeys.salesRecords(filters),
     queryFn: () => api.listSalesRecords(filters),
+  });
+}
+
+export function useSalesSummary(filters?: SalesSummaryFilters) {
+  return useQuery({
+    queryKey: queryKeys.salesSummary(filters),
+    queryFn: () => api.getSalesSummary(filters),
   });
 }
 

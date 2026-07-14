@@ -12,6 +12,8 @@ import type {
   RequestFilters,
   SalesRecord,
   SalesRecordFilters,
+  SalesSummary,
+  SalesSummaryFilters,
   StockRequest,
   UpdateAdminProfileInput,
   UpdateAdminUserInput,
@@ -44,6 +46,19 @@ function normalizeSale(s: SalesRecord): SalesRecord {
     restaurant_id: String(s.restaurant_id),
     branch_id: s.branch_id != null ? String(s.branch_id) : s.branch_id,
     amount: String(s.amount),
+  };
+}
+
+function normalizeSalesSummary(s: SalesSummary): SalesSummary {
+  return {
+    period: s.period,
+    total_amount: String(s.total_amount),
+    total_count: Number(s.total_count),
+    buckets: (s.buckets ?? []).map((b) => ({
+      period_start: b.period_start,
+      total_amount: String(b.total_amount),
+      count: Number(b.count),
+    })),
   };
 }
 
@@ -404,5 +419,15 @@ export const adminApi = {
       `/admin/sales/records?${qs.toString()}`,
     );
     return toPaginated(data, normalizeSale, meta, page, page_size);
+  },
+
+  async getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummary> {
+    const qs = new URLSearchParams();
+    qs.set("period", filters?.period ?? "daily");
+    if (filters?.start) qs.set("start", filters.start);
+    if (filters?.end) qs.set("end", filters.end);
+    if (filters?.branch_id) qs.set("branch_id", filters.branch_id);
+    const data = await request<SalesSummary>(`/admin/sales/summary?${qs.toString()}`);
+    return normalizeSalesSummary(data);
   },
 };

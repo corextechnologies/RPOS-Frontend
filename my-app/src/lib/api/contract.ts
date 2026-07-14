@@ -12,6 +12,8 @@ import type {
   RequestFilters,
   SalesRecord,
   SalesRecordFilters,
+  SalesSummary,
+  SalesSummaryFilters,
   StockRequest,
   UpdateAdminProfileInput,
   UpdateAdminUserInput,
@@ -101,6 +103,7 @@ export interface ApiClient {
 
   recordSale(body: CreateSaleInput): Promise<SalesRecord>;
   listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>>;
+  getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummary>;
 
   listProductPricing(): Promise<ProductPricing[]>;
   updateProductPricing(

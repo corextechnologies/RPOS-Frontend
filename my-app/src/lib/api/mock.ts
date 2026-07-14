@@ -14,6 +14,10 @@ import type {
   RequestFilters,
   SalesRecord,
   SalesRecordFilters,
+  SalesPeriod,
+  SalesSummary,
+  SalesSummaryBucket,
+  SalesSummaryFilters,
   CreateSaleInput,
   StockRequest,
   UpdateAdminProfileInput,
@@ -753,6 +757,19 @@ function paginateRequests(
 
 function findUser(db: MockDb, email: string): MockUserAccount | undefined {
   return db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+}
+
+function salesBucketStart(iso: string, period: SalesPeriod): string {
+  const d = new Date(iso);
+  d.setUTCHours(0, 0, 0, 0);
+  if (period === "monthly") {
+    d.setUTCDate(1);
+  } else if (period === "weekly") {
+    const day = d.getUTCDay(); // 0 = Sunday .. 6 = Saturday
+    const diff = day === 0 ? -6 : 1 - day; // shift back to Monday
+    d.setUTCDate(d.getUTCDate() + diff);
+  }
+  return d.toISOString();
 }
 
 function toEmployeeOut(e: MockEmployee): Employee {
@@ -1637,6 +1654,46 @@ export const mockClient: ApiClient = {
       total: rows.length,
     };
     return delay(result);
+  },
+
+  async getSalesSummary(filters?: SalesSummaryFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const period: SalesPeriod = filters?.period ?? "daily";
+
+    let rows = db.sales.filter((s) => s.restaurant_id === r.id);
+    if (filters?.branch_id) rows = rows.filter((s) => s.branch_id === filters.branch_id);
+    if (filters?.start) rows = rows.filter((s) => s.occurred_at >= filters.start!);
+    if (filters?.end) rows = rows.filter((s) => s.occurred_at <= filters.end!);
+
+    const byBucket = new Map<string, { total: number; count: number }>();
+    let grandTotal = 0;
+    for (const sale of rows) {
+      const key = salesBucketStart(sale.occurred_at, period);
+      const amount = parseFloat(sale.amount) || 0;
+      const entry = byBucket.get(key) ?? { total: 0, count: 0 };
+      entry.total += amount;
+      entry.count += 1;
+      byBucket.set(key, entry);
+      grandTotal += amount;
+    }
+
+    const buckets: SalesSummaryBucket[] = [...byBucket.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([period_start, { total, count }]) => ({
+        period_start,
+        total_amount: total.toFixed(2),
+        count,
+      }));
+
+    const summary: SalesSummary = {
+      period,
+      buckets,
+      total_amount: grandTotal.toFixed(2),
+      total_count: rows.length,
+    };
+    return delay(summary);
   },
 
   async listProductPricing() {

@@ -1,6 +1,10 @@
 import type { IncomeForecastHorizon, IncomePeriodFilter } from "@/lib/types/income";
 import type { RestaurantFilters } from "@/lib/types/super-admin";
-import type { RequestFilters, SalesRecordFilters } from "@/lib/types/admin";
+import type {
+  RequestFilters,
+  SalesRecordFilters,
+  SalesSummaryFilters,
+} from "@/lib/types/admin";
 
 
 export const queryKeys = {
@@ -34,5 +38,9 @@ export const queryKeys = {
     filters
       ? (["admin-sales-records", filters] as const)
       : (["admin-sales-records"] as const),
+  salesSummary: (filters?: SalesSummaryFilters) =>
+    filters
+      ? (["admin-sales-summary", filters] as const)
+      : (["admin-sales-summary"] as const),
 };
 
