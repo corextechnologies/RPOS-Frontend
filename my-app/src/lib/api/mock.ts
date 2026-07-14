@@ -24,7 +24,7 @@ import { tokens } from "./tokens";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 4;
+const SEED_VERSION = 5;
 
 interface MockInvoiceRecord {
   id: number;
@@ -186,8 +186,8 @@ function seedDb(): MockDb {
     name: "Demo Restaurant Group",
     plan_tier: "premium",
     plan_status: "active",
-    branch_limit: 10,
-    branch_count: 4,
+    branch_limit: 2,
+    branch_count: 2,
     plan_amount: "499.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
