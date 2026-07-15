@@ -42,5 +42,7 @@ export const queryKeys = {
     filters
       ? (["admin-sales-summary", filters] as const)
       : (["admin-sales-summary"] as const),
+
+  warehouseInventory: ["warehouse-inventory"] as const,
 };
 

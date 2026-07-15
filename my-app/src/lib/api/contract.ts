@@ -28,6 +28,7 @@ import type {
   IncomePeriodFilter,
   IncomeSummary,
 } from "@/lib/types/income";
+import type { InventoryItem } from "@/lib/types/warehouse";
 import type {
   BillingSummary,
   ChangePasswordInput,
@@ -122,4 +123,6 @@ export interface ApiClient {
   getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
   downloadIncomeCsv(filter: IncomePeriodFilter): Promise<string>;
 
+  // Warehouse (Phase 3) — auto-scoped to the caller's warehouse.
+  listWarehouseInventory(): Promise<InventoryItem[]>;
 }

@@ -44,6 +44,8 @@ import {
   type TokenResponse,
   type UserRole,
 } from "@/lib/types/super-admin";
+import type { InventoryItem } from "@/lib/types/warehouse";
+import { MISSING_WAREHOUSE_ASSIGNMENT } from "@/lib/types/warehouse";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
 import { addOneBillingMonth, defaultNextBillingDate, planAmountForTier, planByTier, todayBillingDate } from "@/lib/plans/catalog";
@@ -57,7 +59,7 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 11;
+const SEED_VERSION = 12;
 
 interface MockInvoiceRecord {
   id: number;
@@ -94,6 +96,10 @@ interface MockStockRequest extends StockRequest {
   restaurant_id: string;
 }
 
+interface MockInventoryItem extends InventoryItem {
+  restaurant_id: string;
+}
+
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
@@ -107,6 +113,7 @@ interface MockDb {
   products: MockProduct[];
   requests: MockStockRequest[];
   sales: SalesRecord[];
+  inventory: MockInventoryItem[];
 }
 
 const now = () => new Date().toISOString();
@@ -182,6 +189,21 @@ function seedUsers(): MockUserAccount[] {
         id: 3,
         email: "warehouse@demo.ros",
         full_name: "Sam Warehouse",
+        role: "WAREHOUSE_MANAGER",
+        restaurant_id: 1,
+        created_by_id: 2,
+        is_active: true,
+      },
+    },
+    {
+      // Warehouse manager with no warehouse assigned — exercises the
+      // `missing_warehouse_assignment` 409 path.
+      email: "warehouse2@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 7,
+        email: "warehouse2@demo.ros",
+        full_name: "Unassigned Warehouse",
         role: "WAREHOUSE_MANAGER",
         restaurant_id: 1,
         created_by_id: 2,
@@ -366,6 +388,18 @@ function seedDb(): MockDb {
       role: "WAREHOUSE_MANAGER",
       is_active: true,
       warehouse_id: "wh-001",
+      branch_id: null,
+      kitchen_id: null,
+      created_at: created,
+    },
+    {
+      id: "emp-007",
+      restaurant_id: "rest-001",
+      email: "warehouse2@demo.ros",
+      full_name: "Unassigned Warehouse",
+      role: "WAREHOUSE_MANAGER",
+      is_active: true,
+      warehouse_id: null,
       branch_id: null,
       kitchen_id: null,
       created_at: created,
@@ -612,6 +646,59 @@ function seedDb(): MockDb {
     },
   ];
 
+  // Expiry dates are relative to today so the near-expiry view stays meaningful
+  // as the seed ages.
+  const expiryInDays = (n: number) =>
+    localYmd(new Date(Date.now() + n * 24 * 60 * 60 * 1000));
+
+  const inventory: MockInventoryItem[] = [
+    {
+      id: "inv-001",
+      restaurant_id: "rest-001",
+      product_id: "prod-001",
+      product: { id: "prod-001", name: "House Blend Coffee Beans", sku: "BN-COF-001" },
+      quantity: 120,
+      batch_code: "B-COF-07",
+      expiry_date: expiryInDays(45),
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+    },
+    {
+      id: "inv-002",
+      restaurant_id: "rest-001",
+      product_id: "prod-002",
+      product: { id: "prod-002", name: "Tomato Sauce (Can)", sku: "ING-TOM-02" },
+      quantity: 64,
+      batch_code: "B-TOM-03",
+      expiry_date: expiryInDays(5),
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+    },
+    {
+      id: "inv-003",
+      restaurant_id: "rest-001",
+      product_id: "prod-003",
+      product: { id: "prod-003", name: "Mozzarella Block", sku: "DAI-MOZ-10" },
+      quantity: 18,
+      batch_code: "B-MOZ-11",
+      expiry_date: expiryInDays(2),
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+    },
+    {
+      // Unbatched, non-perishable stock: empty batch code and no expiry.
+      id: "inv-004",
+      restaurant_id: "rest-001",
+      product_id: "prod-004",
+      product: { id: "prod-004", name: "Paper Napkins (Pack)", sku: "SUP-NAP-50" },
+      quantity: 300,
+      batch_code: "",
+      expiry_date: null,
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+    },
+  ];
+
   return {
     _seed: SEED_VERSION,
     restaurants,
@@ -625,6 +712,7 @@ function seedDb(): MockDb {
     products,
     requests,
     sales,
+    inventory,
   };
 }
 
@@ -719,6 +807,44 @@ function resolveMyRestaurant(db: MockDb, me: MeResponse): Restaurant {
   const r = db.restaurants.find((x) => x.admin.email === me.email);
   if (!r) throw new ApiError("Restaurant not found", 404);
   return r;
+}
+
+/**
+ * Resolve the warehouse the signed-in manager is assigned to.
+ *
+ * Warehouse managers are not restaurant owners, so `resolveMyRestaurant` (which
+ * matches on `admin.email`) never resolves for them. The assignment lives on the
+ * employee record instead — `me.restaurant_id` is a number and does not map to
+ * `Restaurant.id`, so it cannot be used here either.
+ */
+function resolveMyWarehouse(db: MockDb, me: MeResponse): Warehouse {
+  const employee = db.employees.find(
+    (e) => e.email.toLowerCase() === me.email.toLowerCase(),
+  );
+  const warehouse = employee?.warehouse_id
+    ? db.warehouses.find((w) => w.id === employee.warehouse_id)
+    : undefined;
+  if (!warehouse) {
+    throw new ApiError(
+      "No warehouse is assigned to your account",
+      409,
+      MISSING_WAREHOUSE_ASSIGNMENT,
+    );
+  }
+  return warehouse;
+}
+
+function toPublicInventoryItem(item: MockInventoryItem): InventoryItem {
+  return {
+    id: item.id,
+    product_id: item.product_id,
+    product: item.product,
+    quantity: item.quantity,
+    batch_code: item.batch_code,
+    expiry_date: item.expiry_date,
+    location_type: item.location_type,
+    location_id: item.location_id,
+  };
 }
 
 function toPublicRequest(req: MockStockRequest): StockRequest {
@@ -1817,5 +1943,18 @@ export const mockClient: ApiClient = {
     found.updated_at = now();
     saveDb(db);
     return delay(toPublicRequest(found));
+  },
+
+  async listWarehouseInventory() {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+    const items = db.inventory
+      .filter(
+        (item) =>
+          item.location_type === "WAREHOUSE" && item.location_id === warehouse.id,
+      )
+      .map(toPublicInventoryItem);
+    return delay(items);
   },
 };

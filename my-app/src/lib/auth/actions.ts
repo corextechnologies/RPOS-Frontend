@@ -24,7 +24,9 @@ export type AuthAction =
   | "requests:update"
   | "sales:read"
   | "sales:create"
-  | "overview:read";
+  | "overview:read"
+  // Warehouse (Phase 3)
+  | "inventory:read";
 
 import type { UserRole } from "@/lib/types/super-admin";
 
@@ -59,7 +61,7 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "sales:create",
     "overview:read",
   ],
-  WAREHOUSE_MANAGER: [],
+  WAREHOUSE_MANAGER: ["inventory:read"],
   KITCHEN_MANAGER: [],
   BRANCH_MANAGER: [],
 };
