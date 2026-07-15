@@ -1,0 +1,150 @@
+"use client";
+
+import { MoreHorizontal, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState, ErrorState } from "@/components/ui/state";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { InventoryItem } from "@/lib/types/warehouse";
+
+interface InventoryTableProps {
+  items?: InventoryItem[];
+  isLoading: boolean;
+  isError: boolean;
+  onRetry?: () => void;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  onAdjust?: (item: InventoryItem) => void;
+  onWaste?: (item: InventoryItem) => void;
+}
+
+/**
+ * On-hand stock for the caller's warehouse.
+ * There is deliberately no price column: `InventoryItem` carries no cost price,
+ * so one cannot be rendered here by accident.
+ */
+export function InventoryTable({
+  items,
+  isLoading,
+  isError,
+  onRetry,
+  emptyTitle = "No stock on hand",
+  emptyDescription = "Items will appear here once stock is received into your warehouse.",
+  onAdjust,
+  onWaste,
+}: InventoryTableProps) {
+  const showActions = Boolean(onAdjust || onWaste);
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 p-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <ErrorState description="Failed to load inventory." onRetry={onRetry} />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!items || items.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <EmptyState title={emptyTitle} description={emptyDescription} />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Product</TableHead>
+              <TableHead>SKU</TableHead>
+              <TableHead>Batch</TableHead>
+              <TableHead>Expiry</TableHead>
+              <TableHead className="text-right">Quantity</TableHead>
+              {showActions && <TableHead className="w-[72px]" />}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item) => (
+              <TableRow key={item.id}>
+                <TableCell>
+                  <p className="font-medium text-content">{item.product.name}</p>
+                </TableCell>
+                <TableCell className="text-muted">{item.product.sku || "—"}</TableCell>
+                <TableCell>
+                  {item.batch_code ? (
+                    <span className="text-muted">{item.batch_code}</span>
+                  ) : (
+                    <Badge variant="secondary">Unbatched</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-muted">{item.expiry_date || "—"}</TableCell>
+                <TableCell className="text-right font-medium text-content">
+                  {item.quantity}
+                </TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Actions">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {onAdjust && (
+                          <DropdownMenuItem onClick={() => onAdjust(item)}>
+                            <SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust
+                            quantity
+                          </DropdownMenuItem>
+                        )}
+                        {onWaste && (
+                          <DropdownMenuItem
+                            className="text-danger"
+                            onClick={() => onWaste(item)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Mark waste
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}

@@ -82,6 +82,43 @@ export async function request<T>(
   return unwrapData<T>(json);
 }
 
+/**
+ * Like `request`, but keeps the envelope's `meta` — list endpoints return
+ * pagination there rather than in `data`.
+ */
+export async function requestEnvelope<T>(
+  path: string,
+  init?: RequestInit,
+  retried = false,
+): Promise<{ data: T; meta?: Record<string, unknown> }> {
+  const extra = init?.headers as Record<string, string> | undefined;
+  const headers = buildHeaders(extra);
+
+  const res = await fetch(`${apiConfig.baseUrl}${path}`, {
+    ...init,
+    headers,
+  });
+
+  if (res.status === 401 && !retried && tokens.refresh) {
+    const refreshed = await refreshOnce();
+    if (refreshed) return requestEnvelope<T>(path, init, true);
+    tokens.clear();
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw parseApiError(body, res.status);
+  }
+
+  const json = await res.json();
+  const meta =
+    json !== null && typeof json === "object" && "meta" in json
+      ? (json as { meta?: Record<string, unknown> }).meta
+      : undefined;
+
+  return { data: unwrapData<T>(json), meta };
+}
+
 /** Fetch non-JSON responses (e.g. CSV export) with the same auth/refresh behavior. */
 export async function requestText(
   path: string,

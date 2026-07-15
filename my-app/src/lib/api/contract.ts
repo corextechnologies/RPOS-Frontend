@@ -29,6 +29,20 @@ import type {
   IncomeSummary,
 } from "@/lib/types/income";
 import type {
+  AdjustStockInput,
+  CreatePurchaseOrderInput,
+  CreateWarehouseStaffInput,
+  CreateWarehouseStaffResult,
+  InventoryItem,
+  NearExpiryFilters,
+  ReceiveStockInput,
+  UpdateWarehouseRequestStatusInput,
+  WarehouseRequest,
+  WarehouseRequestFilters,
+  WarehouseStaff,
+  WasteStockInput,
+} from "@/lib/types/warehouse";
+import type {
   BillingSummary,
   ChangePasswordInput,
   CreateRestaurantInput,
@@ -122,4 +136,29 @@ export interface ApiClient {
   getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
   downloadIncomeCsv(filter: IncomePeriodFilter): Promise<string>;
 
+  // Warehouse (Phase 3) — auto-scoped to the caller's warehouse.
+  listWarehouseInventory(): Promise<InventoryItem[]>;
+  listNearExpiryInventory(filters?: NearExpiryFilters): Promise<InventoryItem[]>;
+  receiveWarehouseStock(body: ReceiveStockInput): Promise<InventoryItem>;
+  adjustWarehouseStock(body: AdjustStockInput): Promise<InventoryItem>;
+  wasteWarehouseStock(body: WasteStockInput): Promise<InventoryItem>;
+  listWarehouseUsers(params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<Paginated<WarehouseStaff>>;
+  createWarehouseUser(
+    body: CreateWarehouseStaffInput,
+  ): Promise<CreateWarehouseStaffResult>;
+  createWarehousePo(body: CreatePurchaseOrderInput): Promise<WarehouseRequest>;
+  listWarehousePos(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>>;
+  listWarehouseKitchenRequests(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>>;
+  getWarehouseRequest(requestId: string): Promise<WarehouseRequest>;
+  updateWarehouseRequestStatus(
+    requestId: string,
+    body: UpdateWarehouseRequestStatusInput,
+  ): Promise<WarehouseRequest>;
 }

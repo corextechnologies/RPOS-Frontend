@@ -24,7 +24,17 @@ export type AuthAction =
   | "requests:update"
   | "sales:read"
   | "sales:create"
-  | "overview:read";
+  | "overview:read"
+  // Warehouse (Phase 3)
+  | "inventory:read"
+  | "stock:receive"
+  | "stock:adjust"
+  | "stock:waste"
+  | "staff:read"
+  | "staff:create"
+  | "po:read"
+  | "po:create"
+  | "kitchen-requests:read";
 
 import type { UserRole } from "@/lib/types/super-admin";
 
@@ -59,7 +69,19 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "sales:create",
     "overview:read",
   ],
-  WAREHOUSE_MANAGER: [],
+  WAREHOUSE_MANAGER: [
+    "inventory:read",
+    "stock:receive",
+    "stock:adjust",
+    "stock:waste",
+    "staff:read",
+    "staff:create",
+    "po:read",
+    "po:create",
+    "kitchen-requests:read",
+    // Same operation name as Admin's, scoped by this role's own transition map.
+    "requests:update",
+  ],
   KITCHEN_MANAGER: [],
   BRANCH_MANAGER: [],
 };
