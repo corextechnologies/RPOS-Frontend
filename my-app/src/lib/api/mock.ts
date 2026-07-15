@@ -46,9 +46,12 @@ import {
 } from "@/lib/types/super-admin";
 import type {
   AdjustStockInput,
+  CreateWarehouseStaffInput,
+  CreateWarehouseStaffResult,
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  WarehouseStaff,
   WasteStockInput,
 } from "@/lib/types/warehouse";
 import {
@@ -2133,5 +2136,106 @@ export const mockClient: ApiClient = {
     item.quantity -= quantity;
     saveDb(db);
     return delay(toPublicInventoryItem(item));
+  },
+
+  async listWarehouseUsers(params) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const page = params?.page ?? 1;
+    const page_size = params?.page_size ?? 20;
+
+    // Creator-scoped: only staff this manager created, never everyone attached
+    // to the warehouse. The creator link lives on the user account.
+    const createdByMe = new Set(
+      db.users
+        .filter((u) => u.me.created_by_id === me.id)
+        .map((u) => u.email.toLowerCase()),
+    );
+    const all = db.employees.filter(
+      (e) =>
+        e.warehouse_id === warehouse.id && createdByMe.has(e.email.toLowerCase()),
+    );
+
+    const start = (page - 1) * page_size;
+    const items: WarehouseStaff[] = all
+      .slice(start, start + page_size)
+      .map((e) => ({
+        id: e.id,
+        email: e.email,
+        full_name: e.full_name,
+        role: e.role,
+        is_active: e.is_active,
+        warehouse_id: warehouse.id,
+        created_at: e.created_at,
+      }));
+
+    const result: Paginated<WarehouseStaff> = {
+      items,
+      page,
+      page_size,
+      total: all.length,
+    };
+    return delay(result);
+  },
+
+  async createWarehouseUser(body: CreateWarehouseStaffInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const email = body.email.trim().toLowerCase();
+    if (findUser(db, email)) {
+      throw new ApiError("A user with this email already exists", 409, "conflict");
+    }
+
+    const fullName = body.full_name?.trim() || null;
+    const nextId =
+      db.users.reduce(
+        (max, u) => Math.max(max, typeof u.me.id === "number" ? u.me.id : 0),
+        0,
+      ) + 1;
+
+    // The live API emails a generated password and never returns it. The mock
+    // reuses the shared demo password so created staff stay testable offline —
+    // it is deliberately absent from the response either way.
+    db.users.push({
+      email,
+      password: "Demo@1234",
+      me: {
+        id: nextId,
+        email,
+        full_name: fullName,
+        role: "WAREHOUSE_MANAGER",
+        restaurant_id: me.restaurant_id ?? 1,
+        created_by_id: me.id,
+        is_active: true,
+      },
+    });
+
+    db.employees.push({
+      id: `emp-${nextId}`,
+      restaurant_id: warehouse.restaurant_id,
+      email,
+      full_name: fullName ?? "",
+      role: "WAREHOUSE_MANAGER",
+      is_active: true,
+      branch_id: null,
+      kitchen_id: null,
+      warehouse_id: warehouse.id,
+      created_at: now(),
+    });
+
+    saveDb(db);
+
+    const result: CreateWarehouseStaffResult = {
+      user_id: String(nextId),
+      email,
+      role: "WAREHOUSE_MANAGER",
+      warehouse_id: warehouse.id,
+      credential_email_sent: true,
+    };
+    return delay(result, 400);
   },
 };

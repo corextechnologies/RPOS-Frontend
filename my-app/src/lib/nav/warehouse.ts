@@ -4,6 +4,7 @@ import {
   PackagePlus,
   Settings,
   TriangleAlert,
+  Users,
 } from "lucide-react";
 import type { NavSection } from "./types";
 
@@ -41,6 +42,18 @@ export const WAREHOUSE_NAV: NavSection[] = [
         href: "/warehouse/waste",
         icon: TriangleAlert,
         action: "stock:waste",
+        match: "exact",
+      },
+    ],
+  },
+  {
+    title: "People",
+    items: [
+      {
+        label: "Staff",
+        href: "/warehouse/staff",
+        icon: Users,
+        action: "staff:read",
         match: "exact",
       },
     ],

@@ -34,6 +34,44 @@ export interface InventoryItem {
   location_id: string;
 }
 
+/**
+ * A staff member created by the signed-in warehouse manager.
+ *
+ * `GET /warehouse/users` is creator-scoped: it returns only the staff this
+ * manager created, never everyone attached to the warehouse. UI copy must not
+ * imply otherwise. The API assigns them the WAREHOUSE_MANAGER role.
+ */
+export interface WarehouseStaff {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: string;
+  is_active: boolean;
+  warehouse_id: string;
+  created_at?: string;
+}
+
+/** Body for `POST /warehouse/users`. */
+export interface CreateWarehouseStaffInput {
+  email: string;
+  full_name?: string;
+}
+
+/**
+ * Result of `POST /warehouse/users`.
+ *
+ * Note there is no temporary password here — unlike the Admin equivalent, this
+ * endpoint only emails the credentials. Never surface a credentials dialog for
+ * this flow; there is nothing to show.
+ */
+export interface CreateWarehouseStaffResult {
+  user_id: string;
+  email: string;
+  role: string;
+  warehouse_id: string;
+  credential_email_sent: boolean;
+}
+
 /** Body for `POST /warehouse/stock/receive` — incoming stock. */
 export interface ReceiveStockInput {
   product_id: string;

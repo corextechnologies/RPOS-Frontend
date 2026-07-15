@@ -46,5 +46,6 @@ export const queryKeys = {
   warehouseInventory: ["warehouse-inventory"] as const,
   warehouseNearExpiry: (withinDays: number) =>
     ["warehouse-near-expiry", withinDays] as const,
+  warehouseStaff: (page?: number) => ["warehouse-staff", page] as const,
 };
 
