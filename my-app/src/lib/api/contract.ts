@@ -36,6 +36,7 @@ import type {
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  UpdateWarehouseRequestStatusInput,
   WarehouseRequest,
   WarehouseRequestFilters,
   WarehouseStaff,
@@ -152,5 +153,12 @@ export interface ApiClient {
   listWarehousePos(
     filters?: WarehouseRequestFilters,
   ): Promise<Paginated<WarehouseRequest>>;
+  listWarehouseKitchenRequests(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>>;
   getWarehouseRequest(requestId: string): Promise<WarehouseRequest>;
+  updateWarehouseRequestStatus(
+    requestId: string,
+    body: UpdateWarehouseRequestStatusInput,
+  ): Promise<WarehouseRequest>;
 }

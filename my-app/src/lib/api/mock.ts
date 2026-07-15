@@ -3,11 +3,13 @@
  */
 import type {
   AdminProfile,
+  AdminRequestType,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
   CreateLocationInput,
   Employee,
+  RequestStatus,
   Kitchen,
   Paginated,
   ProductPricing,
@@ -53,6 +55,7 @@ import type {
   NearExpiryFilters,
   ReceiveStockInput,
   StockLocationType,
+  UpdateWarehouseRequestStatusInput,
   WarehouseRequest,
   WarehouseRequestFilters,
   WarehouseRequestStatus,
@@ -64,8 +67,11 @@ import {
   INSUFFICIENT_STOCK,
   INVALID_MOVEMENT_TYPE,
   INVALID_QUANTITY,
+  INVALID_TRANSITION,
   MISSING_WAREHOUSE_ASSIGNMENT,
+  MISSING_WAREHOUSE_TARGET,
 } from "@/lib/types/warehouse";
+import { warehouseAllowedTransitions } from "@/lib/warehouse/request-transitions";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
 import { addOneBillingMonth, defaultNextBillingDate, planAmountForTier, planByTier, todayBillingDate } from "@/lib/plans/catalog";
@@ -79,7 +85,7 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 13;
+const SEED_VERSION = 14;
 
 interface MockInvoiceRecord {
   id: number;
@@ -112,7 +118,17 @@ interface MockProduct extends ProductPricing {
   restaurant_id: string;
 }
 
-interface MockStockRequest extends StockRequest {
+/**
+ * The stored request vocabulary is wider than either portal's public one:
+ * Admin never sees KITCHEN_TO_WAREHOUSE or DISPATCHED, the warehouse never sees
+ * REJECTED or FORWARDED_TO_KITCHEN. Each projection narrows back down.
+ */
+type MockRequestType = AdminRequestType | "KITCHEN_TO_WAREHOUSE";
+type MockRequestStatus = RequestStatus | "DISPATCHED";
+
+interface MockStockRequest extends Omit<StockRequest, "type" | "status"> {
+  type: MockRequestType;
+  status: MockRequestStatus;
   restaurant_id: string;
   // Warehouse-facing fields (Phase 3). One request store keeps the cross-portal
   // flow honest — a PO raised here still lands in Admin's inbox, which reads the
@@ -638,6 +654,77 @@ function seedDb(): MockDb {
         },
       ],
     },
+    {
+      // Admin has queued this PO; the warehouse can now close it out.
+      id: "req-006",
+      restaurant_id: "rest-001",
+      type: "WAREHOUSE_TO_ADMIN_PO",
+      status: "IN_QUEUE",
+      notes: "Queued by Admin, awaiting delivery",
+      from_label: "Main Warehouse",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      requester_id: 3,
+      source_location_type: "WAREHOUSE",
+      source_location_id: "wh-001",
+      line_items: [
+        {
+          id: "li-008",
+          product_id: "prod-004",
+          product_name: "Paper Napkins (Pack)",
+          quantity_requested: 100,
+          quantity_approved: 100,
+        },
+      ],
+    },
+    {
+      // Incoming from the kitchen: awaiting warehouse approval.
+      id: "req-007",
+      restaurant_id: "rest-001",
+      type: "KITCHEN_TO_WAREHOUSE",
+      status: "PENDING",
+      notes: "Prep stock for tomorrow's service",
+      from_label: "Central Kitchen",
+      created_at: requestCreated,
+      requester_id: 4,
+      source_location_type: "KITCHEN",
+      source_location_id: "kit-001",
+      target_location_type: "WAREHOUSE",
+      target_location_id: "wh-001",
+      line_items: [
+        {
+          id: "li-009",
+          product_id: "prod-002",
+          product_name: "Tomato Sauce (Can)",
+          quantity_requested: 10,
+        },
+      ],
+    },
+    {
+      // Approved by the warehouse, ready to dispatch.
+      id: "req-008",
+      restaurant_id: "rest-001",
+      type: "KITCHEN_TO_WAREHOUSE",
+      status: "APPROVED",
+      notes: "Cheese for the pizza line",
+      from_label: "Central Kitchen",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      requester_id: 4,
+      source_location_type: "KITCHEN",
+      source_location_id: "kit-001",
+      target_location_type: "WAREHOUSE",
+      target_location_id: "wh-001",
+      line_items: [
+        {
+          id: "li-010",
+          product_id: "prod-003",
+          product_name: "Mozzarella Block",
+          quantity_requested: 8,
+          quantity_approved: 5,
+        },
+      ],
+    },
   ];
 
   const daysAgo = (n: number) =>
@@ -897,6 +984,87 @@ function findWarehouseStock(
   );
 }
 
+/**
+ * Stock rows for one product in this warehouse, oldest expiry first so a
+ * dispatch consumes the batch closest to expiring. Unbatched/undated stock
+ * sorts last.
+ *
+ * ASSUMPTION: a request line carries no batch code, so a dispatch has to draw
+ * across batches — unlike adjust/waste, which target a single batch row. The
+ * contract does not spell out the picking order; FIFO by expiry is the safe
+ * default for perishables.
+ */
+function warehouseStockRows(
+  db: MockDb,
+  warehouse: Warehouse,
+  productId: string,
+): MockInventoryItem[] {
+  return db.inventory
+    .filter(
+      (item) =>
+        item.location_type === "WAREHOUSE" &&
+        item.location_id === warehouse.id &&
+        item.product_id === productId,
+    )
+    .sort((a, b) => {
+      if (a.expiry_date && b.expiry_date) {
+        return a.expiry_date.localeCompare(b.expiry_date);
+      }
+      if (a.expiry_date) return -1;
+      if (b.expiry_date) return 1;
+      return 0;
+    });
+}
+
+/**
+ * Remove dispatched quantities from stock.
+ *
+ * Every line is checked against a running plan before anything is written, so a
+ * shortfall on the last line cannot leave earlier lines already decremented.
+ * The plan also keeps two lines for the same product from double-spending a row.
+ */
+function applyDispatchToStock(
+  db: MockDb,
+  warehouse: Warehouse,
+  request: MockStockRequest,
+): void {
+  const planned = new Map<string, number>();
+
+  for (const line of request.line_items) {
+    // Falls back to the requested amount when nothing was approved.
+    const needed = line.quantity_approved ?? line.quantity_requested;
+    if (needed <= 0) continue;
+
+    const rows = warehouseStockRows(db, warehouse, line.product_id ?? "");
+    const available = rows.reduce(
+      (sum, row) => sum + (row.quantity - (planned.get(row.id) ?? 0)),
+      0,
+    );
+    if (available < needed) {
+      throw new ApiError(
+        `Only ${available} of ${line.product_name} on hand`,
+        409,
+        INSUFFICIENT_STOCK,
+      );
+    }
+
+    let remaining = needed;
+    for (const row of rows) {
+      if (remaining <= 0) break;
+      const free = row.quantity - (planned.get(row.id) ?? 0);
+      if (free <= 0) continue;
+      const take = Math.min(free, remaining);
+      planned.set(row.id, (planned.get(row.id) ?? 0) + take);
+      remaining -= take;
+    }
+  }
+
+  for (const [rowId, quantity] of planned) {
+    const row = db.inventory.find((item) => item.id === rowId);
+    if (row) row.quantity -= quantity;
+  }
+}
+
 function toPublicInventoryItem(item: MockInventoryItem): InventoryItem {
   return {
     id: item.id,
@@ -910,17 +1078,43 @@ function toPublicInventoryItem(item: MockInventoryItem): InventoryItem {
   };
 }
 
+/**
+ * Admin projection. Callers filter to Admin-visible types first, so the
+ * narrowing here is safe — a kitchen request never reaches this function.
+ */
 function toPublicRequest(req: MockStockRequest): StockRequest {
   return {
     id: req.id,
-    type: req.type,
-    status: req.status,
+    type: req.type as AdminRequestType,
+    status: req.status as RequestStatus,
     notes: req.notes,
     from_label: req.from_label,
     line_items: req.line_items,
     created_at: req.created_at,
     updated_at: req.updated_at,
   };
+}
+
+/**
+ * Which requests this manager may see. The two types scope differently:
+ * a PO is the manager's own outgoing order, while a kitchen request is incoming
+ * and belongs to whoever runs the target warehouse.
+ */
+function isWarehouseVisibleRequest(
+  req: MockStockRequest,
+  warehouse: Warehouse,
+  meId: number,
+): boolean {
+  if (req.type === "WAREHOUSE_TO_ADMIN_PO") {
+    return req.requester_id === meId;
+  }
+  if (req.type === "KITCHEN_TO_WAREHOUSE") {
+    return (
+      req.target_location_type === "WAREHOUSE" &&
+      req.target_location_id === warehouse.id
+    );
+  }
+  return false;
 }
 
 /**
@@ -1992,7 +2186,9 @@ export const mockClient: ApiClient = {
       throw new ApiError("Request not found", 404);
     }
 
-    const allowed = allowedTransitions(found.type, found.status);
+    // The type guard above rules out kitchen requests, so DISPATCHED — the only
+    // status Admin lacks — cannot appear here.
+    const allowed = allowedTransitions(found.type, found.status as RequestStatus);
     if (!allowed.includes(body.to_status)) {
       throw new ApiError(
         `Cannot transition from ${found.status} to ${body.to_status}`,
@@ -2377,6 +2573,35 @@ export const mockClient: ApiClient = {
     return delay(result);
   },
 
+  async listWarehouseKitchenRequests(filters?: WarehouseRequestFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+
+    let rows = db.requests.filter(
+      (req) =>
+        req.type === "KITCHEN_TO_WAREHOUSE" &&
+        req.restaurant_id === warehouse.restaurant_id &&
+        req.target_location_type === "WAREHOUSE" &&
+        req.target_location_id === warehouse.id,
+    );
+    if (filters?.status && filters.status !== "all") {
+      rows = rows.filter((req) => req.status === filters.status);
+    }
+
+    const start = (page - 1) * page_size;
+    const result: Paginated<WarehouseRequest> = {
+      items: rows.slice(start, start + page_size).map(toPublicWarehouseRequest),
+      page,
+      page_size,
+      total: rows.length,
+    };
+    return delay(result);
+  },
+
   async getWarehouseRequest(requestId: string) {
     const me = requireAuth();
     const db = loadDb();
@@ -2385,15 +2610,85 @@ export const mockClient: ApiClient = {
     const found = db.requests.find(
       (req) => req.id === requestId && req.restaurant_id === warehouse.restaurant_id,
     );
-    // Only PO requests are warehouse-visible so far; kitchen requests join in
-    // the next slice. Anything else is invisible rather than forbidden.
-    if (!found || found.type !== "WAREHOUSE_TO_ADMIN_PO") {
-      throw new ApiError("Request not found", 404);
-    }
-    if (found.requester_id !== me.id) {
+    // Anything outside this warehouse's reach is invisible rather than forbidden.
+    if (!found || !isWarehouseVisibleRequest(found, warehouse, me.id)) {
       throw new ApiError("Request not found", 404);
     }
 
+    return delay(toPublicWarehouseRequest(found));
+  },
+
+  async updateWarehouseRequestStatus(
+    requestId: string,
+    body: UpdateWarehouseRequestStatusInput,
+  ) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const found = db.requests.find(
+      (req) => req.id === requestId && req.restaurant_id === warehouse.restaurant_id,
+    );
+    if (!found || !isWarehouseVisibleRequest(found, warehouse, me.id)) {
+      throw new ApiError("Request not found", 404);
+    }
+
+    const type = found.type as WarehouseRequestType;
+    const allowed = warehouseAllowedTransitions(
+      type,
+      found.status as WarehouseRequestStatus,
+    );
+    if (!allowed.includes(body.to_status)) {
+      throw new ApiError(
+        `Cannot move from ${found.status} to ${body.to_status}`,
+        409,
+        INVALID_TRANSITION,
+      );
+    }
+
+    for (const approval of body.line_approvals ?? []) {
+      const line = found.line_items.find((item) => item.id === approval.line_item_id);
+      if (
+        !line ||
+        !Number.isInteger(approval.quantity_approved) ||
+        approval.quantity_approved < 0 ||
+        approval.quantity_approved > line.quantity_requested
+      ) {
+        throw new ApiError(
+          `Invalid approved quantity for line ${approval.line_item_id}`,
+          409,
+          "invalid_approval_quantity",
+        );
+      }
+      line.quantity_approved = approval.quantity_approved;
+    }
+
+    // Dispatching is the only warehouse move that touches stock. A PO reaching
+    // RECEIVED deliberately does not — intake stays a separate action.
+    if (body.to_status === "DISPATCHED") {
+      if (
+        found.target_location_type !== "WAREHOUSE" ||
+        !found.target_location_id
+      ) {
+        throw new ApiError(
+          "This request has no warehouse target",
+          409,
+          MISSING_WAREHOUSE_TARGET,
+        );
+      }
+      applyDispatchToStock(db, warehouse, found);
+    }
+
+    found.status = body.to_status;
+    if (body.notes !== undefined) {
+      found.notes = body.notes;
+    }
+    if (body.assignee_id !== undefined) {
+      found.assignee_id = Number(body.assignee_id);
+    }
+    found.updated_at = now();
+
+    saveDb(db);
     return delay(toPublicWarehouseRequest(found));
   },
 };

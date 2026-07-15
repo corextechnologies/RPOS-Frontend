@@ -33,7 +33,8 @@ export type AuthAction =
   | "staff:read"
   | "staff:create"
   | "po:read"
-  | "po:create";
+  | "po:create"
+  | "kitchen-requests:read";
 
 import type { UserRole } from "@/lib/types/super-admin";
 
@@ -77,6 +78,9 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "staff:create",
     "po:read",
     "po:create",
+    "kitchen-requests:read",
+    // Same operation name as Admin's, scoped by this role's own transition map.
+    "requests:update",
   ],
   KITCHEN_MANAGER: [],
   BRANCH_MANAGER: [],

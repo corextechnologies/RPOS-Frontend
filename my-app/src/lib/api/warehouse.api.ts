@@ -7,6 +7,7 @@ import type {
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  UpdateWarehouseRequestStatusInput,
   WarehouseRequest,
   WarehouseRequestFilters,
   WarehouseStaff,
@@ -81,6 +82,33 @@ function numberFromMeta(
   fallback: number,
 ): number {
   return typeof meta?.[key] === "number" ? (meta[key] as number) : fallback;
+}
+
+/** Both request inboxes page and filter identically; only the path differs. */
+async function fetchRequestList(
+  path: string,
+  filters?: WarehouseRequestFilters,
+): Promise<Paginated<WarehouseRequest>> {
+  const page = filters?.page ?? 1;
+  const page_size = filters?.page_size ?? 20;
+  const qs = new URLSearchParams({
+    page: String(page),
+    page_size: String(page_size),
+  });
+  if (filters?.status && filters.status !== "all") {
+    qs.set("status", filters.status);
+  }
+
+  const { data, meta } = await requestEnvelope<WarehouseRequest[]>(
+    `${path}?${qs.toString()}`,
+  );
+  const items = (data ?? []).map(normalizeWarehouseRequest);
+  return {
+    items,
+    page: numberFromMeta(meta, "page", page),
+    page_size: numberFromMeta(meta, "page_size", page_size),
+    total: numberFromMeta(meta, "total", items.length),
+  };
 }
 
 /** Live Warehouse API — every call is scoped server-side by the manager's token. */
@@ -203,30 +231,41 @@ export const warehouseApi = {
   async listWarehousePos(
     filters?: WarehouseRequestFilters,
   ): Promise<Paginated<WarehouseRequest>> {
-    const page = filters?.page ?? 1;
-    const page_size = filters?.page_size ?? 20;
-    const qs = new URLSearchParams({
-      page: String(page),
-      page_size: String(page_size),
-    });
-    if (filters?.status && filters.status !== "all") {
-      qs.set("status", filters.status);
-    }
-    const { data, meta } = await requestEnvelope<WarehouseRequest[]>(
-      `/warehouse/requests/po?${qs.toString()}`,
-    );
-    const items = (data ?? []).map(normalizeWarehouseRequest);
-    return {
-      items,
-      page: numberFromMeta(meta, "page", page),
-      page_size: numberFromMeta(meta, "page_size", page_size),
-      total: numberFromMeta(meta, "total", items.length),
-    };
+    return fetchRequestList("/warehouse/requests/po", filters);
+  },
+
+  async listWarehouseKitchenRequests(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>> {
+    return fetchRequestList("/warehouse/requests/kitchen", filters);
   },
 
   async getWarehouseRequest(requestId: string): Promise<WarehouseRequest> {
     const data = await request<WarehouseRequest>(
       `/warehouse/requests/${requestId}`,
+    );
+    return normalizeWarehouseRequest(data);
+  },
+
+  async updateWarehouseRequestStatus(
+    requestId: string,
+    body: UpdateWarehouseRequestStatusInput,
+  ): Promise<WarehouseRequest> {
+    const data = await request<WarehouseRequest>(
+      `/warehouse/requests/${requestId}/status`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          to_status: body.to_status,
+          // `line_item_id`, not Admin's `line_id`.
+          line_approvals: body.line_approvals?.map((approval) => ({
+            line_item_id: approval.line_item_id,
+            quantity_approved: approval.quantity_approved,
+          })),
+          notes: optionalText(body.notes),
+          assignee_id: body.assignee_id,
+        }),
+      },
     );
     return normalizeWarehouseRequest(data);
   },

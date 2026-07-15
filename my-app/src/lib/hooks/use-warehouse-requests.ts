@@ -4,9 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
 import type {
   CreatePurchaseOrderInput,
+  UpdateWarehouseRequestStatusInput,
   WarehouseRequestFilters,
 } from "@/lib/types/warehouse";
-import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
+import {
+  isMissingWarehouseAssignment,
+  STALE_STATUS,
+} from "@/lib/types/warehouse";
+import { ApiError } from "@/lib/types/super-admin";
 import { toast } from "sonner";
 
 export const WAREHOUSE_REQUESTS_PAGE_SIZE = 20;
@@ -15,6 +20,15 @@ export function useWarehousePos(filters?: WarehouseRequestFilters) {
   return useQuery({
     queryKey: queryKeys.warehousePos(filters),
     queryFn: () => api.listWarehousePos(filters),
+    retry: (failureCount, error) =>
+      !isMissingWarehouseAssignment(error) && failureCount < 3,
+  });
+}
+
+export function useWarehouseKitchenRequests(filters?: WarehouseRequestFilters) {
+  return useQuery({
+    queryKey: queryKeys.warehouseKitchenRequests(filters),
+    queryFn: () => api.listWarehouseKitchenRequests(filters),
     retry: (failureCount, error) =>
       !isMissingWarehouseAssignment(error) && failureCount < 3,
   });
@@ -42,6 +56,35 @@ export function useCreateWarehousePo() {
     onError: (err) => {
       const message =
         err instanceof Error ? err.message : "Failed to create purchase order";
+      toast.error(message);
+    },
+  });
+}
+
+export function useUpdateWarehouseRequestStatus(requestId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: UpdateWarehouseRequestStatusInput) =>
+      api.updateWarehouseRequestStatus(requestId, body),
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: queryKeys.warehouseRequest(requestId) });
+      qc.invalidateQueries({ queryKey: ["warehouse-pos"] });
+      qc.invalidateQueries({ queryKey: ["warehouse-kitchen-requests"] });
+      // Dispatching removes stock, so the inventory views are now stale too.
+      if (updated.status === "DISPATCHED") {
+        qc.invalidateQueries({ queryKey: queryKeys.warehouseInventory });
+        qc.invalidateQueries({ queryKey: ["warehouse-near-expiry"] });
+      }
+      toast.success("Request updated");
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.code === STALE_STATUS) {
+        toast.error("This request changed while you were viewing it. Refreshing.");
+        qc.invalidateQueries({ queryKey: queryKeys.warehouseRequest(requestId) });
+        return;
+      }
+      const message = err instanceof Error ? err.message : "Failed to update request";
       toast.error(message);
     },
   });

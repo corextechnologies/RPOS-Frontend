@@ -50,6 +50,10 @@ export const queryKeys = {
   warehouseStaff: (page?: number) => ["warehouse-staff", page] as const,
   warehousePos: (filters?: WarehouseRequestFilters) =>
     filters ? (["warehouse-pos", filters] as const) : (["warehouse-pos"] as const),
+  warehouseKitchenRequests: (filters?: WarehouseRequestFilters) =>
+    filters
+      ? (["warehouse-kitchen-requests", filters] as const)
+      : (["warehouse-kitchen-requests"] as const),
   warehouseRequest: (id: string) => ["warehouse-request", id] as const,
 };
 

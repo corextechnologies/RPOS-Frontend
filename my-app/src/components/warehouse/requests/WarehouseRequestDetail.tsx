@@ -19,33 +19,8 @@ import type { WarehouseRequest } from "@/lib/types/warehouse";
 import { formatDate } from "@/lib/utils";
 import { WarehouseStatusBadge } from "./WarehouseStatusBadge";
 
-/**
- * Receiving a PO is a status change only — it does not put stock on the shelf.
- * Intake stays a separate, explicit action, so say so rather than let the two
- * read as one step.
- */
-function StatusHint({ request }: { request: WarehouseRequest }) {
-  if (request.request_type !== "WAREHOUSE_TO_ADMIN_PO") return null;
-
-  if (request.status === "PENDING") {
-    return (
-      <p className="text-sm text-muted">
-        Waiting on Admin. You can act on this order once it reaches In Queue.
-      </p>
-    );
-  }
-  if (request.status === "RECEIVED") {
-    return (
-      <p className="text-sm text-muted">
-        This order is closed. Stock still has to be booked in through Receive
-        stock.
-      </p>
-    );
-  }
-  return null;
-}
-
 export function WarehouseRequestDetail({ request }: { request: WarehouseRequest }) {
+  const isPo = request.request_type === "WAREHOUSE_TO_ADMIN_PO";
   const hasApprovals = request.line_items.some(
     (line) => line.quantity_approved != null,
   );
@@ -56,24 +31,23 @@ export function WarehouseRequestDetail({ request }: { request: WarehouseRequest 
         <CardHeader>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <CardTitle>Order details</CardTitle>
+              <CardTitle>Details</CardTitle>
               <CardDescription>
-                Raised {formatDate(request.created_at)}
+                {isPo ? "Raised" : "Requested"} {formatDate(request.created_at)}
               </CardDescription>
             </div>
             <WarehouseStatusBadge status={request.status} />
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent>
           {request.notes ? (
             <div>
               <p className="text-sm font-medium text-content">Notes</p>
               <p className="mt-1 text-sm text-muted">{request.notes}</p>
             </div>
           ) : (
-            <p className="text-sm text-muted">No notes on this order.</p>
+            <p className="text-sm text-muted">No notes on this request.</p>
           )}
-          <StatusHint request={request} />
         </CardContent>
       </Card>
 
@@ -82,7 +56,9 @@ export function WarehouseRequestDetail({ request }: { request: WarehouseRequest 
           <CardTitle>Lines</CardTitle>
           <CardDescription>
             {hasApprovals
-              ? "Approved quantities may be lower than requested."
+              ? isPo
+                ? "Approved quantities may be lower than requested."
+                : "Dispatch removes the approved quantity, or the requested quantity where none is set."
               : "Nothing approved yet."}
           </CardDescription>
         </CardHeader>

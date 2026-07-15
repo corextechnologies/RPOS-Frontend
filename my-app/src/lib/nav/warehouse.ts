@@ -1,6 +1,7 @@
 import {
   Boxes,
   ClipboardList,
+  Inbox,
   LayoutDashboard,
   PackagePlus,
   Settings,
@@ -50,6 +51,13 @@ export const WAREHOUSE_NAV: NavSection[] = [
   {
     title: "Requests",
     items: [
+      {
+        label: "Kitchen requests",
+        href: "/warehouse/requests/kitchen",
+        icon: Inbox,
+        action: "kitchen-requests:read",
+        match: "prefix",
+      },
       {
         label: "Purchase orders",
         href: "/warehouse/requests/po",

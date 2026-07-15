@@ -175,6 +175,33 @@ export interface WarehouseRequestFilters {
   page_size?: number;
 }
 
+/**
+ * Line approval for `PATCH /warehouse/requests/{id}/status`.
+ *
+ * Note the key is `line_item_id` — Admin's equivalent sends `line_id`. The two
+ * are not interchangeable on the wire; do not swap this for Admin's LineApproval.
+ */
+export interface WarehouseLineApproval {
+  line_item_id: string;
+  quantity_approved: number;
+}
+
+export interface UpdateWarehouseRequestStatusInput {
+  to_status: WarehouseRequestStatus;
+  line_approvals?: WarehouseLineApproval[];
+  notes?: string;
+  assignee_id?: string;
+}
+
+/** 409 raised when a status move is not legal for that request type. */
+export const INVALID_TRANSITION = "invalid_transition";
+
+/** 409 raised when the request moved underneath you — refetch and retry. */
+export const STALE_STATUS = "stale_status";
+
+/** 409 raised when a kitchen request has no warehouse target to dispatch from. */
+export const MISSING_WAREHOUSE_TARGET = "missing_warehouse_target";
+
 /** 409 raised when a quantity is not greater than zero, or a delta is zero. */
 export const INVALID_QUANTITY = "invalid_quantity";
 
