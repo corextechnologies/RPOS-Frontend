@@ -44,8 +44,8 @@ import {
   type TokenResponse,
   type UserRole,
 } from "@/lib/types/super-admin";
-import type { InventoryItem } from "@/lib/types/warehouse";
-import { MISSING_WAREHOUSE_ASSIGNMENT } from "@/lib/types/warehouse";
+import type { InventoryItem, ReceiveStockInput } from "@/lib/types/warehouse";
+import { INVALID_QUANTITY, MISSING_WAREHOUSE_ASSIGNMENT } from "@/lib/types/warehouse";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
 import { addOneBillingMonth, defaultNextBillingDate, planAmountForTier, planByTier, todayBillingDate } from "@/lib/plans/catalog";
@@ -1956,5 +1956,57 @@ export const mockClient: ApiClient = {
       )
       .map(toPublicInventoryItem);
     return delay(items);
+  },
+
+  async receiveWarehouseStock(body: ReceiveStockInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const quantity = Number(body.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+    }
+
+    const product = db.products.find(
+      (p) => p.id === body.product_id && p.restaurant_id === warehouse.restaurant_id,
+    );
+    if (!product) throw new ApiError("Product not found", 404);
+
+    const batchCode = body.batch_code?.trim() ?? "";
+    const expiryDate = body.expiry_date?.trim() || null;
+
+    // Stock is tracked per product+batch. Receiving into an existing batch adds
+    // to it rather than replacing it; a new batch becomes its own row.
+    const existing = db.inventory.find(
+      (item) =>
+        item.location_type === "WAREHOUSE" &&
+        item.location_id === warehouse.id &&
+        item.product_id === product.id &&
+        item.batch_code === batchCode,
+    );
+
+    let received: MockInventoryItem;
+    if (existing) {
+      existing.quantity += quantity;
+      if (expiryDate) existing.expiry_date = expiryDate;
+      received = existing;
+    } else {
+      received = {
+        id: `inv-${Date.now()}`,
+        restaurant_id: warehouse.restaurant_id,
+        product_id: product.id,
+        product: { id: product.id, name: product.name, sku: product.sku },
+        quantity,
+        batch_code: batchCode,
+        expiry_date: expiryDate,
+        location_type: "WAREHOUSE",
+        location_id: warehouse.id,
+      };
+      db.inventory.push(received);
+    }
+
+    saveDb(db);
+    return delay(toPublicInventoryItem(received));
   },
 };

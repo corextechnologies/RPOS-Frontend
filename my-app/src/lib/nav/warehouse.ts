@@ -1,4 +1,4 @@
-import { Boxes, LayoutDashboard, Settings } from "lucide-react";
+import { Boxes, LayoutDashboard, PackagePlus, Settings } from "lucide-react";
 import type { NavSection } from "./types";
 
 export const WAREHOUSE_NAV: NavSection[] = [
@@ -21,6 +21,13 @@ export const WAREHOUSE_NAV: NavSection[] = [
         href: "/warehouse/inventory",
         icon: Boxes,
         action: "inventory:read",
+        match: "exact",
+      },
+      {
+        label: "Receive stock",
+        href: "/warehouse/stock/receive",
+        icon: PackagePlus,
+        action: "stock:receive",
         match: "exact",
       },
     ],

@@ -34,6 +34,21 @@ export interface InventoryItem {
   location_id: string;
 }
 
+/** Body for `POST /warehouse/stock/receive` — incoming stock. */
+export interface ReceiveStockInput {
+  product_id: string;
+  /** Whole units, must be > 0. */
+  quantity: number;
+  /** Omitted entirely for unbatched stock. */
+  batch_code?: string;
+  /** `YYYY-MM-DD`. */
+  expiry_date?: string;
+  notes?: string;
+}
+
+/** 409 raised when a quantity is not greater than zero. */
+export const INVALID_QUANTITY = "invalid_quantity";
+
 /**
  * 409 raised when the signed-in warehouse manager has no warehouse assigned.
  * Every /warehouse/* endpoint can return this, so the portal treats it as a

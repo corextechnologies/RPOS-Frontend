@@ -1,4 +1,4 @@
-import type { InventoryItem } from "@/lib/types/warehouse";
+import type { InventoryItem, ReceiveStockInput } from "@/lib/types/warehouse";
 import { request } from "./client";
 
 /**
@@ -20,10 +20,34 @@ function normalizeInventoryItem(item: InventoryItem): InventoryItem {
   };
 }
 
+/**
+ * Optional string fields are dropped when blank rather than sent as "".
+ * The stock endpoints reject empty-but-present values (`notes` must be at least
+ * one character if included), so an omitted key is the only safe encoding.
+ */
+function optionalText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 /** Live Warehouse API — every call is scoped server-side by the manager's token. */
 export const warehouseApi = {
   async listWarehouseInventory(): Promise<InventoryItem[]> {
     const data = await request<InventoryItem[]>("/warehouse/inventory");
     return (data ?? []).map(normalizeInventoryItem);
+  },
+
+  async receiveWarehouseStock(body: ReceiveStockInput): Promise<InventoryItem> {
+    const data = await request<InventoryItem>("/warehouse/stock/receive", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: body.product_id,
+        quantity: body.quantity,
+        batch_code: optionalText(body.batch_code),
+        expiry_date: optionalText(body.expiry_date),
+        notes: optionalText(body.notes),
+      }),
+    });
+    return normalizeInventoryItem(data);
   },
 };
