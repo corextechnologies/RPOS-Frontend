@@ -1,4 +1,6 @@
 import type {
+  AdminInventoryFilters,
+  AdminInventoryItem,
   AdminProfile,
   AdminRequestType,
   Branch,
@@ -10,6 +12,7 @@ import type {
   Kitchen,
   Paginated,
   ProductPricing,
+  ProductPricingFilters,
   RequestFilters,
   SalesRecord,
   SalesRecordFilters,
@@ -355,13 +358,56 @@ export const adminApi = {
     return { ...data, id: String(data.id) };
   },
 
-  async listProductPricing(): Promise<ProductPricing[]> {
-    const data = await request<ProductPricing[]>("/admin/products/pricing");
+  async listProductPricing(
+    filters?: ProductPricingFilters,
+  ): Promise<ProductPricing[]> {
+    // Only send the param when narrowing: an absent `unpriced` means "all
+    // products", and `unpriced=false` is not the same request.
+    const qs = filters?.unpriced ? "?unpriced=true" : "";
+    const data = await request<ProductPricing[]>(`/admin/products/pricing${qs}`);
     return data.map((p) => ({
       ...p,
       id: String(p.id),
+      // A decimal string on the wire. Kept as a string on purpose — parsing it
+      // to a float loses precision on money.
       cost_price: p.cost_price == null ? null : String(p.cost_price),
     }));
+  },
+
+  async listAdminInventory(
+    filters?: AdminInventoryFilters,
+  ): Promise<AdminInventoryItem[]> {
+    const qs = new URLSearchParams();
+    if (filters?.location_type) qs.set("location_type", filters.location_type);
+    if (filters?.location_id) qs.set("location_id", filters.location_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    // Not paginated. This is the only inventory response carrying cost_price.
+    const data = await request<AdminInventoryItem[]>(`/admin/inventory${suffix}`);
+    return (data ?? []).map((item) => ({
+      ...item,
+      id: String(item.id),
+      product_id: String(item.product_id),
+      product: {
+        ...item.product,
+        id: String(item.product.id),
+        cost_price:
+          item.product.cost_price == null ? null : String(item.product.cost_price),
+      },
+      quantity: Number(item.quantity),
+      batch_code: item.batch_code ?? "",
+      location_id: String(item.location_id),
+    }));
+  },
+
+  async listAdminKitchenRequests(
+    filters?: RequestFilters,
+  ): Promise<Paginated<StockRequest>> {
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+    const { data, meta } = await adminGetEnvelope<
+      StockRequest[] | Paginated<StockRequest>
+    >(`/admin/requests/kitchen?${requestListQuery(filters)}`);
+    return toPaginatedRequests(data, meta, page, page_size);
   },
 
   async updateProductPricing(

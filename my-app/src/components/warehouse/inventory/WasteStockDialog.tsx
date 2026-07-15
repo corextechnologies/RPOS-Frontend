@@ -29,6 +29,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { WasteReasonSelect } from "@/components/stock/WasteReasonSelect";
+import {
+  defaultReasonFor,
+  MOVEMENT_TYPE_LABELS,
+} from "@/lib/stock/waste-reason";
 import {
   wasteStockDefaults,
   wasteStockSchema,
@@ -62,7 +67,12 @@ export function WasteStockDialog({
 
   useEffect(() => {
     if (open) {
-      form.reset({ ...wasteStockDefaults, movement_type: defaultMovementType });
+      form.reset({
+        ...wasteStockDefaults,
+        movement_type: defaultMovementType,
+        // Opening from the near-expiry list already says why.
+        waste_reason: defaultReasonFor(defaultMovementType),
+      });
     }
   }, [open, defaultMovementType, form]);
 
@@ -81,12 +91,22 @@ export function WasteStockDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            {/* The same picker the kitchen uses. Waste-rate analytics
+                aggregates across both portals, so the lists must not drift. */}
+            <FormField
+              control={form.control}
+              name="waste_reason"
+              render={({ field }) => (
+                <WasteReasonSelect value={field.value} onChange={field.onChange} />
+              )}
+            />
+
             <FormField
               control={form.control}
               name="movement_type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Reason</FormLabel>
+                  <FormLabel>Movement type</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger>
@@ -94,8 +114,11 @@ export function WasteStockDialog({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="WASTE">Waste</SelectItem>
-                      <SelectItem value="EXPIRY">Expired</SelectItem>
+                      {Object.entries(MOVEMENT_TYPE_LABELS).map(([value, text]) => (
+                        <SelectItem key={value} value={value}>
+                          {text}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

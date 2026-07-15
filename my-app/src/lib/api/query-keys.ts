@@ -1,6 +1,7 @@
 import type { IncomeForecastHorizon, IncomePeriodFilter } from "@/lib/types/income";
 import type { RestaurantFilters } from "@/lib/types/super-admin";
 import type {
+  AdminInventoryFilters,
   RequestFilters,
   SalesRecordFilters,
   SalesSummaryFilters,
@@ -11,6 +12,7 @@ import type { KitchenLabelFilters, KitchenRequestFilters } from "@/lib/types/kit
 
 export const queryKeys = {
   me: ["me"] as const,
+  notifications: (page?: number) => ["notifications", page] as const,
   restaurants: (filters?: RestaurantFilters) =>
     filters ? (["restaurants", filters] as const) : (["restaurants"] as const),
   restaurant: (id: string) => ["restaurant", id] as const,
@@ -22,10 +24,22 @@ export const queryKeys = {
   incomeSummary: (filter: IncomePeriodFilter) => ["income-summary", filter] as const,
   incomeForecast: (horizon: IncomeForecastHorizon) => ["income-forecast", horizon] as const,
 
+  adminInventory: (filters?: AdminInventoryFilters) =>
+    filters
+      ? (["admin-inventory", filters] as const)
+      : (["admin-inventory"] as const),
+  adminKitchenRequests: (filters?: RequestFilters) =>
+    filters
+      ? (["admin-requests-kitchen", filters] as const)
+      : (["admin-requests-kitchen"] as const),
+
   kitchens: ["admin-kitchens"] as const,
   warehouses: ["admin-warehouses"] as const,
   employees: (page?: number) => ["admin-employees", page] as const,
-  productPricing: ["admin-product-pricing"] as const,
+  productPricing: (unpriced?: boolean) =>
+    unpriced
+      ? (["admin-product-pricing", "unpriced"] as const)
+      : (["admin-product-pricing"] as const),
   productRequests: (filters?: RequestFilters) =>
     filters
       ? (["admin-requests-products", filters] as const)
@@ -46,6 +60,7 @@ export const queryKeys = {
       : (["admin-sales-summary"] as const),
 
   warehouseInventory: ["warehouse-inventory"] as const,
+  warehouseProducts: ["warehouse-products"] as const,
   warehouseNearExpiry: (withinDays: number) =>
     ["warehouse-near-expiry", withinDays] as const,
   warehouseStaff: (page?: number) => ["warehouse-staff", page] as const,
@@ -58,6 +73,8 @@ export const queryKeys = {
   warehouseRequest: (id: string) => ["warehouse-request", id] as const,
 
   kitchenInventory: ["kitchen-inventory"] as const,
+  kitchenWarehouseInventory: (warehouseId: string) =>
+    ["kitchen-warehouse-inventory", warehouseId] as const,
   kitchenWarehouses: ["kitchen-warehouses"] as const,
   kitchenNearExpiry: (withinDays: number) =>
     ["kitchen-near-expiry", withinDays] as const,

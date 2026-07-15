@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronRight, LogOut, Menu, User } from "lucide-react";
+import { ChevronRight, LogOut, Menu, User } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AUTH_ROUTES } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,9 +67,7 @@ export function Topbar({ portalLabel, portalHome, onMenu }: TopbarProps) {
         <Breadcrumbs portalLabel={portalLabel} portalHome={portalHome} />
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" aria-label="Notifications (coming soon)" disabled>
-          <Bell className="h-4 w-4" />
-        </Button>
+        <NotificationBell />
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

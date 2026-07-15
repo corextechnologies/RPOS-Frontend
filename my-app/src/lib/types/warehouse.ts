@@ -1,11 +1,16 @@
 import { ApiError } from "@/lib/types/super-admin";
+import type { WasteReason } from "@/lib/stock/waste-reason";
 
 // Warehouse (Phase 3) DTOs — mirrors the /v1/warehouse/* backend contract.
 //
 // Deliberately independent of admin.ts. The two portals disagree on the wire:
-// warehouse requests use `request_type`/`line_item_id` where Admin uses
-// `type`/`line_id`, and warehouse inventory must never carry a cost price.
-// Do NOT widen the Admin types to cover these — the field names differ.
+// warehouse requests use `request_type` where Admin calls the field `type`, and
+// warehouse inventory must never carry a cost price.
+//
+// They agree on more than was once assumed, though: every portal's status PATCH
+// shares one `RequestTransition` schema server-side, so `line_item_id` is the
+// key everywhere. The old claim that Admin sent `line_id` was a mock-era guess,
+// and it was silently wrong against the live API until Phase 4.1.
 
 /** All calls are scoped to the caller's warehouse; `warehouse_id` is never sent. */
 export type StockLocationType = "WAREHOUSE" | "KITCHEN" | "BRANCH";
@@ -72,6 +77,41 @@ export interface CreateWarehouseStaffResult {
   credential_email_sent: boolean;
 }
 
+/**
+ * A product in the warehouse's catalog.
+ *
+ * Cost price is structurally absent, exactly as on `InventoryProduct`: the
+ * warehouse introduces the product, Admin prices it afterwards, and the
+ * warehouse must never see what it cost.
+ */
+export interface WarehouseProduct {
+  id: string;
+  name: string;
+  sku?: string | null;
+}
+
+/** Body for `POST /warehouse/products`. */
+export interface CreateWarehouseProductInput {
+  /** 1–255 characters. */
+  name: string;
+  /** Up to 100 characters, unique per restaurant. */
+  sku?: string;
+}
+
+/** Body for `PUT /warehouse/products/{product_id}/reorder-level`. */
+export interface UpdateReorderLevelInput {
+  /** >= 0. */
+  reorder_level: number;
+}
+
+/** Result of `PUT /warehouse/products/{product_id}/reorder-level`. */
+export interface ReorderLevel {
+  product_id: string;
+  location_type: StockLocationType;
+  location_id: string;
+  reorder_level: number;
+}
+
 /** Body for `POST /warehouse/stock/receive` — incoming stock. */
 export interface ReceiveStockInput {
   product_id: string;
@@ -82,6 +122,11 @@ export interface ReceiveStockInput {
   /** `YYYY-MM-DD`. */
   expiry_date?: string;
   notes?: string;
+  /**
+   * Optional low-stock limit, set while adding the item. Upsert: sending it
+   * again updates the limit. Without one, no low-stock alert ever fires.
+   */
+  reorder_level?: number;
 }
 
 /** Body for `POST /warehouse/stock/adjust` — manual correction, up or down. */
@@ -101,6 +146,12 @@ export interface WasteStockInput {
   product_id: string;
   /** Whole units, must be > 0. */
   quantity: number;
+  /**
+   * Optional on this endpoint (required on the kitchen's), but always sent:
+   * waste-rate analytics aggregates on it, so an unreasoned write-off is
+   * permanently unreportable. Shared enum — see lib/stock/waste-reason.ts.
+   */
+  waste_reason?: WasteReason;
   /** Defaults to "WASTE" server-side. */
   movement_type?: StockMovementType;
   batch_code?: string;
@@ -115,17 +166,25 @@ export interface NearExpiryFilters {
 
 // ---- Requests ----
 // Warehouse-local on purpose. The wire shape differs from Admin's StockRequest:
-// `request_type` (not `type`), `line_item_id` in approvals (not `line_id`), and
-// a DISPATCHED status Admin never sees. Do not reuse the Admin request types.
+// `request_type` (not `type`). Do not reuse the Admin request types.
 
 export type WarehouseRequestType = "WAREHOUSE_TO_ADMIN_PO" | "KITCHEN_TO_WAREHOUSE";
 
-/** Purchase orders the warehouse raises to Admin. */
+/**
+ * Purchase orders the warehouse raises to Admin.
+ *
+ * DISPATCHED replaced IN_QUEUE in Phase 4.1: it means Admin has sent the goods
+ * and the warehouse must now either confirm receipt or report a problem.
+ * REPORTED credits no stock; RESOLVED is Admin accepting the shortfall so the
+ * warehouse can book in what actually arrived.
+ */
 export type PurchaseOrderStatus =
   | "PENDING"
   | "APPROVED"
   | "PARTIALLY_APPROVED"
-  | "IN_QUEUE"
+  | "DISPATCHED"
+  | "REPORTED"
+  | "RESOLVED"
   | "RECEIVED";
 
 /** Requests the kitchen raises against this warehouse. */
@@ -135,6 +194,14 @@ export type KitchenRequestStatus =
   | "DISPATCHED"
   | "RECEIVED";
 
+/**
+ * The union of both vocabularies.
+ *
+ * DANGER: DISPATCHED is a member of both and means different things — on a PO,
+ * Admin shipped to us; on a kitchen request, we shipped to the kitchen. Never
+ * branch on a status from this union without first discriminating on
+ * `request_type`.
+ */
 export type WarehouseRequestStatus = PurchaseOrderStatus | KitchenRequestStatus;
 
 export interface WarehouseRequestLineItem {
@@ -144,6 +211,10 @@ export interface WarehouseRequestLineItem {
   quantity_requested: number;
   /** Null until Admin approves; a partial approval sets it below requested. */
   quantity_approved?: number | null;
+  /** Null until a PO is reported or received. Cumulative for the PO. */
+  quantity_received?: number | null;
+  /** What was wrong with this line, set by a report. */
+  issue_note?: string | null;
 }
 
 export interface WarehouseRequest {
@@ -178,23 +249,61 @@ export interface WarehouseRequestFilters {
 /**
  * Line approval for `PATCH /warehouse/requests/{id}/status`.
  *
- * Note the key is `line_item_id` — Admin's equivalent sends `line_id`. The two
- * are not interchangeable on the wire; do not swap this for Admin's LineApproval.
+ * The key is `line_item_id`, from `line_items[].id` — not `product_id`.
  */
 export interface WarehouseLineApproval {
   line_item_id: string;
   quantity_approved: number;
 }
 
+/**
+ * One line of a PO receipt, for `RECEIVED` or `REPORTED`.
+ *
+ * `quantity_received` is the CUMULATIVE total received against this PO line, not
+ * a per-delivery top-up: on the re-enqueue path the warehouse confirms the whole
+ * total once, and stock is credited exactly once at RECEIVED. Label the field
+ * accordingly or users will under-book stock.
+ *
+ * Omitting a line on RECEIVED falls back to its reported or approved quantity —
+ * but then it gets no batch or expiry, which hides that stock from near-expiry
+ * alerts and expiry labels. Always send one entry per line.
+ */
+export interface WarehouseLineReceipt {
+  /** From `line_items[].id`, not `product_id`. */
+  line_item_id: string;
+  /** >= 0, and never more than `quantity_approved`. */
+  quantity_received: number;
+  /** Omitted entirely for unbatched stock. */
+  batch_code?: string;
+  /** `YYYY-MM-DD`. */
+  expiry_date?: string;
+  /** Free text describing what was wrong. */
+  issue_note?: string;
+}
+
 export interface UpdateWarehouseRequestStatusInput {
   to_status: WarehouseRequestStatus;
   line_approvals?: WarehouseLineApproval[];
+  /** Required for a PO reaching RECEIVED or REPORTED. */
+  line_receipts?: WarehouseLineReceipt[];
   notes?: string;
   assignee_id?: string;
 }
 
 /** 409 raised when a status move is not legal for that request type. */
 export const INVALID_TRANSITION = "invalid_transition";
+
+/** 409 raised when a PO moves to RECEIVED or REPORTED without any line receipts. */
+export const MISSING_LINE_RECEIPTS = "missing_line_receipts";
+
+/** 409 raised when a received quantity exceeds the approved quantity. */
+export const INVALID_RECEIVED_QUANTITY = "invalid_received_quantity";
+
+/** 409 raised when a report says nothing is wrong — that is not a report. */
+export const NOTHING_REPORTED = "nothing_reported";
+
+/** 409 raised on duplicate SKU when creating a product. */
+export const DUPLICATE_SKU = "duplicate_sku";
 
 /** 409 raised when the request moved underneath you — refetch and retry. */
 export const STALE_STATUS = "stale_status";

@@ -2,7 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
-import type { RequestFilters, UpdateRequestStatusInput } from "@/lib/types/admin";
+import type {
+  AdminInventoryFilters,
+  RequestFilters,
+  UpdateRequestStatusInput,
+} from "@/lib/types/admin";
 import { toast } from "sonner";
 
 export function useProductRequests(filters?: RequestFilters) {
@@ -16,6 +20,26 @@ export function useDistributionRequests(filters?: RequestFilters) {
   return useQuery({
     queryKey: queryKeys.distributionRequests(filters),
     queryFn: () => api.listDistributionRequests(filters),
+  });
+}
+
+/**
+ * Admin's read-only oversight of kitchen → warehouse requests.
+ *
+ * Read-only by contract: Admin never actions these, the transitions belong to
+ * the kitchen and warehouse. There is deliberately no matching mutation hook.
+ */
+export function useAdminKitchenRequests(filters?: RequestFilters) {
+  return useQuery({
+    queryKey: queryKeys.adminKitchenRequests(filters),
+    queryFn: () => api.listAdminKitchenRequests(filters),
+  });
+}
+
+export function useAdminInventory(filters?: AdminInventoryFilters) {
+  return useQuery({
+    queryKey: queryKeys.adminInventory(filters),
+    queryFn: () => api.listAdminInventory(filters),
   });
 }
 

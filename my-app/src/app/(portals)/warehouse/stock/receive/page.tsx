@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
+import { AddProductDialog } from "@/components/warehouse/products/AddProductDialog";
 import { WarehouseUnassigned } from "@/components/warehouse/WarehouseUnassigned";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,9 +38,11 @@ import {
   useReceiveWarehouseStock,
   useWarehouseProductOptions,
 } from "@/lib/hooks/use-warehouse-inventory";
+import { useCreateWarehouseProduct } from "@/lib/hooks/use-warehouse-products";
 import {
   receiveStockDefaults,
   receiveStockSchema,
+  type CreateWarehouseProductForm,
   type ReceiveStockForm,
 } from "@/lib/schemas/warehouse-stock";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
@@ -46,6 +50,8 @@ import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 export default function ReceiveStockPage() {
   const { products, isLoading, isError, error } = useWarehouseProductOptions();
   const receiveStock = useReceiveWarehouseStock();
+  const createProduct = useCreateWarehouseProduct();
+  const [addingProduct, setAddingProduct] = useState(false);
 
   const form = useForm<ReceiveStockForm>({
     resolver: zodResolver(receiveStockSchema),
@@ -59,9 +65,25 @@ export default function ReceiveStockPage() {
       batch_code: values.batch_code || undefined,
       expiry_date: values.expiry_date || undefined,
       notes: values.notes || undefined,
+      // Blank means "don't touch the limit"; a value upserts it.
+      reorder_level:
+        values.reorder_level === "" || values.reorder_level === undefined
+          ? undefined
+          : Number(values.reorder_level),
     });
     // Intake is repetitive — keep the manager on the form for the next delivery.
     form.reset(receiveStockDefaults);
+  };
+
+  const handleAddProduct = async (values: CreateWarehouseProductForm) => {
+    const created = await createProduct.mutateAsync({
+      name: values.name,
+      sku: values.sku || undefined,
+    });
+    setAddingProduct(false);
+    // Select what was just created: adding a product here is almost always the
+    // first step of receiving it.
+    form.setValue("product_id", created.id, { shouldValidate: true });
   };
 
   return (
@@ -104,8 +126,14 @@ export default function ReceiveStockPage() {
               <ErrorState description="Failed to load products." />
             ) : products.length === 0 ? (
               <EmptyState
-                title="No products available"
-                description="Products can only be selected once they exist in your warehouse. Ask your Admin to stock this warehouse first."
+                title="No products yet"
+                description="Add a product to your catalog, then receive stock against it."
+                action={
+                  <Button type="button" onClick={() => setAddingProduct(true)}>
+                    <Plus className="h-4 w-4" />
+                    Add product
+                  </Button>
+                }
               />
             ) : (
               <Form {...form}>
@@ -115,7 +143,21 @@ export default function ReceiveStockPage() {
                     name="product_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Product</FormLabel>
+                        <div className="flex items-center justify-between gap-2">
+                          <FormLabel>Product</FormLabel>
+                          {/* Reachable whether or not the catalog is empty:
+                              receiving a delivery is the usual moment a product
+                              first needs to exist. */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAddingProduct(true)}
+                          >
+                            <Plus className="h-4 w-4" />
+                            New product
+                          </Button>
+                        </div>
                         <Select value={field.value} onValueChange={field.onChange}>
                           <FormControl>
                             <SelectTrigger>
@@ -202,6 +244,33 @@ export default function ReceiveStockPage() {
 
                   <FormField
                     control={form.control}
+                    name="reorder_level"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Low-stock limit (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="1"
+                            inputMode="numeric"
+                            placeholder="e.g. 50"
+                            {...field}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted">
+                          {/* Silence-by-default is the trap worth naming: no
+                              limit means no alert, ever. */}
+                          Alerts you when total stock for this product drops to
+                          this number. Without a limit, no alert is ever sent.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="notes"
                     render={({ field }) => (
                       <FormItem>
@@ -228,6 +297,13 @@ export default function ReceiveStockPage() {
           </CardContent>
         </Card>
       )}
+
+      <AddProductDialog
+        open={addingProduct}
+        onOpenChange={setAddingProduct}
+        onSubmit={handleAddProduct}
+        isSubmitting={createProduct.isPending}
+      />
     </div>
   );
 }

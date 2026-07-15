@@ -23,6 +23,8 @@ interface PricingTableProps {
   onRetry?: () => void;
   canEdit: boolean;
   onEdit: (product: ProductPricing) => void;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
 export function PricingTable({
@@ -32,6 +34,8 @@ export function PricingTable({
   onRetry,
   canEdit,
   onEdit,
+  emptyTitle = "No products yet",
+  emptyDescription = "Products will appear here once they exist for your restaurant.",
 }: PricingTableProps) {
   if (isLoading) {
     return (
@@ -59,10 +63,7 @@ export function PricingTable({
     return (
       <Card>
         <CardContent className="p-0">
-          <EmptyState
-            title="No products yet"
-            description="Products will appear here once they exist for your restaurant."
-          />
+          <EmptyState title={emptyTitle} description={emptyDescription} />
         </CardContent>
       </Card>
     );

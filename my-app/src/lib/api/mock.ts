@@ -13,6 +13,9 @@ import type {
   Kitchen,
   Paginated,
   ProductPricing,
+  ProductPricingFilters,
+  AdminInventoryItem,
+  AdminInventoryFilters,
   RequestFilters,
   SalesRecord,
   SalesRecordFilters,
@@ -30,6 +33,10 @@ import type {
   Warehouse,
 } from "@/lib/types/admin";
 import { INVALID_KITCHEN_TARGET, MISSING_KITCHEN_TARGET } from "@/lib/types/admin";
+import type {
+  AppNotification,
+  NotificationFilters,
+} from "@/lib/types/notification";
 import type {
   CreateKitchenCountInput,
   CreateKitchenStaffInput,
@@ -88,18 +95,26 @@ import type {
   UpdateWarehouseRequestStatusInput,
   WarehouseRequest,
   WarehouseRequestFilters,
+  WarehouseProduct,
+  CreateWarehouseProductInput,
+  ReorderLevel,
+  UpdateReorderLevelInput,
   WarehouseRequestStatus,
   WarehouseRequestType,
   WarehouseStaff,
   WasteStockInput,
 } from "@/lib/types/warehouse";
 import {
+  DUPLICATE_SKU,
   INSUFFICIENT_STOCK,
   INVALID_MOVEMENT_TYPE,
   INVALID_QUANTITY,
+  INVALID_RECEIVED_QUANTITY,
   INVALID_TRANSITION,
+  MISSING_LINE_RECEIPTS,
   MISSING_WAREHOUSE_ASSIGNMENT,
   MISSING_WAREHOUSE_TARGET,
+  NOTHING_REPORTED,
 } from "@/lib/types/warehouse";
 import { warehouseAllowedTransitions } from "@/lib/warehouse/request-transitions";
 import type { ApiClient } from "./contract";
@@ -115,7 +130,7 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 15;
+const SEED_VERSION = 16;
 
 interface MockInvoiceRecord {
   id: number;
@@ -149,12 +164,17 @@ interface MockProduct extends ProductPricing {
 }
 
 /**
- * The stored request vocabulary is wider than either portal's public one:
- * Admin never sees KITCHEN_TO_WAREHOUSE or DISPATCHED, the warehouse never sees
- * REJECTED or FORWARDED_TO_KITCHEN. Each projection narrows back down.
+ * The stored request vocabulary is wider than either portal's public one: the
+ * warehouse never sees REJECTED or FORWARDED_TO_KITCHEN, and Admin never sees
+ * KITCHEN_TO_WAREHOUSE. Each projection narrows back down.
+ *
+ * Since Phase 4.1 Admin both sees and sends DISPATCHED — on a PO it means Admin
+ * shipped to the warehouse, on a kitchen request it means the warehouse shipped
+ * to the kitchen. `RequestStatus` already covers it, so the status alias is just
+ * `RequestStatus`; it stays named for symmetry with `MockRequestType`.
  */
 type MockRequestType = AdminRequestType | "KITCHEN_TO_WAREHOUSE";
-type MockRequestStatus = RequestStatus | "DISPATCHED";
+type MockRequestStatus = RequestStatus;
 
 interface MockStockRequest extends Omit<StockRequest, "type" | "status"> {
   type: MockRequestType;
@@ -195,6 +215,26 @@ interface MockDb {
   sales: SalesRecord[];
   inventory: MockInventoryItem[];
   stock_counts: MockStockCount[];
+  notifications: MockNotification[];
+  /**
+   * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
+   * limit is compared against total on hand across every batch, so it cannot
+   * live on a per-batch row.
+   */
+  reorder_levels: MockReorderLevel[];
+}
+
+interface MockNotification extends AppNotification {
+  restaurant_id: string;
+  user_id: string;
+}
+
+interface MockReorderLevel {
+  restaurant_id: string;
+  product_id: string;
+  location_type: StockLocationType;
+  location_id: string;
+  reorder_level: number;
 }
 
 const now = () => new Date().toISOString();
@@ -691,12 +731,12 @@ function seedDb(): MockDb {
       ],
     },
     {
-      // Admin has queued this PO; the warehouse can now close it out.
+      // Admin dispatched this PO; the warehouse now confirms or reports.
       id: "req-006",
       restaurant_id: "rest-001",
       type: "WAREHOUSE_TO_ADMIN_PO",
-      status: "IN_QUEUE",
-      notes: "Queued by Admin, awaiting delivery",
+      status: "DISPATCHED",
+      notes: "Dispatched by Admin, awaiting delivery",
       from_label: "Main Warehouse",
       created_at: requestCreated,
       updated_at: requestCreated,
@@ -994,7 +1034,55 @@ function seedDb(): MockDb {
     sales,
     inventory,
     stock_counts: [],
+    reorder_levels: [],
+    notifications: seedNotifications(),
   };
+}
+
+/**
+ * One of each known entity_type, plus one deliberately unknown.
+ *
+ * The unknown row is the point: new types arrive without an API version bump, so
+ * the inbox has to render one inertly rather than crash. Seeding it means that
+ * path is exercised every time someone opens the bell, not only in a future
+ * phase when it is too late.
+ */
+function seedNotifications(): MockNotification[] {
+  return [
+    {
+      id: "ntf-001",
+      restaurant_id: "rest-001",
+      user_id: "3",
+      title: "Low stock",
+      body: "Mozzarella Block at warehouse 1 is down to 18 (limit 20). Time to request more.",
+      entity_type: "product",
+      entity_id: "prod-003",
+      is_read: false,
+      created_at: now(),
+    },
+    {
+      id: "ntf-002",
+      restaurant_id: "rest-001",
+      user_id: "2",
+      title: "Request status updated",
+      body: "Request #6 moved from APPROVED to DISPATCHED.",
+      entity_type: "request",
+      entity_id: "req-006",
+      is_read: false,
+      created_at: now(),
+    },
+    {
+      id: "ntf-003",
+      restaurant_id: "rest-001",
+      user_id: "2",
+      title: "Something from a later phase",
+      body: "An entity_type this build has never heard of. It must render inertly, not crash the inbox.",
+      entity_type: "some_future_thing",
+      entity_id: "42",
+      is_read: true,
+      created_at: now(),
+    },
+  ];
 }
 
 function loadDb(): MockDb {
@@ -1337,7 +1425,9 @@ function toPublicKitchenInventoryItem(item: MockInventoryItem): KitchenInventory
     quantity: item.quantity,
     batch_code: item.batch_code,
     expiry_date: item.expiry_date,
-    location_type: "KITCHEN",
+    // Carried through, not hardcoded: this projection also serves the kitchen's
+    // read-only view of WAREHOUSE stock.
+    location_type: item.location_type,
     location_id: item.location_id,
   };
 }
@@ -1537,6 +1627,140 @@ function applyKitchenReceiptToStock(
   }
 }
 
+/** Upsert a low-stock limit for one product at the caller's warehouse. */
+function upsertReorderLevel(
+  db: MockDb,
+  warehouse: Warehouse,
+  productId: string,
+  level: number,
+) {
+  const existing = db.reorder_levels.find(
+    (r) =>
+      r.product_id === productId &&
+      r.location_type === "WAREHOUSE" &&
+      r.location_id === warehouse.id,
+  );
+  if (existing) {
+    existing.reorder_level = level;
+    return;
+  }
+  db.reorder_levels.push({
+    restaurant_id: warehouse.restaurant_id,
+    product_id: productId,
+    location_type: "WAREHOUSE",
+    location_id: warehouse.id,
+    reorder_level: level,
+  });
+}
+
+/**
+ * Apply a PO's line receipts, for RECEIVED or REPORTED.
+ *
+ * The rules this encodes, all from the Phase 4.1 contract:
+ *  - receipts are mandatory on both moves (`missing_line_receipts`)
+ *  - `quantity_received` may never exceed `quantity_approved`
+ *  - a report where nothing differs and no note was written is not a report
+ *  - REPORTED records the shortfall and credits NOTHING
+ *  - RECEIVED credits stock exactly once, and `quantity_received` is the
+ *    CUMULATIVE total for the PO — on the re-enqueue path the warehouse confirms
+ *    100, not the 20 that just turned up, so crediting the delta would be wrong
+ *    and crediting the total twice would double-book.
+ */
+function applyPoReceipts(
+  db: MockDb,
+  warehouse: Warehouse,
+  req: MockStockRequest,
+  body: UpdateWarehouseRequestStatusInput,
+) {
+  const receipts = body.line_receipts ?? [];
+  if (receipts.length === 0) {
+    throw new ApiError(
+      "Line receipts are required to receive or report this order.",
+      409,
+      MISSING_LINE_RECEIPTS,
+    );
+  }
+
+  // Validate everything before mutating: a half-applied receipt would leave the
+  // status un-moved but stock already booked.
+  const applied = receipts.map((receipt) => {
+    const line = req.line_items.find((item) => item.id === receipt.line_item_id);
+    if (!line) throw new ApiError("Line item not found", 404);
+
+    const received = Number(receipt.quantity_received);
+    if (!Number.isInteger(received) || received < 0) {
+      throw new ApiError(
+        "Received quantity must be 0 or greater",
+        409,
+        INVALID_RECEIVED_QUANTITY,
+      );
+    }
+
+    // The approved quantity is the cap for the whole order.
+    const cap = line.quantity_approved ?? line.quantity_requested;
+    if (received > cap) {
+      throw new ApiError(
+        `Cannot receive ${received} of ${line.product_name}; only ${cap} was approved.`,
+        409,
+        INVALID_RECEIVED_QUANTITY,
+      );
+    }
+    return { line, receipt, received, cap };
+  });
+
+  if (body.to_status === "REPORTED") {
+    const somethingDiffers = applied.some(
+      ({ received, cap, receipt }) =>
+        received !== cap || Boolean(receipt.issue_note?.trim()),
+    );
+    if (!somethingDiffers) {
+      throw new ApiError(
+        "Nothing differs from the order and no issue was described.",
+        409,
+        NOTHING_REPORTED,
+      );
+    }
+  }
+
+  for (const { line, receipt, received } of applied) {
+    line.quantity_received = received;
+    if (receipt.issue_note !== undefined) {
+      line.issue_note = receipt.issue_note ?? null;
+    }
+  }
+
+  // REPORTED records only. Stock enters the ledger once, at RECEIVED.
+  if (body.to_status !== "RECEIVED") return;
+
+  for (const { line, receipt, received } of applied) {
+    if (received === 0) continue;
+    const productId = line.product_id ?? "";
+    const batch = receipt.batch_code?.trim() ?? "";
+    const existing = findWarehouseStock(db, warehouse, productId, batch);
+    if (existing) {
+      existing.quantity += received;
+      if (receipt.expiry_date) existing.expiry_date = receipt.expiry_date;
+      continue;
+    }
+    const product = db.products.find((p) => p.id === productId);
+    db.inventory.push({
+      id: `inv-${Date.now()}-${productId}-${batch}`,
+      restaurant_id: warehouse.restaurant_id,
+      product_id: productId,
+      product: {
+        id: productId,
+        name: product?.name ?? line.product_name,
+        sku: product?.sku,
+      },
+      quantity: received,
+      batch_code: batch,
+      expiry_date: receipt.expiry_date?.trim() || null,
+      location_type: "WAREHOUSE",
+      location_id: warehouse.id,
+    });
+  }
+}
+
 /**
  * Warehouse projection of a stored request.
  *
@@ -1569,10 +1793,15 @@ function toPublicWarehouseRequest(req: MockStockRequest): WarehouseRequest {
   };
 }
 
+/**
+ * `type` widens to MockRequestType so Admin's read-only kitchen oversight can
+ * page KITCHEN_TO_WAREHOUSE rows. Filtering by type first is also what keeps a
+ * `?status=DISPATCHED` query from crossing the two vocabularies.
+ */
 function paginateRequests(
   db: MockDb,
   restaurantId: string,
-  type: StockRequest["type"],
+  type: MockRequestType,
   filters?: RequestFilters,
 ): Paginated<StockRequest> {
   const page = filters?.page ?? 1;
@@ -2531,12 +2760,15 @@ export const mockClient: ApiClient = {
     return delay(summary);
   },
 
-  async listProductPricing() {
+  async listProductPricing(filters?: ProductPricingFilters) {
     const me = requireAuth();
     const db = loadDb();
     const r = resolveMyRestaurant(db, me);
     const items: ProductPricing[] = db.products
       .filter((p) => p.restaurant_id === r.id)
+      // `unpriced=true` is Admin's pricing queue; once priced, a product drops
+      // off it. An absent param means every product.
+      .filter((p) => !filters?.unpriced || p.cost_price == null)
       .map((p) => ({
         id: p.id,
         name: p.name,
@@ -2584,15 +2816,58 @@ export const mockClient: ApiClient = {
     return delay(paginateRequests(db, r.id, "WAREHOUSE_TO_ADMIN_PO", filters));
   },
 
+  async listAdminKitchenRequests(filters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    // Oversight only. Admin never actions these — the moves belong to the
+    // kitchen and the warehouse — so there is no matching status endpoint.
+    return delay(paginateRequests(db, r.id, "KITCHEN_TO_WAREHOUSE", filters));
+  },
+
+  async listAdminInventory(filters?: AdminInventoryFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    // The only inventory projection carrying cost_price. Every location.
+    const items: AdminInventoryItem[] = db.inventory
+      .filter((item) => item.restaurant_id === r.id)
+      .filter(
+        (item) =>
+          !filters?.location_type || item.location_type === filters.location_type,
+      )
+      .filter(
+        (item) => !filters?.location_id || item.location_id === filters.location_id,
+      )
+      .map((item) => {
+        const product = db.products.find((p) => p.id === item.product_id);
+        return {
+          id: item.id,
+          product_id: item.product_id,
+          product: {
+            id: item.product.id,
+            name: item.product.name,
+            sku: item.product.sku,
+            cost_price: product?.cost_price ?? null,
+          },
+          quantity: item.quantity,
+          batch_code: item.batch_code,
+          expiry_date: item.expiry_date,
+          location_type: item.location_type,
+          location_id: item.location_id,
+        };
+      });
+    return delay(items);
+  },
+
   async getRequest(requestId) {
     const me = requireAuth();
     const db = loadDb();
     const r = resolveMyRestaurant(db, me);
     const found = db.requests.find((req) => req.id === requestId && req.restaurant_id === r.id);
+    // Kitchen requests became readable in Phase 4.1 — this used to 404 on one.
+    // Admin oversees the kitchen⇄warehouse loop; the PATCH still refuses.
     if (!found) throw new ApiError("Request not found", 404);
-    if (found.type !== "BRANCH_TO_ADMIN" && found.type !== "WAREHOUSE_TO_ADMIN_PO") {
-      throw new ApiError("Request not found", 404);
-    }
     return delay(toPublicRequest(found));
   },
 
@@ -2602,12 +2877,19 @@ export const mockClient: ApiClient = {
     const r = resolveMyRestaurant(db, me);
     const found = db.requests.find((req) => req.id === requestId && req.restaurant_id === r.id);
     if (!found) throw new ApiError("Request not found", 404);
-    if (found.type !== "BRANCH_TO_ADMIN" && found.type !== "WAREHOUSE_TO_ADMIN_PO") {
-      throw new ApiError("Request not found", 404);
+    // Readable, but not actionable: approving and dispatching a kitchen request
+    // belong to the warehouse. A 403 rather than a 404 — Admin can see it.
+    if (found.type === "KITCHEN_TO_WAREHOUSE") {
+      throw new ApiError(
+        "Admin cannot action kitchen requests.",
+        403,
+        "forbidden",
+      );
     }
 
-    // The type guard above rules out kitchen requests, so DISPATCHED — the only
-    // status Admin lacks — cannot appear here.
+    // Keyed by type, which is what keeps DISPATCHED honest: Admin dispatches a
+    // PO to the warehouse, but the identically-named move on a kitchen request
+    // belongs to the warehouse and is unreachable here by construction.
     const allowed = allowedTransitions(found.type, found.status as RequestStatus);
     if (!allowed.includes(body.to_status)) {
       throw new ApiError(
@@ -2650,9 +2932,9 @@ export const mockClient: ApiClient = {
         throw new ApiError("line_approvals are required for partial approval", 400);
       }
       for (const approval of approvals) {
-        const line = found.line_items.find((item) => item.id === approval.line_id);
+        const line = found.line_items.find((item) => item.id === approval.line_item_id);
         if (!line) {
-          throw new ApiError(`Line item ${approval.line_id} not found`, 400);
+          throw new ApiError(`Line item ${approval.line_item_id} not found`, 400);
         }
         if (
           !Number.isFinite(approval.quantity_approved) ||
@@ -2660,7 +2942,7 @@ export const mockClient: ApiClient = {
           approval.quantity_approved > line.quantity_requested
         ) {
           throw new ApiError(
-            `Invalid quantity_approved for line ${approval.line_id}`,
+            `Invalid quantity_approved for line ${approval.line_item_id}`,
             400,
           );
         }
@@ -2682,6 +2964,124 @@ export const mockClient: ApiClient = {
     found.updated_at = now();
     saveDb(db);
     return delay(toPublicRequest(found));
+  },
+
+  async listNotifications(filters?: NotificationFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+
+    // Scoped to the signed-in user, newest first.
+    const all = db.notifications
+      .filter((n) => String(n.user_id) === String(me.id))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    const start = (page - 1) * page_size;
+    const result: Paginated<AppNotification> = {
+      items: all.slice(start, start + page_size),
+      page,
+      page_size,
+      total: all.length,
+    };
+    return delay(result);
+  },
+
+  async markNotificationRead(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const found = db.notifications.find(
+      (n) => n.id === id && String(n.user_id) === String(me.id),
+    );
+    if (!found) throw new ApiError("Notification not found", 404);
+    found.is_read = true;
+    saveDb(db);
+    return delay(found as AppNotification);
+  },
+
+  async listWarehouseProducts() {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+    // Cost price is projected away, not nulled: the warehouse introduces the
+    // product and Admin prices it, and the keeper must never see what it cost.
+    const products: WarehouseProduct[] = db.products
+      .filter((p) => p.restaurant_id === warehouse.restaurant_id)
+      .map((p) => ({ id: p.id, name: p.name, sku: p.sku }));
+    return delay(products);
+  },
+
+  async createWarehouseProduct(body: CreateWarehouseProductInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const name = body.name?.trim() ?? "";
+    if (!name) throw new ApiError("Request validation failed", 422);
+
+    const sku = body.sku?.trim() || null;
+    if (
+      sku &&
+      db.products.some(
+        (p) =>
+          p.restaurant_id === warehouse.restaurant_id &&
+          (p.sku ?? "").toLowerCase() === sku.toLowerCase(),
+      )
+    ) {
+      throw new ApiError(
+        "A product with this SKU already exists.",
+        409,
+        DUPLICATE_SKU,
+      );
+    }
+
+    const created: MockProduct = {
+      id: `prod-${Date.now()}`,
+      restaurant_id: warehouse.restaurant_id,
+      name,
+      sku,
+      // Unpriced until Admin sets it — this is what puts it on Admin's queue.
+      cost_price: null,
+    };
+    db.products.push(created);
+    saveDb(db);
+
+    const result: WarehouseProduct = {
+      id: created.id,
+      name: created.name,
+      sku: created.sku,
+    };
+    return delay(result);
+  },
+
+  async setWarehouseReorderLevel(
+    productId: string,
+    body: UpdateReorderLevelInput,
+  ) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const level = Number(body.reorder_level);
+    if (!Number.isInteger(level) || level < 0) {
+      throw new ApiError("Reorder level must be 0 or greater", 422);
+    }
+    const product = db.products.find(
+      (p) => p.id === productId && p.restaurant_id === warehouse.restaurant_id,
+    );
+    if (!product) throw new ApiError("Product not found", 404);
+
+    upsertReorderLevel(db, warehouse, productId, level);
+    saveDb(db);
+
+    const result: ReorderLevel = {
+      product_id: productId,
+      location_type: "WAREHOUSE",
+      location_id: warehouse.id,
+      reorder_level: level,
+    };
+    return delay(result);
   },
 
   async listWarehouseInventory() {
@@ -2714,6 +3114,16 @@ export const mockClient: ApiClient = {
 
     const batchCode = body.batch_code?.trim() ?? "";
     const expiryDate = body.expiry_date?.trim() || null;
+
+    // Optional low-stock limit, upserted alongside the intake. Without one, no
+    // alert ever fires for this product.
+    if (body.reorder_level !== undefined && body.reorder_level !== null) {
+      const level = Number(body.reorder_level);
+      if (!Number.isInteger(level) || level < 0) {
+        throw new ApiError("Reorder level must be 0 or greater", 422);
+      }
+      upsertReorderLevel(db, warehouse, product.id, level);
+    }
 
     // Stock is tracked per product+batch. Receiving into an existing batch adds
     // to it rather than replacing it; a new batch becomes its own row.
@@ -3111,9 +3521,10 @@ export const mockClient: ApiClient = {
       line.quantity_approved = approval.quantity_approved;
     }
 
-    // Dispatching is the only warehouse move that touches stock. A PO reaching
-    // RECEIVED deliberately does not — intake stays a separate action.
-    if (body.to_status === "DISPATCHED") {
+    // Every stock effect below is gated on the request TYPE first. DISPATCHED
+    // and RECEIVED both belong to two vocabularies and mean opposite things, so
+    // a status-only check here would debit stock on the wrong request.
+    if (type === "KITCHEN_TO_WAREHOUSE" && body.to_status === "DISPATCHED") {
       if (
         found.target_location_type !== "WAREHOUSE" ||
         !found.target_location_id
@@ -3125,6 +3536,13 @@ export const mockClient: ApiClient = {
         );
       }
       applyDispatchToStock(db, warehouse, found);
+    }
+
+    if (
+      type === "WAREHOUSE_TO_ADMIN_PO" &&
+      (body.to_status === "RECEIVED" || body.to_status === "REPORTED")
+    ) {
+      applyPoReceipts(db, warehouse, found, body);
     }
 
     found.status = body.to_status;
@@ -3150,6 +3568,28 @@ export const mockClient: ApiClient = {
       .filter(
         (item) =>
           item.location_type === "KITCHEN" && item.location_id === kitchen.id,
+      )
+      .map(toPublicKitchenInventoryItem);
+    return delay(items);
+  },
+
+  async listKitchenWarehouseInventory(warehouseId: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    // Another restaurant's warehouse is a 404 — scope leaks nothing about what
+    // exists elsewhere.
+    const warehouse = db.warehouses.find(
+      (w) => w.id === warehouseId && w.restaurant_id === kitchen.restaurant_id,
+    );
+    if (!warehouse) throw new ApiError("Warehouse not found", 404);
+
+    // Quantity only. The kitchen judges availability; cost stays Admin-only, so
+    // this reuses the kitchen's cost-free projection.
+    const items = db.inventory
+      .filter(
+        (item) =>
+          item.location_type === "WAREHOUSE" && item.location_id === warehouse.id,
       )
       .map(toPublicKitchenInventoryItem);
     return delay(items);

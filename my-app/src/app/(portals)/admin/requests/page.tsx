@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { RequestList } from "@/components/admin/requests/RequestList";
 import { Button } from "@/components/ui/button";
@@ -23,8 +24,12 @@ const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
   "REJECTED",
   "PARTIALLY_APPROVED",
   "FORWARDED_TO_KITCHEN",
-  "IN_QUEUE",
+  "DISPATCHED",
+  "REPORTED",
+  "RESOLVED",
   "IN_PRODUCTION",
+  "PRODUCED",
+  "ALLOCATED",
   "RECEIVED",
 ];
 
@@ -84,6 +89,11 @@ export default function AdminRequestsPage() {
             }}
           >
             Distribution
+          </Button>
+          {/* A route rather than a tab: kitchen → warehouse requests are oversight
+              only, so they do not belong on a screen about pending Admin action. */}
+          <Button asChild variant="ghost">
+            <Link href="/admin/requests/kitchen">Kitchen oversight</Link>
           </Button>
         </div>
 

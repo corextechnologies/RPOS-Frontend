@@ -1,7 +1,8 @@
 import { z } from "zod";
 
+/** The key is `line_item_id`, from `line_items[].id` — never `product_id`. */
 export const lineApprovalSchema = z.object({
-  line_id: z.string().min(1),
+  line_item_id: z.string().min(1),
   quantity_approved: z.number().min(0, "Quantity must be 0 or greater"),
 });
 
@@ -13,7 +14,10 @@ export const requestActionSchema = z
       "REJECTED",
       "PARTIALLY_APPROVED",
       "FORWARDED_TO_KITCHEN",
-      "IN_QUEUE",
+      // DISPATCHED replaced IN_QUEUE in Phase 4.1.
+      "DISPATCHED",
+      "REPORTED",
+      "RESOLVED",
       "IN_PRODUCTION",
       "PRODUCED",
       "ALLOCATED",

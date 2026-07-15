@@ -19,7 +19,14 @@ import {
   warehouseActionHint,
   warehouseActionLabel,
   warehouseAllowedTransitions,
+  warehouseTransitionNeedsReceipts,
 } from "@/lib/warehouse/request-transitions";
+import {
+  seedReceiptDrafts,
+  validateReceipts,
+  type ReceiptDraft,
+} from "@/lib/schemas/warehouse-receipt";
+import { PoReceiptsEditor } from "./PoReceiptsEditor";
 
 interface WarehouseRequestActionPanelProps {
   request: WarehouseRequest;
@@ -28,12 +35,19 @@ interface WarehouseRequestActionPanelProps {
   onSubmit: (body: UpdateWarehouseRequestStatusInput) => Promise<void>;
 }
 
-/** Copy for statuses the warehouse cannot act on, so the panel never dead-ends. */
+/**
+ * Copy for statuses the warehouse cannot act on, so the panel never dead-ends.
+ *
+ * Branches on `request_type` first: DISPATCHED means "act on this" for a PO and
+ * "waiting on the kitchen" for a kitchen request.
+ */
 function waitingCopy(request: WarehouseRequest): string {
   if (request.request_type === "WAREHOUSE_TO_ADMIN_PO") {
-    return request.status === "RECEIVED"
-      ? "This order is closed."
-      : "Admin has this order. You can act once it reaches In Queue.";
+    if (request.status === "RECEIVED") return "This order is closed.";
+    if (request.status === "REPORTED") {
+      return "Admin is reviewing your report. You can book the goods in once they respond.";
+    }
+    return "Admin has this order. You can act once it is dispatched to you.";
   }
   if (request.status === "DISPATCHED") {
     return "Dispatched. The kitchen confirms receipt on their side.";
@@ -49,6 +63,8 @@ export function WarehouseRequestActionPanel({
 }: WarehouseRequestActionPanelProps) {
   const [pending, setPending] = useState<WarehouseRequestStatus | null>(null);
   const [notes, setNotes] = useState("");
+  const [drafts, setDrafts] = useState<ReceiptDraft[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | undefined>();
 
   const transitions = warehouseAllowedTransitions(
     request.request_type,
@@ -66,16 +82,70 @@ export function WarehouseRequestActionPanel({
     );
   }
 
-  const hint = pending ? warehouseActionHint(request.request_type, pending) : null;
+  const hint = pending
+    ? warehouseActionHint(request.request_type, pending, request.status)
+    : null;
+
+  const needsReceipts =
+    pending != null &&
+    warehouseTransitionNeedsReceipts(request.request_type, pending);
+
+  // Coming out of REPORTED, the warehouse confirms the whole order's total, not
+  // the delivery that just arrived.
+  const isCumulative = request.status === "RESOLVED" || request.status === "REPORTED";
+
+  const validation = needsReceipts
+    ? validateReceipts(drafts, request.line_items)
+    : null;
+
+  // A report where every quantity matches and nothing was written is not a
+  // report — the API answers `nothing_reported`, so the button stays disabled.
+  const reportBlocked =
+    pending === "REPORTED" && validation != null && !validation.differs;
+  const quantitiesInvalid = (validation?.invalid.length ?? 0) > 0;
+
+  const start = (status: WarehouseRequestStatus) => {
+    setPending(status);
+    setErrorMessage(undefined);
+    if (warehouseTransitionNeedsReceipts(request.request_type, status)) {
+      setDrafts(seedReceiptDrafts(request.line_items));
+    }
+  };
 
   const reset = () => {
     setPending(null);
     setNotes("");
+    setDrafts([]);
+    setErrorMessage(undefined);
+  };
+
+  const patchDraft = (lineItemId: string, patch: Partial<ReceiptDraft>) => {
+    setDrafts((prev) =>
+      prev.map((d) => (d.line_item_id === lineItemId ? { ...d, ...patch } : d)),
+    );
   };
 
   const confirm = async () => {
     if (!pending) return;
-    await onSubmit({ to_status: pending, notes: notes || undefined });
+    if (needsReceipts && quantitiesInvalid) {
+      setErrorMessage("Enter a whole quantity within the ordered amount for every line.");
+      return;
+    }
+    await onSubmit({
+      to_status: pending,
+      notes: notes || undefined,
+      // One entry per line: omitting a line loses its batch and expiry, which
+      // would hide that stock from near-expiry alerts and labels.
+      line_receipts: needsReceipts
+        ? drafts.map((d) => ({
+            line_item_id: d.line_item_id,
+            quantity_received: Number(d.quantity_received),
+            batch_code: d.batch_code || undefined,
+            expiry_date: d.expiry_date || undefined,
+            issue_note: d.issue_note || undefined,
+          }))
+        : undefined,
+    });
     reset();
   };
 
@@ -94,7 +164,7 @@ export function WarehouseRequestActionPanel({
               key={status}
               type="button"
               variant={pending === status ? "default" : "outline"}
-              onClick={() => setPending(status)}
+              onClick={() => start(status)}
             >
               {warehouseActionLabel(status)}
             </Button>
@@ -109,6 +179,25 @@ export function WarehouseRequestActionPanel({
               </p>
               {hint && <p className="text-sm text-muted">{hint}</p>}
             </div>
+
+            {needsReceipts && (
+              <PoReceiptsEditor
+                lines={request.line_items}
+                drafts={drafts}
+                mode={pending === "REPORTED" ? "REPORTED" : "RECEIVED"}
+                isCumulative={isCumulative}
+                onChange={patchDraft}
+              />
+            )}
+
+            {reportBlocked && (
+              <p className="text-sm text-muted">
+                Nothing differs from the order yet. Change a quantity or describe
+                the problem before reporting.
+              </p>
+            )}
+
+            {errorMessage && <p className="text-sm text-danger">{errorMessage}</p>}
 
             <div className="space-y-2">
               <label
@@ -134,7 +223,11 @@ export function WarehouseRequestActionPanel({
               >
                 Cancel
               </Button>
-              <Button type="button" onClick={confirm} disabled={isSubmitting}>
+              <Button
+                type="button"
+                onClick={confirm}
+                disabled={isSubmitting || reportBlocked || quantitiesInvalid}
+              >
                 {isSubmitting ? "Working…" : "Confirm"}
               </Button>
             </div>

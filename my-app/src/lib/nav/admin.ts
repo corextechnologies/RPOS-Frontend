@@ -4,6 +4,7 @@ import {
   DollarSign,
   Inbox,
   LayoutDashboard,
+  Package,
   Receipt,
   Settings,
   Tag,
@@ -72,6 +73,16 @@ export const ADMIN_NAV: NavSection[] = [
   {
     title: "Operations",
     items: [
+      {
+        label: "Inventory",
+        href: "/admin/inventory",
+        icon: Package,
+        // Not the Warehouse's "inventory:read" — that action is scoped to a
+        // single warehouse's own stock. This page is Admin's cross-location
+        // oversight, which is what "overview:read" already grants.
+        action: "overview:read",
+        match: "exact",
+      },
       {
         label: "Pricing",
         href: "/admin/pricing",

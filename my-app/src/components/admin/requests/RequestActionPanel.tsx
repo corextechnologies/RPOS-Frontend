@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   actionLabel,
+  adminActionHint,
   allowedTransitions,
   isDestructiveTransition,
 } from "@/lib/admin/request-transitions";
@@ -118,7 +119,8 @@ export function RequestActionPanel({
     const line_approvals =
       toStatus === "PARTIALLY_APPROVED"
         ? request.line_items.map((line) => ({
-            line_id: line.id,
+            // `line_item_id`, from the line's own id — not the product id.
+            line_item_id: line.id,
             quantity_approved: Number(lineQtys[line.id]),
           }))
         : undefined;
@@ -140,7 +142,7 @@ export function RequestActionPanel({
 
     if (toStatus === "PARTIALLY_APPROVED" && line_approvals) {
       for (const line of request.line_items) {
-        const approval = line_approvals.find((a) => a.line_id === line.id);
+        const approval = line_approvals.find((a) => a.line_item_id === line.id);
         if (
           !approval ||
           !Number.isFinite(approval.quantity_approved) ||
@@ -203,7 +205,7 @@ export function RequestActionPanel({
                 disabled={isSubmitting}
                 onClick={() => startAction(toStatus)}
               >
-                {actionLabel(toStatus)}
+                {actionLabel(toStatus, request.status)}
               </Button>
             ))}
           </div>
@@ -211,8 +213,14 @@ export function RequestActionPanel({
           {(showPartialEditor || showConfirmPanel) && (
             <div className="space-y-4 rounded-xl border border-line bg-surface-2 p-4">
               <p className="text-sm font-medium text-content">
-                {selected ? actionLabel(selected) : "Action"}
+                {selected ? actionLabel(selected, request.status) : "Action"}
               </p>
+
+              {selected && adminActionHint(selected, request.status) && (
+                <p className="text-sm text-muted">
+                  {adminActionHint(selected, request.status)}
+                </p>
+              )}
 
               {showPartialEditor && (
                 <div className="space-y-3">

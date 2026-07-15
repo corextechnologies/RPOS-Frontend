@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { wasteReasonSchema } from "@/lib/stock/waste-reason";
 
 /**
  * Quantities arrive from number inputs as strings, so they are validated as
@@ -9,18 +10,9 @@ const wholeQuantity = z.string().refine((value) => {
   return Number.isInteger(n) && n > 0;
 }, "Enter a whole quantity greater than 0");
 
-export const wasteReasonSchema = z.enum([
-  "SPOILAGE",
-  "EXPIRED",
-  "DAMAGED",
-  "OVERPRODUCTION",
-  "PREP_ERROR",
-  "OTHER",
-]);
-
 /**
- * Unlike the Warehouse's waste form, `waste_reason` is required — the API
- * rejects a write-off without one.
+ * Required here, optional on the Warehouse's endpoint — but both portals send
+ * it, and both use the same shared list. See lib/stock/waste-reason.ts.
  */
 export const kitchenWasteSchema = z.object({
   quantity: wholeQuantity,
@@ -38,20 +30,10 @@ export const kitchenWasteDefaults: KitchenWasteForm = {
   notes: "",
 };
 
-/** Display strings for the enums. Never render the raw wire values. */
-export const WASTE_REASON_LABELS: Record<
-  z.infer<typeof wasteReasonSchema>,
-  string
-> = {
-  SPOILAGE: "Spoilage",
-  EXPIRED: "Expired",
-  DAMAGED: "Damaged",
-  OVERPRODUCTION: "Overproduction",
-  PREP_ERROR: "Prep error",
-  OTHER: "Other",
-};
-
-export const MOVEMENT_TYPE_LABELS: Record<"WASTE" | "EXPIRY", string> = {
-  WASTE: "Waste",
-  EXPIRY: "Expiry",
-};
+// Labels and the reason enum now live in lib/stock/waste-reason.ts, shared with
+// the Warehouse. Re-exported so existing kitchen imports keep working.
+export {
+  MOVEMENT_TYPE_LABELS,
+  WASTE_REASON_LABELS,
+  wasteReasonSchema,
+} from "@/lib/stock/waste-reason";

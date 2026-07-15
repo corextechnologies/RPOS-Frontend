@@ -11,7 +11,10 @@ const STATUS_VARIANT: Record<RequestStatus, NonNullable<BadgeProps["variant"]>> 
   REJECTED: "destructive",
   PARTIALLY_APPROVED: "secondary",
   FORWARDED_TO_KITCHEN: "secondary",
-  IN_QUEUE: "secondary",
+  DISPATCHED: "secondary",
+  // A reported problem is waiting on Admin, so it reads as needing attention.
+  REPORTED: "warning",
+  RESOLVED: "secondary",
   IN_PRODUCTION: "secondary",
   PRODUCED: "secondary",
   ALLOCATED: "secondary",
@@ -42,5 +45,6 @@ export function formatRequestType(type: string | null | undefined): string {
   if (!type) return "—";
   if (type === "BRANCH_TO_ADMIN") return "Product request";
   if (type === "WAREHOUSE_TO_ADMIN_PO") return "Distribution / PO";
+  if (type === "KITCHEN_TO_WAREHOUSE") return "Kitchen request";
   return formatStatus(type);
 }

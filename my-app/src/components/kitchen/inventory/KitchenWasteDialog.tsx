@@ -29,11 +29,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { WasteReasonSelect } from "@/components/stock/WasteReasonSelect";
+import { defaultReasonFor, MOVEMENT_TYPE_LABELS } from "@/lib/stock/waste-reason";
 import {
   kitchenWasteDefaults,
   kitchenWasteSchema,
-  MOVEMENT_TYPE_LABELS,
-  WASTE_REASON_LABELS,
   type KitchenWasteForm,
 } from "@/lib/schemas/kitchen-stock";
 import type { KitchenInventoryItem } from "@/lib/types/kitchen";
@@ -67,9 +67,8 @@ export function KitchenWasteDialog({
       form.reset({
         ...kitchenWasteDefaults,
         movement_type: defaultMovementType,
-        // Opening from the near-expiry list already says why; defaulting the
-        // reason to match saves the obvious second click.
-        waste_reason: defaultMovementType === "EXPIRY" ? "EXPIRED" : "SPOILAGE",
+        // Opening from the near-expiry list already says why.
+        waste_reason: defaultReasonFor(defaultMovementType),
       });
     }
   }, [open, defaultMovementType, form]);
@@ -89,28 +88,12 @@ export function KitchenWasteDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            {/* Shared with the Warehouse — one list, one analytics dimension. */}
             <FormField
               control={form.control}
               name="waste_reason"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Reason</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.entries(WASTE_REASON_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+                <WasteReasonSelect value={field.value} onChange={field.onChange} />
               )}
             />
 

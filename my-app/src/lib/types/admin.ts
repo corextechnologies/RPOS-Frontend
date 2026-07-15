@@ -152,18 +152,77 @@ export interface ProductPricing {
   cost_price: string | null; // decimal string, like billing amounts
 }
 
+export interface ProductPricingFilters {
+  /** True narrows to products with no price yet — Admin's pricing queue. */
+  unpriced?: boolean;
+}
+
+/**
+ * Admin's view of stock across every location.
+ *
+ * This is the ONLY inventory shape carrying `cost_price`. The Warehouse and
+ * Kitchen equivalents omit the field structurally rather than nulling it, so the
+ * separation is enforced by the type system and not by remembering to hide a
+ * column. Do not widen those types to reuse this one.
+ */
+export interface AdminInventoryProduct {
+  id: string;
+  name: string;
+  sku?: string | null;
+  /** Decimal string, e.g. "1.20". Null until Admin prices it. */
+  cost_price: string | null;
+}
+
+export interface AdminInventoryItem {
+  id: string;
+  product_id: string;
+  product: AdminInventoryProduct;
+  quantity: number;
+  /** Empty string means unbatched stock. */
+  batch_code: string;
+  expiry_date?: string | null;
+  location_type: AdminLocationType;
+  location_id: string;
+}
+
+export type AdminLocationType = "BRANCH" | "KITCHEN" | "WAREHOUSE";
+
+export interface AdminInventoryFilters {
+  location_type?: AdminLocationType;
+  location_id?: string;
+}
+
 export interface UpdateProductPricingInput {
   cost_price: number | string; // >= 0
 }
 
 // ---- Requests ----
-export type AdminRequestType = "BRANCH_TO_ADMIN" | "WAREHOUSE_TO_ADMIN_PO";
 
 /**
- * The full branch-request vocabulary. PRODUCED and ALLOCATED are driven by the
- * Kitchen portal (Phase 4) and never appear in Admin's transition map, but a
- * forwarded request comes back through Admin's read screens carrying them, so
- * they must parse here.
+ * Every request type Admin can READ.
+ *
+ * KITCHEN_TO_WAREHOUSE became readable in Phase 4.1 — `GET /admin/requests/{id}`
+ * used to 404 on one. Admin oversees that loop but never actions it: the PATCH
+ * still answers 403, and ADMIN_REQUEST_TRANSITIONS deliberately has no entry for
+ * this type, so the action panel renders read-only by construction rather than
+ * by remembering to hide buttons.
+ */
+export type AdminRequestType =
+  | "BRANCH_TO_ADMIN"
+  | "WAREHOUSE_TO_ADMIN_PO"
+  | "KITCHEN_TO_WAREHOUSE";
+
+/**
+ * The full request vocabulary Admin can read.
+ *
+ * PRODUCED and ALLOCATED are driven by the Kitchen portal and never appear in
+ * Admin's transition map, but a forwarded request comes back through Admin's
+ * read screens carrying them, so they must parse here.
+ *
+ * DISPATCHED replaced IN_QUEUE in Phase 4.1. Note it is ambiguous across request
+ * types — on a PO it means Admin sent the goods to the warehouse, on a kitchen
+ * request it means the warehouse shipped to the kitchen. Always discriminate on
+ * the request type before acting on it.
  */
 export type RequestStatus =
   | "PENDING"
@@ -171,7 +230,9 @@ export type RequestStatus =
   | "REJECTED"
   | "PARTIALLY_APPROVED"
   | "FORWARDED_TO_KITCHEN"
-  | "IN_QUEUE"
+  | "DISPATCHED"
+  | "REPORTED"
+  | "RESOLVED"
   | "IN_PRODUCTION"
   | "PRODUCED"
   | "ALLOCATED"
@@ -183,6 +244,10 @@ export interface RequestLineItem {
   product_name: string;
   quantity_requested: number;
   quantity_approved?: number | null;
+  /** Null until a PO is reported or received. */
+  quantity_received?: number | null;
+  /** What was wrong with this line, set by a warehouse report. */
+  issue_note?: string | null;
 }
 
 export interface StockRequest {
@@ -202,8 +267,17 @@ export interface RequestFilters {
   page_size?: number;
 }
 
+/**
+ * The key is `line_item_id` and it comes from `line_items[].id` — not
+ * `product_id`.
+ *
+ * This said `line_id` until Phase 4.1. That was a mock-era assumption: every
+ * portal's status PATCH shares one `RequestTransition` schema server-side, so
+ * Admin sends exactly what the Warehouse sends, and `line_id` was silently
+ * wrong against the live API.
+ */
 export interface LineApproval {
-  line_id: string;
+  line_item_id: string;
   quantity_approved: number;
 }
 
@@ -236,3 +310,12 @@ export const MISSING_KITCHEN_TARGET = "missing_kitchen_target";
 
 /** 409 raised when a forward target is a warehouse or branch rather than a kitchen. */
 export const INVALID_KITCHEN_TARGET = "invalid_kitchen_target";
+
+/** 409 raised when a PO moves to RECEIVED or REPORTED without any line receipts. */
+export const MISSING_LINE_RECEIPTS = "missing_line_receipts";
+
+/** 409 raised when a received quantity exceeds the approved quantity. */
+export const INVALID_RECEIVED_QUANTITY = "invalid_received_quantity";
+
+/** 409 raised when a report says nothing is wrong — that is not a report. */
+export const NOTHING_REPORTED = "nothing_reported";

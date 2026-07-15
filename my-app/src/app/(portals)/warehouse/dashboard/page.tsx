@@ -41,9 +41,16 @@ import type { WarehouseRequest } from "@/lib/types/warehouse";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 import { formatDate } from "@/lib/utils";
 
-/** Only the statuses this manager can actually act on. */
+/**
+ * Only the statuses this manager can actually act on.
+ *
+ * DISPATCHED means opposite things per request type, so these constants are only
+ * safe because each is passed to a type-scoped endpoint: PENDING kitchen
+ * requests are ours to approve, and a DISPATCHED PO is ours to receive or
+ * report. Never reuse either across the other inbox.
+ */
 const KITCHEN_TO_ACTION = { status: "PENDING" as const, page: 1, page_size: 5 };
-const PO_TO_ACTION = { status: "IN_QUEUE" as const, page: 1, page_size: 5 };
+const PO_TO_ACTION = { status: "DISPATCHED" as const, page: 1, page_size: 5 };
 
 function StatCard({
   label,

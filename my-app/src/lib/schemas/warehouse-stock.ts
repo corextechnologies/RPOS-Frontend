@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { wasteReasonSchema } from "@/lib/stock/waste-reason";
 
 export const receiveStockSchema = z.object({
   product_id: z.string().min(1, "Select a product"),
@@ -14,6 +15,18 @@ export const receiveStockSchema = z.object({
     .optional(),
   expiry_date: z.string().optional(),
   notes: z.string().max(500, "Notes must be 500 characters or fewer").optional(),
+  /**
+   * Optional low-stock limit, set while adding the item. Blank means "leave it
+   * as it is" — and if none was ever set, no alert will ever fire.
+   */
+  reorder_level: z
+    .string()
+    .refine((value) => {
+      if (value === "") return true;
+      const n = Number(value);
+      return Number.isInteger(n) && n >= 0;
+    }, "Enter a whole number of 0 or more")
+    .optional(),
 });
 
 export type ReceiveStockForm = z.infer<typeof receiveStockSchema>;
@@ -24,6 +37,24 @@ export const receiveStockDefaults: ReceiveStockForm = {
   batch_code: "",
   expiry_date: "",
   notes: "",
+  reorder_level: "",
+};
+
+export const createWarehouseProductSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(255, "Name must be 255 characters or fewer"),
+  sku: z.string().max(100, "SKU must be 100 characters or fewer").optional(),
+});
+
+export type CreateWarehouseProductForm = z.infer<
+  typeof createWarehouseProductSchema
+>;
+
+export const createWarehouseProductDefaults: CreateWarehouseProductForm = {
+  name: "",
+  sku: "",
 };
 
 export const adjustStockSchema = z.object({
@@ -50,6 +81,13 @@ export const wasteStockSchema = z.object({
       const n = Number(value);
       return Number.isInteger(n) && n > 0;
     }, "Enter a whole quantity greater than 0"),
+  /**
+   * Optional on this endpoint, unlike the kitchen's — but required here anyway.
+   * Waste-rate analytics aggregates on it, and a write-off logged without a
+   * reason can never be reported on afterwards. Better to insist now than to
+   * discover the gap when someone asks what all the waste was.
+   */
+  waste_reason: wasteReasonSchema,
   movement_type: z.enum(["WASTE", "EXPIRY"]),
   notes: z.string().max(500, "Notes must be 500 characters or fewer").optional(),
 });
@@ -58,6 +96,7 @@ export type WasteStockForm = z.infer<typeof wasteStockSchema>;
 
 export const wasteStockDefaults: WasteStockForm = {
   quantity: "",
+  waste_reason: "SPOILAGE",
   movement_type: "WASTE",
   notes: "",
 };

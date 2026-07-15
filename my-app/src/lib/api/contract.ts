@@ -21,6 +21,9 @@ import type {
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
   Warehouse,
+  ProductPricingFilters,
+  AdminInventoryItem,
+  AdminInventoryFilters,
 } from "@/lib/types/admin";
 import type {
   IncomeForecast,
@@ -41,6 +44,10 @@ import type {
   WarehouseRequestFilters,
   WarehouseStaff,
   WasteStockInput,
+  WarehouseProduct,
+  CreateWarehouseProductInput,
+  ReorderLevel,
+  UpdateReorderLevelInput,
 } from "@/lib/types/warehouse";
 import type {
   CreateKitchenCountInput,
@@ -60,6 +67,10 @@ import type {
   KitchenWasteInput,
   UpdateKitchenRequestStatusInput,
 } from "@/lib/types/kitchen";
+import type {
+  AppNotification,
+  NotificationFilters,
+} from "@/lib/types/notification";
 import type {
   BillingSummary,
   ChangePasswordInput,
@@ -137,7 +148,9 @@ export interface ApiClient {
   listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>>;
   getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummary>;
 
-  listProductPricing(): Promise<ProductPricing[]>;
+  listProductPricing(filters?: ProductPricingFilters): Promise<ProductPricing[]>;
+  listAdminInventory(filters?: AdminInventoryFilters): Promise<AdminInventoryItem[]>;
+  listAdminKitchenRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
   updateProductPricing(
     productId: string,
     body: UpdateProductPricingInput,
@@ -150,12 +163,26 @@ export interface ApiClient {
     requestId: string,
     body: UpdateRequestStatusInput,
   ): Promise<StockRequest>;
+  // Notifications — shared by every portal. Polled; there is no push.
+  listNotifications(
+    filters?: NotificationFilters,
+  ): Promise<Paginated<AppNotification>>;
+  markNotificationRead(id: string): Promise<AppNotification>;
+
   getIncomeSummary(filter: IncomePeriodFilter): Promise<IncomeSummary>;
   getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
   downloadIncomeCsv(filter: IncomePeriodFilter): Promise<string>;
 
   // Warehouse (Phase 3) — auto-scoped to the caller's warehouse.
   listWarehouseInventory(): Promise<InventoryItem[]>;
+  listWarehouseProducts(): Promise<WarehouseProduct[]>;
+  createWarehouseProduct(
+    body: CreateWarehouseProductInput,
+  ): Promise<WarehouseProduct>;
+  setWarehouseReorderLevel(
+    productId: string,
+    body: UpdateReorderLevelInput,
+  ): Promise<ReorderLevel>;
   listNearExpiryInventory(filters?: NearExpiryFilters): Promise<InventoryItem[]>;
   receiveWarehouseStock(body: ReceiveStockInput): Promise<InventoryItem>;
   adjustWarehouseStock(body: AdjustStockInput): Promise<InventoryItem>;
@@ -182,6 +209,9 @@ export interface ApiClient {
 
   // Kitchen (Phase 4) — auto-scoped to the caller's kitchen.
   listKitchenInventory(): Promise<KitchenInventoryItem[]>;
+  listKitchenWarehouseInventory(
+    warehouseId: string,
+  ): Promise<KitchenInventoryItem[]>;
   listKitchenNearExpiry(
     filters?: KitchenNearExpiryFilters,
   ): Promise<KitchenInventoryItem[]>;

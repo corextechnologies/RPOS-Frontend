@@ -154,6 +154,18 @@ export const kitchenApi = {
     return (data ?? []).map(normalizeLabel);
   },
 
+  async listKitchenWarehouseInventory(
+    warehouseId: string,
+  ): Promise<KitchenInventoryItem[]> {
+    // What a warehouse holds, so the kitchen can judge availability before
+    // requesting. Quantity only — procurement cost stays Admin-only, so these
+    // rows reuse the kitchen's cost-free product shape.
+    const data = await request<KitchenInventoryItem[]>(
+      `/kitchen/warehouses/${warehouseId}/inventory`,
+    );
+    return (data ?? []).map(normalizeInventoryItem);
+  },
+
   async wasteKitchenStock(body: KitchenWasteInput): Promise<KitchenInventoryItem> {
     const data = await request<KitchenInventoryItem>("/kitchen/stock/waste", {
       method: "POST",

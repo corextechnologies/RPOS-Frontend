@@ -21,7 +21,11 @@ import type {
 } from "@/lib/types/warehouse";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 
-/** Kitchen vocabulary only — these requests never reach IN_QUEUE. */
+/**
+ * Kitchen vocabulary only — these never reach REPORTED or RESOLVED. DISPATCHED
+ * here means we shipped to the kitchen and they must confirm; on a PO the same
+ * status means the opposite.
+ */
 const STATUS_OPTIONS: Array<KitchenRequestStatus | "all"> = [
   "all",
   "PENDING",

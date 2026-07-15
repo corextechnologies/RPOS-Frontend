@@ -24,13 +24,18 @@ import type {
 } from "@/lib/types/warehouse";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 
-/** PO vocabulary only — a PO never reaches DISPATCHED. */
+/**
+ * PO vocabulary only. DISPATCHED here means Admin sent the goods to us — the
+ * same status on a kitchen request means the opposite direction.
+ */
 const STATUS_OPTIONS: Array<PurchaseOrderStatus | "all"> = [
   "all",
   "PENDING",
   "APPROVED",
   "PARTIALLY_APPROVED",
-  "IN_QUEUE",
+  "DISPATCHED",
+  "REPORTED",
+  "RESOLVED",
   "RECEIVED",
 ];
 

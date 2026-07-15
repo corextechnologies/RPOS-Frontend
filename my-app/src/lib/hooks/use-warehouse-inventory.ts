@@ -5,11 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
 import type {
   AdjustStockInput,
-  InventoryProduct,
   ReceiveStockInput,
   WasteStockInput,
 } from "@/lib/types/warehouse";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
+import { useWarehouseProducts } from "./use-warehouse-products";
 import { toast } from "sonner";
 
 /** Default matches the API's own `within_days` default. */
@@ -27,31 +27,51 @@ export function useWarehouseInventory() {
 }
 
 /**
- * Products selectable for stock intake, derived from what is already on hand.
+ * Products selectable for stock intake and purchase orders.
  *
- * The Warehouse API exposes no product catalog, and `/admin/products/pricing`
- * is Admin-only and carries cost price, so it must not be called from here.
- * Consequence: a product never yet stocked in this warehouse cannot be chosen.
- * Swap this for a warehouse catalog endpoint once one exists — callers only
- * depend on the returned shape.
+ * Reads the real catalog (`GET /warehouse/products`) rather than deriving the
+ * list from inventory rows. Deriving it meant a product that had never been
+ * stocked could not be chosen — and since choosing it is how you stock it, a new
+ * product could never enter the warehouse at all. The catalog broke that cycle
+ * in Phase 4.1.
+ *
+ * `/admin/products/pricing` is Admin-only and carries cost price, so it must
+ * still never be called from here.
  */
 export function useWarehouseProductOptions() {
-  const inventory = useWarehouseInventory();
+  const catalog = useWarehouseProducts();
 
-  const products = useMemo(() => {
-    const byId = new Map<string, InventoryProduct>();
-    for (const item of inventory.data ?? []) {
-      if (!byId.has(item.product_id)) byId.set(item.product_id, item.product);
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [inventory.data]);
+  const products = useMemo(
+    () =>
+      [...(catalog.data ?? [])].sort((a, b) => a.name.localeCompare(b.name)),
+    [catalog.data],
+  );
 
   return {
     products,
-    isLoading: inventory.isLoading,
-    isError: inventory.isError,
-    error: inventory.error,
+    isLoading: catalog.isLoading,
+    isError: catalog.isError,
+    error: catalog.error,
   };
+}
+
+/**
+ * True when total on hand across every batch has fallen to the limit.
+ *
+ * Low stock is computed client-side on purpose: there is no low-stock endpoint
+ * or flag, and the notification fires only once per crossing — deliberately, so
+ * people do not learn to ignore it. A persistent badge therefore has to be
+ * derived here.
+ *
+ * Totals span batches: 5 units left in an old batch alongside 500 in a new one
+ * is not low. Never compute this per inventory row.
+ */
+export function isLowStock(
+  totalOnHand: number,
+  reorderLevel: number | null | undefined,
+): boolean {
+  if (reorderLevel == null) return false;
+  return totalOnHand <= reorderLevel;
 }
 
 export function useNearExpiryInventory(withinDays: number) {

@@ -9,8 +9,12 @@ import type {
 import { titleCase } from "@/lib/utils";
 
 /**
- * Warehouse-local on purpose: this vocabulary includes DISPATCHED and excludes
+ * Warehouse-local on purpose: this vocabulary includes REPORTED and excludes
  * Admin-only statuses, so it cannot share Admin's badge map.
+ *
+ * The colour is type-agnostic by necessity — DISPATCHED means "act on this" for
+ * a PO and "waiting on the kitchen" for a kitchen request. Anything that needs
+ * to distinguish those must branch on `request_type`, not on the badge.
  */
 const STATUS_VARIANT: Record<
   WarehouseRequestStatus,
@@ -19,8 +23,9 @@ const STATUS_VARIANT: Record<
   PENDING: "warning",
   APPROVED: "success",
   PARTIALLY_APPROVED: "secondary",
-  IN_QUEUE: "secondary",
   DISPATCHED: "secondary",
+  REPORTED: "warning",
+  RESOLVED: "secondary",
   RECEIVED: "success",
 };
 

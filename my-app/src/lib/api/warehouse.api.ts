@@ -2,12 +2,16 @@ import type { Paginated } from "@/lib/types/admin";
 import type {
   AdjustStockInput,
   CreatePurchaseOrderInput,
+  CreateWarehouseProductInput,
   CreateWarehouseStaffInput,
   CreateWarehouseStaffResult,
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  ReorderLevel,
+  UpdateReorderLevelInput,
   UpdateWarehouseRequestStatusInput,
+  WarehouseProduct,
   WarehouseRequest,
   WarehouseRequestFilters,
   WarehouseStaff,
@@ -35,6 +39,10 @@ function normalizeInventoryItem(item: InventoryItem): InventoryItem {
   };
 }
 
+function normalizeProduct(product: WarehouseProduct): WarehouseProduct {
+  return { ...product, id: String(product.id) };
+}
+
 function normalizeStaff(staff: WarehouseStaff): WarehouseStaff {
   return {
     ...staff,
@@ -59,6 +67,11 @@ function normalizeWarehouseRequest(req: WarehouseRequest): WarehouseRequest {
       quantity_requested: Number(line.quantity_requested),
       quantity_approved:
         line.quantity_approved == null ? null : Number(line.quantity_approved),
+      // Null until a PO is reported or received; both are real values, not
+      // missing data, so they are preserved rather than defaulted.
+      quantity_received:
+        line.quantity_received == null ? null : Number(line.quantity_received),
+      issue_note: line.issue_note ?? null,
     })),
   };
 }
@@ -106,9 +119,49 @@ export const warehouseApi = {
         batch_code: optionalText(body.batch_code),
         expiry_date: optionalText(body.expiry_date),
         notes: optionalText(body.notes),
+        // Optional low-stock limit, upserted alongside the intake.
+        reorder_level: body.reorder_level,
       }),
     });
     return normalizeInventoryItem(data);
+  },
+
+  async listWarehouseProducts(): Promise<WarehouseProduct[]> {
+    // Not paginated: no meta, and `data` is the whole catalog.
+    const data = await request<WarehouseProduct[]>("/warehouse/products");
+    return (data ?? []).map(normalizeProduct);
+  },
+
+  async createWarehouseProduct(
+    body: CreateWarehouseProductInput,
+  ): Promise<WarehouseProduct> {
+    const data = await request<WarehouseProduct>("/warehouse/products", {
+      method: "POST",
+      body: JSON.stringify({
+        name: body.name.trim(),
+        sku: optionalText(body.sku),
+      }),
+    });
+    return normalizeProduct(data);
+  },
+
+  async setWarehouseReorderLevel(
+    productId: string,
+    body: UpdateReorderLevelInput,
+  ): Promise<ReorderLevel> {
+    const data = await request<ReorderLevel>(
+      `/warehouse/products/${productId}/reorder-level`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ reorder_level: body.reorder_level }),
+      },
+    );
+    return {
+      ...data,
+      product_id: String(data.product_id),
+      location_id: String(data.location_id),
+      reorder_level: Number(data.reorder_level),
+    };
   },
 
   async listNearExpiryInventory(
@@ -143,6 +196,8 @@ export const warehouseApi = {
       body: JSON.stringify({
         product_id: body.product_id,
         quantity: body.quantity,
+        // Optional on this endpoint, but always sent — see WasteStockInput.
+        waste_reason: body.waste_reason,
         movement_type: body.movement_type,
         batch_code: optionalText(body.batch_code),
         notes: optionalText(body.notes),
@@ -236,10 +291,17 @@ export const warehouseApi = {
         method: "PATCH",
         body: JSON.stringify({
           to_status: body.to_status,
-          // `line_item_id`, not Admin's `line_id`.
           line_approvals: body.line_approvals?.map((approval) => ({
             line_item_id: approval.line_item_id,
             quantity_approved: approval.quantity_approved,
+          })),
+          // Required for a PO reaching RECEIVED or REPORTED.
+          line_receipts: body.line_receipts?.map((receipt) => ({
+            line_item_id: receipt.line_item_id,
+            quantity_received: receipt.quantity_received,
+            batch_code: optionalText(receipt.batch_code),
+            expiry_date: optionalText(receipt.expiry_date),
+            issue_note: optionalText(receipt.issue_note),
           })),
           notes: optionalText(body.notes),
           assignee_id: body.assignee_id,

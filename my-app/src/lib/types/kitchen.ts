@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/types/super-admin";
+import type { WasteReason } from "@/lib/stock/waste-reason";
 
 // Kitchen (Phase 4) DTOs — mirrors the /v1/kitchen/* backend contract.
 //
@@ -12,13 +13,9 @@ import { ApiError } from "@/lib/types/super-admin";
 /** All calls are scoped to the caller's kitchen; `kitchen_id` is never sent. */
 export type KitchenLocationType = "BRANCH" | "KITCHEN" | "WAREHOUSE";
 
-export type WasteReason =
-  | "SPOILAGE"
-  | "EXPIRED"
-  | "DAMAGED"
-  | "OVERPRODUCTION"
-  | "PREP_ERROR"
-  | "OTHER";
+// One list, shared with the Warehouse: waste-rate analytics aggregates across
+// both portals, so two copies could silently split the same report in two.
+export type { WasteReason } from "@/lib/stock/waste-reason";
 
 export type KitchenMovementType = "WASTE" | "EXPIRY";
 

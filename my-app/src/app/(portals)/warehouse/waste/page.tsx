@@ -52,6 +52,9 @@ export default function WarehouseWastePage() {
     await wasteStock.mutateAsync({
       product_id: wasting.product_id,
       quantity: Number(values.quantity),
+      // Optional on the wire, always sent: an unreasoned write-off cannot be
+      // reported on later.
+      waste_reason: values.waste_reason,
       movement_type: values.movement_type,
       batch_code: wasting.batch_code || undefined,
       notes: values.notes || undefined,

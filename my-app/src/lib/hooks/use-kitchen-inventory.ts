@@ -29,6 +29,20 @@ export function useKitchenInventory() {
   });
 }
 
+/**
+ * What a warehouse holds, so the kitchen can judge availability before
+ * requesting. Both kitchen roles may read it. Quantity only — no cost price.
+ */
+export function useKitchenWarehouseInventory(warehouseId: string) {
+  return useQuery({
+    queryKey: queryKeys.kitchenWarehouseInventory(warehouseId),
+    queryFn: () => api.listKitchenWarehouseInventory(warehouseId),
+    enabled: !!warehouseId,
+    retry: (failureCount, error) =>
+      !isMissingKitchenAssignment(error) && failureCount < 3,
+  });
+}
+
 export function useKitchenNearExpiry(withinDays: number) {
   return useQuery({
     queryKey: queryKeys.kitchenNearExpiry(withinDays),
