@@ -1,6 +1,7 @@
 import {
   Building2,
   CookingPot,
+  DollarSign,
   Inbox,
   LayoutDashboard,
   Receipt,
@@ -83,6 +84,13 @@ export const ADMIN_NAV: NavSection[] = [
         href: "/admin/requests",
         icon: Inbox,
         action: "requests:read",
+        match: "prefix",
+      },
+      {
+        label: "Sales",
+        href: "/admin/sales",
+        icon: DollarSign,
+        action: "sales:read",
         match: "prefix",
       },
     ],

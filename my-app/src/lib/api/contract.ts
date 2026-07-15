@@ -1,14 +1,23 @@
 import type {
+  AdminProfile,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
   CreateLocationInput,
+  CreateSaleInput,
   Employee,
   Kitchen,
   Paginated,
   ProductPricing,
   RequestFilters,
+  SalesRecord,
+  SalesRecordFilters,
+  SalesSummary,
+  SalesSummaryFilters,
   StockRequest,
+  UpdateAdminProfileInput,
+  UpdateAdminUserInput,
+  UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
   Warehouse,
@@ -71,13 +80,30 @@ export interface ApiClient {
 
   listBranches(): Promise<Branch[]>;
   createBranch(body: CreateLocationInput): Promise<Branch>;
+  updateBranch(id: string, body: UpdateLocationInput): Promise<Branch>;
+  deleteBranch(id: string): Promise<void>;
   listKitchens(): Promise<Kitchen[]>;
   createKitchen(body: CreateLocationInput): Promise<Kitchen>;
+  updateKitchen(id: string, body: UpdateLocationInput): Promise<Kitchen>;
+  deleteKitchen(id: string): Promise<void>;
   listWarehouses(): Promise<Warehouse[]>;
   createWarehouse(body: CreateLocationInput): Promise<Warehouse>;
+  updateWarehouse(id: string, body: UpdateLocationInput): Promise<Warehouse>;
+  deleteWarehouse(id: string): Promise<void>;
 
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
   createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
+  updateUser(id: string, body: UpdateAdminUserInput): Promise<Employee>;
+  revokeUser(id: string): Promise<Employee>;
+  restoreUser(id: string): Promise<Employee>;
+  deleteUser(id: string): Promise<void>;
+
+  getAdminSettings(): Promise<AdminProfile>;
+  updateAdminSettings(body: UpdateAdminProfileInput): Promise<AdminProfile>;
+
+  recordSale(body: CreateSaleInput): Promise<SalesRecord>;
+  listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>>;
+  getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummary>;
 
   listProductPricing(): Promise<ProductPricing[]>;
   updateProductPricing(

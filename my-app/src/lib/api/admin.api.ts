@@ -1,14 +1,23 @@
 import type {
+  AdminProfile,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
   CreateLocationInput,
+  CreateSaleInput,
   Employee,
   Kitchen,
   Paginated,
   ProductPricing,
   RequestFilters,
+  SalesRecord,
+  SalesRecordFilters,
+  SalesSummary,
+  SalesSummaryFilters,
   StockRequest,
+  UpdateAdminProfileInput,
+  UpdateAdminUserInput,
+  UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
   Warehouse,
@@ -27,6 +36,29 @@ function normalizeEmployee(e: Employee): Employee {
     branch_id: e.branch_id != null ? String(e.branch_id) : e.branch_id,
     kitchen_id: e.kitchen_id != null ? String(e.kitchen_id) : e.kitchen_id,
     warehouse_id: e.warehouse_id != null ? String(e.warehouse_id) : e.warehouse_id,
+  };
+}
+
+function normalizeSale(s: SalesRecord): SalesRecord {
+  return {
+    ...s,
+    id: String(s.id),
+    restaurant_id: String(s.restaurant_id),
+    branch_id: s.branch_id != null ? String(s.branch_id) : s.branch_id,
+    amount: String(s.amount),
+  };
+}
+
+function normalizeSalesSummary(s: SalesSummary): SalesSummary {
+  return {
+    period: s.period,
+    total_amount: String(s.total_amount),
+    total_count: Number(s.total_count),
+    buckets: (s.buckets ?? []).map((b) => ({
+      period_start: b.period_start,
+      total_amount: String(b.total_amount),
+      count: Number(b.count),
+    })),
   };
 }
 
@@ -157,6 +189,22 @@ export const adminApi = {
     };
   },
 
+  async updateBranch(id: string, body: UpdateLocationInput): Promise<Branch> {
+    const data = await request<Branch>(`/admin/branches/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      id: String(data.id),
+      restaurant_id: String(data.restaurant_id),
+    };
+  },
+
+  async deleteBranch(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/branches/${id}`, { method: "DELETE" });
+  },
+
   async listKitchens(): Promise<Kitchen[]> {
     const data = await request<Kitchen[]>("/admin/kitchens");
     return data.map((k) => ({
@@ -178,6 +226,22 @@ export const adminApi = {
     };
   },
 
+  async updateKitchen(id: string, body: UpdateLocationInput): Promise<Kitchen> {
+    const data = await request<Kitchen>(`/admin/kitchens/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      id: String(data.id),
+      restaurant_id: String(data.restaurant_id),
+    };
+  },
+
+  async deleteKitchen(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/kitchens/${id}`, { method: "DELETE" });
+  },
+
   async listWarehouses(): Promise<Warehouse[]> {
     const data = await request<Warehouse[]>("/admin/warehouses");
     return data.map((w) => ({
@@ -197,6 +261,22 @@ export const adminApi = {
       id: String(data.id),
       restaurant_id: String(data.restaurant_id),
     };
+  },
+
+  async updateWarehouse(id: string, body: UpdateLocationInput): Promise<Warehouse> {
+    const data = await request<Warehouse>(`/admin/warehouses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return {
+      ...data,
+      id: String(data.id),
+      restaurant_id: String(data.restaurant_id),
+    };
+  },
+
+  async deleteWarehouse(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/warehouses/${id}`, { method: "DELETE" });
   },
 
   async listEmployees(params?: {
@@ -224,6 +304,41 @@ export const adminApi = {
       ...data,
       user_id: String(data.user_id),
     };
+  },
+
+  async updateUser(id: string, body: UpdateAdminUserInput): Promise<Employee> {
+    const data = await request<Employee>(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return normalizeEmployee(data);
+  },
+
+  async revokeUser(id: string): Promise<Employee> {
+    const data = await request<Employee>(`/admin/users/${id}/revoke`, { method: "POST" });
+    return normalizeEmployee(data);
+  },
+
+  async restoreUser(id: string): Promise<Employee> {
+    const data = await request<Employee>(`/admin/users/${id}/restore`, { method: "POST" });
+    return normalizeEmployee(data);
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/users/${id}`, { method: "DELETE" });
+  },
+
+  async getAdminSettings(): Promise<AdminProfile> {
+    const data = await request<AdminProfile>("/admin/settings");
+    return { ...data, id: String(data.id) };
+  },
+
+  async updateAdminSettings(body: UpdateAdminProfileInput): Promise<AdminProfile> {
+    const data = await request<AdminProfile>("/admin/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return { ...data, id: String(data.id) };
   },
 
   async listProductPricing(): Promise<ProductPricing[]> {
@@ -282,5 +397,37 @@ export const adminApi = {
       body: JSON.stringify(body),
     });
     return normalizeStockRequest(data);
+  },
+
+  async recordSale(body: CreateSaleInput): Promise<SalesRecord> {
+    const data = await request<SalesRecord>("/admin/sales", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    return normalizeSale(data);
+  },
+
+  async listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>> {
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 50;
+    const qs = new URLSearchParams({
+      page: String(page),
+      page_size: String(page_size),
+    });
+    if (filters?.branch_id) qs.set("branch_id", filters.branch_id);
+    const { data, meta } = await adminGetEnvelope<SalesRecord[] | Paginated<SalesRecord>>(
+      `/admin/sales/records?${qs.toString()}`,
+    );
+    return toPaginated(data, normalizeSale, meta, page, page_size);
+  },
+
+  async getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummary> {
+    const qs = new URLSearchParams();
+    qs.set("period", filters?.period ?? "daily");
+    if (filters?.start) qs.set("start", filters.start);
+    if (filters?.end) qs.set("end", filters.end);
+    if (filters?.branch_id) qs.set("branch_id", filters.branch_id);
+    const data = await request<SalesSummary>(`/admin/sales/summary?${qs.toString()}`);
+    return normalizeSalesSummary(data);
   },
 };

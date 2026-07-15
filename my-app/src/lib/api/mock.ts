@@ -2,6 +2,7 @@
  * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
 import type {
+  AdminProfile,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -11,7 +12,17 @@ import type {
   Paginated,
   ProductPricing,
   RequestFilters,
+  SalesRecord,
+  SalesRecordFilters,
+  SalesPeriod,
+  SalesSummary,
+  SalesSummaryBucket,
+  SalesSummaryFilters,
+  CreateSaleInput,
   StockRequest,
+  UpdateAdminProfileInput,
+  UpdateAdminUserInput,
+  UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
   Warehouse,
@@ -46,7 +57,7 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 10;
+const SEED_VERSION = 11;
 
 interface MockInvoiceRecord {
   id: number;
@@ -63,6 +74,7 @@ interface MockUserAccount {
   email: string;
   password: string;
   me: MeResponse;
+  image_url?: string | null;
 }
 
 interface MockResetToken {
@@ -94,6 +106,7 @@ interface MockDb {
   employees: MockEmployee[];
   products: MockProduct[];
   requests: MockStockRequest[];
+  sales: SalesRecord[];
 }
 
 const now = () => new Date().toISOString();
@@ -557,6 +570,48 @@ function seedDb(): MockDb {
     },
   ];
 
+  const daysAgo = (n: number) =>
+    new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+
+  const sales: SalesRecord[] = [
+    {
+      id: "sale-001",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      amount: "420.00",
+      occurred_at: daysAgo(0),
+      note: "Dinner service",
+      created_at: daysAgo(0),
+    },
+    {
+      id: "sale-002",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      amount: "185.50",
+      occurred_at: daysAgo(1),
+      note: "Lunch service",
+      created_at: daysAgo(1),
+    },
+    {
+      id: "sale-003",
+      restaurant_id: "rest-001",
+      branch_id: null,
+      amount: "96.75",
+      occurred_at: daysAgo(2),
+      note: "Takeaway counter",
+      created_at: daysAgo(2),
+    },
+    {
+      id: "sale-004",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      amount: "512.20",
+      occurred_at: daysAgo(5),
+      note: null,
+      created_at: daysAgo(5),
+    },
+  ];
+
   return {
     _seed: SEED_VERSION,
     restaurants,
@@ -569,6 +624,7 @@ function seedDb(): MockDb {
     employees,
     products,
     requests,
+    sales,
   };
 }
 
@@ -703,6 +759,33 @@ function findUser(db: MockDb, email: string): MockUserAccount | undefined {
   return db.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 }
 
+function salesBucketStart(iso: string, period: SalesPeriod): string {
+  const d = new Date(iso);
+  d.setUTCHours(0, 0, 0, 0);
+  if (period === "monthly") {
+    d.setUTCDate(1);
+  } else if (period === "weekly") {
+    const day = d.getUTCDay(); // 0 = Sunday .. 6 = Saturday
+    const diff = day === 0 ? -6 : 1 - day; // shift back to Monday
+    d.setUTCDate(d.getUTCDate() + diff);
+  }
+  return d.toISOString();
+}
+
+function toEmployeeOut(e: MockEmployee): Employee {
+  return {
+    id: e.id,
+    email: e.email,
+    full_name: e.full_name,
+    role: e.role,
+    is_active: e.is_active,
+    branch_id: e.branch_id,
+    kitchen_id: e.kitchen_id,
+    warehouse_id: e.warehouse_id,
+    created_at: e.created_at,
+  };
+}
+
 function setSession(me: MeResponse) {
   if (typeof window !== "undefined") {
     localStorage.setItem(SESSION_KEY, JSON.stringify(me));
@@ -726,6 +809,9 @@ export const mockClient: ApiClient = {
     const user = findUser(db, email);
     if (!user || user.password !== password) {
       throw new ApiError("Invalid email or password", 401);
+    }
+    if (user.me.is_active === false) {
+      throw new ApiError("This account has been deactivated", 401);
     }
     return delay(issueTokens({ ...user.me }));
   },
@@ -1159,6 +1245,30 @@ export const mockClient: ApiClient = {
     return delay(branch);
   },
 
+  async updateBranch(id: string, body: UpdateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const branch = db.branches.find((b) => b.id === id && b.restaurant_id === r.id);
+    if (!branch) throw new ApiError("Branch not found", 404);
+    if (body.name !== undefined) branch.name = body.name;
+    if (body.location !== undefined) branch.location = body.location;
+    saveDb(db);
+    return delay({ ...branch });
+  },
+
+  async deleteBranch(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const exists = db.branches.some((b) => b.id === id && b.restaurant_id === r.id);
+    if (!exists) throw new ApiError("Branch not found", 404);
+    db.branches = db.branches.filter((b) => b.id !== id);
+    r.branch_count = Math.max(0, r.branch_count - 1);
+    saveDb(db);
+    return delay(undefined);
+  },
+
   async listKitchens() {
     const me = requireAuth();
     const db = loadDb();
@@ -1182,6 +1292,29 @@ export const mockClient: ApiClient = {
     return delay(kitchen);
   },
 
+  async updateKitchen(id: string, body: UpdateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const kitchen = db.kitchens.find((k) => k.id === id && k.restaurant_id === r.id);
+    if (!kitchen) throw new ApiError("Kitchen not found", 404);
+    if (body.name !== undefined) kitchen.name = body.name;
+    if (body.location !== undefined) kitchen.location = body.location;
+    saveDb(db);
+    return delay({ ...kitchen });
+  },
+
+  async deleteKitchen(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const exists = db.kitchens.some((k) => k.id === id && k.restaurant_id === r.id);
+    if (!exists) throw new ApiError("Kitchen not found", 404);
+    db.kitchens = db.kitchens.filter((k) => k.id !== id);
+    saveDb(db);
+    return delay(undefined);
+  },
+
   async listWarehouses() {
     const me = requireAuth();
     const db = loadDb();
@@ -1203,6 +1336,29 @@ export const mockClient: ApiClient = {
     db.warehouses.push(warehouse);
     saveDb(db);
     return delay(warehouse);
+  },
+
+  async updateWarehouse(id: string, body: UpdateLocationInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const warehouse = db.warehouses.find((w) => w.id === id && w.restaurant_id === r.id);
+    if (!warehouse) throw new ApiError("Warehouse not found", 404);
+    if (body.name !== undefined) warehouse.name = body.name;
+    if (body.location !== undefined) warehouse.location = body.location;
+    saveDb(db);
+    return delay({ ...warehouse });
+  },
+
+  async deleteWarehouse(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const exists = db.warehouses.some((w) => w.id === id && w.restaurant_id === r.id);
+    if (!exists) throw new ApiError("Warehouse not found", 404);
+    db.warehouses = db.warehouses.filter((w) => w.id !== id);
+    saveDb(db);
+    return delay(undefined);
   },
 
   async listEmployees(params) {
@@ -1320,6 +1476,224 @@ export const mockClient: ApiClient = {
       temporary_password: tempPassword,
     };
     return delay(result, 400);
+  },
+
+  async updateUser(id: string, body: UpdateAdminUserInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+
+    if (body.branch_id !== undefined) {
+      if (employee.role !== "BRANCH_MANAGER") {
+        throw new ApiError("branch_id is only valid for a branch manager", 409, "conflict");
+      }
+      const branch = db.branches.find((b) => b.id === body.branch_id && b.restaurant_id === r.id);
+      if (!branch) throw new ApiError("Branch not found", 404);
+      employee.branch_id = branch.id;
+    }
+    if (body.kitchen_id !== undefined) {
+      if (employee.role !== "KITCHEN_MANAGER") {
+        throw new ApiError("kitchen_id is only valid for a kitchen manager", 409, "conflict");
+      }
+      const kitchen = db.kitchens.find((k) => k.id === body.kitchen_id && k.restaurant_id === r.id);
+      if (!kitchen) throw new ApiError("Kitchen not found", 404);
+      employee.kitchen_id = kitchen.id;
+    }
+    if (body.warehouse_id !== undefined) {
+      if (employee.role !== "WAREHOUSE_MANAGER") {
+        throw new ApiError("warehouse_id is only valid for a warehouse manager", 409, "conflict");
+      }
+      const warehouse = db.warehouses.find(
+        (w) => w.id === body.warehouse_id && w.restaurant_id === r.id,
+      );
+      if (!warehouse) throw new ApiError("Warehouse not found", 404);
+      employee.warehouse_id = warehouse.id;
+    }
+
+    if (body.full_name !== undefined) employee.full_name = body.full_name.trim();
+    if (body.is_active !== undefined) employee.is_active = body.is_active;
+
+    const account = findUser(db, employee.email);
+    if (account) {
+      account.me = {
+        ...account.me,
+        full_name: employee.full_name,
+        is_active: employee.is_active,
+      };
+    }
+
+    saveDb(db);
+
+    return delay(toEmployeeOut(employee));
+  },
+
+  async revokeUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+    employee.is_active = false;
+    const account = findUser(db, employee.email);
+    if (account) account.me = { ...account.me, is_active: false };
+    saveDb(db);
+    return delay(toEmployeeOut(employee));
+  },
+
+  async restoreUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+    employee.is_active = true;
+    const account = findUser(db, employee.email);
+    if (account) account.me = { ...account.me, is_active: true };
+    saveDb(db);
+    return delay(toEmployeeOut(employee));
+  },
+
+  async deleteUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const employee = db.employees.find((e) => e.id === id && e.restaurant_id === r.id);
+    if (!employee) throw new ApiError("Employee not found", 404);
+    db.employees = db.employees.filter((e) => e.id !== id);
+    db.users = db.users.filter((u) => u.email.toLowerCase() !== employee.email.toLowerCase());
+    saveDb(db);
+    return delay(undefined);
+  },
+
+  async getAdminSettings() {
+    const me = requireAuth();
+    const db = loadDb();
+    const account = findUser(db, me.email);
+    const profile: AdminProfile = {
+      id: String(me.id),
+      email: me.email,
+      full_name: me.full_name,
+      image_url: account?.image_url ?? null,
+      role: me.role,
+    };
+    return delay(profile);
+  },
+
+  async updateAdminSettings(body: UpdateAdminProfileInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const account = findUser(db, me.email);
+    if (!account) throw new ApiError("Account not found", 404);
+    if (body.full_name !== undefined) {
+      account.me = { ...account.me, full_name: body.full_name.trim() };
+    }
+    if (body.image_url !== undefined) {
+      account.image_url = body.image_url === "" ? null : body.image_url;
+    }
+    saveDb(db);
+    setSession(account.me);
+    const profile: AdminProfile = {
+      id: String(account.me.id),
+      email: account.me.email,
+      full_name: account.me.full_name,
+      image_url: account.image_url ?? null,
+      role: account.me.role,
+    };
+    return delay(profile);
+  },
+
+  async recordSale(body: CreateSaleInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const amountNum = typeof body.amount === "string" ? parseFloat(body.amount) : body.amount;
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      throw new ApiError("Amount must be greater than 0", 422);
+    }
+    let branchId: string | null = null;
+    if (body.branch_id) {
+      const branch = db.branches.find(
+        (b) => b.id === body.branch_id && b.restaurant_id === r.id,
+      );
+      if (!branch) throw new ApiError("Branch not found", 404);
+      branchId = branch.id;
+    }
+    const sale: SalesRecord = {
+      id: `sale-${Date.now()}`,
+      restaurant_id: r.id,
+      branch_id: branchId,
+      amount: amountNum.toFixed(2),
+      occurred_at: body.occurred_at ?? now(),
+      note: body.note?.trim() || null,
+      created_at: now(),
+    };
+    db.sales.push(sale);
+    saveDb(db);
+    return delay(sale);
+  },
+
+  async listSalesRecords(filters?: SalesRecordFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 50;
+    let rows = db.sales.filter((s) => s.restaurant_id === r.id);
+    if (filters?.branch_id) {
+      rows = rows.filter((s) => s.branch_id === filters.branch_id);
+    }
+    rows = [...rows].sort((a, b) => b.occurred_at.localeCompare(a.occurred_at));
+    const start = (page - 1) * page_size;
+    const items = rows.slice(start, start + page_size);
+    const result: Paginated<SalesRecord> = {
+      items,
+      page,
+      page_size,
+      total: rows.length,
+    };
+    return delay(result);
+  },
+
+  async getSalesSummary(filters?: SalesSummaryFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const period: SalesPeriod = filters?.period ?? "daily";
+
+    let rows = db.sales.filter((s) => s.restaurant_id === r.id);
+    if (filters?.branch_id) rows = rows.filter((s) => s.branch_id === filters.branch_id);
+    if (filters?.start) rows = rows.filter((s) => s.occurred_at >= filters.start!);
+    if (filters?.end) rows = rows.filter((s) => s.occurred_at <= filters.end!);
+
+    const byBucket = new Map<string, { total: number; count: number }>();
+    let grandTotal = 0;
+    for (const sale of rows) {
+      const key = salesBucketStart(sale.occurred_at, period);
+      const amount = parseFloat(sale.amount) || 0;
+      const entry = byBucket.get(key) ?? { total: 0, count: 0 };
+      entry.total += amount;
+      entry.count += 1;
+      byBucket.set(key, entry);
+      grandTotal += amount;
+    }
+
+    const buckets: SalesSummaryBucket[] = [...byBucket.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([period_start, { total, count }]) => ({
+        period_start,
+        total_amount: total.toFixed(2),
+        count,
+      }));
+
+    const summary: SalesSummary = {
+      period,
+      buckets,
+      total_amount: grandTotal.toFixed(2),
+      total_count: rows.length,
+    };
+    return delay(summary);
   },
 
   async listProductPricing() {

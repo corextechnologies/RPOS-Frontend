@@ -1,7 +1,16 @@
 "use client";
 
+import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import {
@@ -21,6 +30,10 @@ interface EmployeeListProps {
   isError: boolean;
   onRetry?: () => void;
   locationLabel: (employee: Employee) => string;
+  onEdit?: (id: string) => void;
+  onRevoke?: (employee: Employee) => void;
+  onRestore?: (employee: Employee) => void;
+  onDelete?: (employee: Employee) => void;
 }
 
 export function EmployeeList({
@@ -29,7 +42,13 @@ export function EmployeeList({
   isError,
   onRetry,
   locationLabel,
+  onEdit,
+  onRevoke,
+  onRestore,
+  onDelete,
 }: EmployeeListProps) {
+  const showActions = Boolean(onEdit || onRevoke || onRestore || onDelete);
+
   if (isLoading) {
     return (
       <Card>
@@ -77,6 +96,7 @@ export function EmployeeList({
               <TableHead>Active</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Created</TableHead>
+              {showActions && <TableHead className="w-[72px]" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -98,6 +118,45 @@ export function EmployeeList({
                 <TableCell className="text-muted">
                   {employee.created_at ? formatDate(employee.created_at) : "—"}
                 </TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Actions">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {onEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(employee.id)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                        )}
+                        {onRevoke && employee.is_active && (
+                          <DropdownMenuItem onClick={() => onRevoke(employee)}>
+                            <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
+                          </DropdownMenuItem>
+                        )}
+                        {onRestore && !employee.is_active && (
+                          <DropdownMenuItem onClick={() => onRestore(employee)}>
+                            <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
+                          </DropdownMenuItem>
+                        )}
+                        {onDelete && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-danger"
+                              onClick={() => onDelete(employee)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

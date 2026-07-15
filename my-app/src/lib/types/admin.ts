@@ -31,6 +31,11 @@ export interface CreateLocationInput {
   location?: string;
 }
 
+export interface UpdateLocationInput {
+  name?: string;
+  location?: string;
+}
+
 // ---- Users / employees ----
 export type AdminCreatableRole =
   | "BRANCH_MANAGER"
@@ -52,6 +57,72 @@ export interface CreateAdminUserResult {
   role: AdminCreatableRole;
   credential_email_sent: boolean;
   temporary_password?: string;
+}
+
+export interface UpdateAdminUserInput {
+  full_name?: string;
+  is_active?: boolean;
+  branch_id?: string;
+  kitchen_id?: string;
+  warehouse_id?: string;
+}
+
+export interface AdminProfile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  image_url: string | null;
+  role: string;
+}
+
+export interface UpdateAdminProfileInput {
+  full_name?: string;
+  image_url?: string;
+}
+
+export interface SalesRecord {
+  id: string;
+  restaurant_id: string;
+  branch_id?: string | null;
+  amount: string;
+  occurred_at: string;
+  note?: string | null;
+  created_at: string;
+}
+
+export interface CreateSaleInput {
+  amount: string | number;
+  occurred_at?: string;
+  branch_id?: string;
+  note?: string;
+}
+
+export interface SalesRecordFilters {
+  branch_id?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export type SalesPeriod = "daily" | "weekly" | "monthly";
+
+export interface SalesSummaryBucket {
+  period_start: string;
+  total_amount: string;
+  count: number;
+}
+
+export interface SalesSummary {
+  period: SalesPeriod;
+  buckets: SalesSummaryBucket[];
+  total_amount: string;
+  total_count: number;
+}
+
+export interface SalesSummaryFilters {
+  period?: SalesPeriod;
+  start?: string;
+  end?: string;
+  branch_id?: string;
 }
 
 export interface Employee {
