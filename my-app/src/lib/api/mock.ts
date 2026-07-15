@@ -44,8 +44,19 @@ import {
   type TokenResponse,
   type UserRole,
 } from "@/lib/types/super-admin";
-import type { InventoryItem, ReceiveStockInput } from "@/lib/types/warehouse";
-import { INVALID_QUANTITY, MISSING_WAREHOUSE_ASSIGNMENT } from "@/lib/types/warehouse";
+import type {
+  AdjustStockInput,
+  InventoryItem,
+  NearExpiryFilters,
+  ReceiveStockInput,
+  WasteStockInput,
+} from "@/lib/types/warehouse";
+import {
+  INSUFFICIENT_STOCK,
+  INVALID_MOVEMENT_TYPE,
+  INVALID_QUANTITY,
+  MISSING_WAREHOUSE_ASSIGNMENT,
+} from "@/lib/types/warehouse";
 import type { ApiClient } from "./contract";
 import { apiConfig } from "./config";
 import { addOneBillingMonth, defaultNextBillingDate, planAmountForTier, planByTier, todayBillingDate } from "@/lib/plans/catalog";
@@ -832,6 +843,33 @@ function resolveMyWarehouse(db: MockDb, me: MeResponse): Warehouse {
     );
   }
   return warehouse;
+}
+
+/**
+ * Locate one stock row by product and batch within the caller's warehouse.
+ *
+ * Stock is held per product+batch, so an omitted or blank `batch_code` targets
+ * the unbatched row (`batch_code: ""`) rather than the product as a whole.
+ *
+ * ASSUMPTION: the contract does not say whether `insufficient_stock` is judged
+ * per batch or against a product's total across batches. This mock judges per
+ * batch — consistent with movements carrying a `batch_code`. If the live API
+ * aggregates instead, this helper is the only place that needs to change.
+ */
+function findWarehouseStock(
+  db: MockDb,
+  warehouse: Warehouse,
+  productId: string,
+  batchCode?: string,
+): MockInventoryItem | undefined {
+  const batch = batchCode?.trim() ?? "";
+  return db.inventory.find(
+    (item) =>
+      item.location_type === "WAREHOUSE" &&
+      item.location_id === warehouse.id &&
+      item.product_id === productId &&
+      item.batch_code === batch,
+  );
 }
 
 function toPublicInventoryItem(item: MockInventoryItem): InventoryItem {
@@ -1978,13 +2016,7 @@ export const mockClient: ApiClient = {
 
     // Stock is tracked per product+batch. Receiving into an existing batch adds
     // to it rather than replacing it; a new batch becomes its own row.
-    const existing = db.inventory.find(
-      (item) =>
-        item.location_type === "WAREHOUSE" &&
-        item.location_id === warehouse.id &&
-        item.product_id === product.id &&
-        item.batch_code === batchCode,
-    );
+    const existing = findWarehouseStock(db, warehouse, product.id, batchCode);
 
     let received: MockInventoryItem;
     if (existing) {
@@ -2008,5 +2040,98 @@ export const mockClient: ApiClient = {
 
     saveDb(db);
     return delay(toPublicInventoryItem(received));
+  },
+
+  async listNearExpiryInventory(filters?: NearExpiryFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const withinDays = filters?.within_days ?? 7;
+    if (!Number.isInteger(withinDays) || withinDays < 0 || withinDays > 365) {
+      throw new ApiError("within_days must be between 0 and 365", 422);
+    }
+
+    // `YYYY-MM-DD` strings compare correctly lexicographically, so no parsing.
+    // Already-expired stock is included: it is the most urgent, not the least.
+    const cutoff = localYmd(new Date(Date.now() + withinDays * 24 * 60 * 60 * 1000));
+    const items = db.inventory
+      .filter(
+        (item) =>
+          item.location_type === "WAREHOUSE" &&
+          item.location_id === warehouse.id &&
+          item.expiry_date != null &&
+          item.expiry_date <= cutoff,
+      )
+      .sort((a, b) => (a.expiry_date ?? "").localeCompare(b.expiry_date ?? ""))
+      .map(toPublicInventoryItem);
+
+    return delay(items);
+  },
+
+  async adjustWarehouseStock(body: AdjustStockInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const delta = Number(body.quantity_delta);
+    if (!Number.isInteger(delta) || delta === 0) {
+      throw new ApiError(
+        "Adjustment must be a non-zero whole number",
+        409,
+        INVALID_QUANTITY,
+      );
+    }
+
+    const item = findWarehouseStock(db, warehouse, body.product_id, body.batch_code);
+    if (!item) throw new ApiError("Stock not found", 404);
+
+    const next = item.quantity + delta;
+    if (next < 0) {
+      throw new ApiError(
+        `Only ${item.quantity} on hand for this batch`,
+        409,
+        INSUFFICIENT_STOCK,
+      );
+    }
+
+    item.quantity = next;
+    saveDb(db);
+    return delay(toPublicInventoryItem(item));
+  },
+
+  async wasteWarehouseStock(body: WasteStockInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const movementType = body.movement_type ?? "WASTE";
+    if (movementType !== "WASTE" && movementType !== "EXPIRY") {
+      throw new ApiError(
+        "Movement type must be WASTE or EXPIRY",
+        409,
+        INVALID_MOVEMENT_TYPE,
+      );
+    }
+
+    const quantity = Number(body.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+    }
+
+    const item = findWarehouseStock(db, warehouse, body.product_id, body.batch_code);
+    if (!item) throw new ApiError("Stock not found", 404);
+
+    if (quantity > item.quantity) {
+      throw new ApiError(
+        `Only ${item.quantity} on hand for this batch`,
+        409,
+        INSUFFICIENT_STOCK,
+      );
+    }
+
+    item.quantity -= quantity;
+    saveDb(db);
+    return delay(toPublicInventoryItem(item));
   },
 };

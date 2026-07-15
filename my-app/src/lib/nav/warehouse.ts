@@ -1,4 +1,10 @@
-import { Boxes, LayoutDashboard, PackagePlus, Settings } from "lucide-react";
+import {
+  Boxes,
+  LayoutDashboard,
+  PackagePlus,
+  Settings,
+  TriangleAlert,
+} from "lucide-react";
 import type { NavSection } from "./types";
 
 export const WAREHOUSE_NAV: NavSection[] = [
@@ -28,6 +34,13 @@ export const WAREHOUSE_NAV: NavSection[] = [
         href: "/warehouse/stock/receive",
         icon: PackagePlus,
         action: "stock:receive",
+        match: "exact",
+      },
+      {
+        label: "Waste & expiry",
+        href: "/warehouse/waste",
+        icon: TriangleAlert,
+        action: "stock:waste",
         match: "exact",
       },
     ],

@@ -4,11 +4,16 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
 import type {
+  AdjustStockInput,
   InventoryProduct,
   ReceiveStockInput,
+  WasteStockInput,
 } from "@/lib/types/warehouse";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 import { toast } from "sonner";
+
+/** Default matches the API's own `within_days` default. */
+export const NEAR_EXPIRY_DEFAULT_DAYS = 7;
 
 export function useWarehouseInventory() {
   return useQuery({
@@ -49,17 +54,70 @@ export function useWarehouseProductOptions() {
   };
 }
 
-export function useReceiveWarehouseStock() {
+export function useNearExpiryInventory(withinDays: number) {
+  return useQuery({
+    queryKey: queryKeys.warehouseNearExpiry(withinDays),
+    queryFn: () => api.listNearExpiryInventory({ within_days: withinDays }),
+    retry: (failureCount, error) =>
+      !isMissingWarehouseAssignment(error) && failureCount < 3,
+  });
+}
+
+/**
+ * Any stock movement can change both the on-hand list and which items are near
+ * expiry, so both are refreshed together.
+ */
+function useStockMovementInvalidation() {
   const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: queryKeys.warehouseInventory });
+    qc.invalidateQueries({ queryKey: ["warehouse-near-expiry"] });
+  };
+}
+
+export function useReceiveWarehouseStock() {
+  const invalidate = useStockMovementInvalidation();
 
   return useMutation({
     mutationFn: (body: ReceiveStockInput) => api.receiveWarehouseStock(body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.warehouseInventory });
+      invalidate();
       toast.success("Stock received");
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to receive stock";
+      toast.error(message);
+    },
+  });
+}
+
+export function useAdjustWarehouseStock() {
+  const invalidate = useStockMovementInvalidation();
+
+  return useMutation({
+    mutationFn: (body: AdjustStockInput) => api.adjustWarehouseStock(body),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Stock adjusted");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to adjust stock";
+      toast.error(message);
+    },
+  });
+}
+
+export function useWasteWarehouseStock() {
+  const invalidate = useStockMovementInvalidation();
+
+  return useMutation({
+    mutationFn: (body: WasteStockInput) => api.wasteWarehouseStock(body),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Stock written off");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to write off stock";
       toast.error(message);
     },
   });

@@ -46,8 +46,43 @@ export interface ReceiveStockInput {
   notes?: string;
 }
 
-/** 409 raised when a quantity is not greater than zero. */
+/** Body for `POST /warehouse/stock/adjust` — manual correction, up or down. */
+export interface AdjustStockInput {
+  product_id: string;
+  /** Non-zero. Positive adds, negative removes. */
+  quantity_delta: number;
+  batch_code?: string;
+  /** Omitted when blank — the API rejects an empty-but-present value. */
+  notes?: string;
+}
+
+export type StockMovementType = "WASTE" | "EXPIRY";
+
+/** Body for `POST /warehouse/stock/waste` — write off wasted or expired stock. */
+export interface WasteStockInput {
+  product_id: string;
+  /** Whole units, must be > 0. */
+  quantity: number;
+  /** Defaults to "WASTE" server-side. */
+  movement_type?: StockMovementType;
+  batch_code?: string;
+  notes?: string;
+}
+
+/** Query for `GET /warehouse/inventory/near-expiry`. */
+export interface NearExpiryFilters {
+  /** Defaults to 7 server-side. Valid range 0–365. */
+  within_days?: number;
+}
+
+/** 409 raised when a quantity is not greater than zero, or a delta is zero. */
 export const INVALID_QUANTITY = "invalid_quantity";
+
+/** 409 raised when a movement would drop on-hand below zero. */
+export const INSUFFICIENT_STOCK = "insufficient_stock";
+
+/** 409 raised when a waste movement_type is neither WASTE nor EXPIRY. */
+export const INVALID_MOVEMENT_TYPE = "invalid_movement_type";
 
 /**
  * 409 raised when the signed-in warehouse manager has no warehouse assigned.

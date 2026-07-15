@@ -28,7 +28,13 @@ import type {
   IncomePeriodFilter,
   IncomeSummary,
 } from "@/lib/types/income";
-import type { InventoryItem, ReceiveStockInput } from "@/lib/types/warehouse";
+import type {
+  AdjustStockInput,
+  InventoryItem,
+  NearExpiryFilters,
+  ReceiveStockInput,
+  WasteStockInput,
+} from "@/lib/types/warehouse";
 import type {
   BillingSummary,
   ChangePasswordInput,
@@ -125,5 +131,8 @@ export interface ApiClient {
 
   // Warehouse (Phase 3) — auto-scoped to the caller's warehouse.
   listWarehouseInventory(): Promise<InventoryItem[]>;
+  listNearExpiryInventory(filters?: NearExpiryFilters): Promise<InventoryItem[]>;
   receiveWarehouseStock(body: ReceiveStockInput): Promise<InventoryItem>;
+  adjustWarehouseStock(body: AdjustStockInput): Promise<InventoryItem>;
+  wasteWarehouseStock(body: WasteStockInput): Promise<InventoryItem>;
 }

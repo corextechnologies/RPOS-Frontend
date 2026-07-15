@@ -1,4 +1,10 @@
-import type { InventoryItem, ReceiveStockInput } from "@/lib/types/warehouse";
+import type {
+  AdjustStockInput,
+  InventoryItem,
+  NearExpiryFilters,
+  ReceiveStockInput,
+  WasteStockInput,
+} from "@/lib/types/warehouse";
 import { request } from "./client";
 
 /**
@@ -45,6 +51,46 @@ export const warehouseApi = {
         quantity: body.quantity,
         batch_code: optionalText(body.batch_code),
         expiry_date: optionalText(body.expiry_date),
+        notes: optionalText(body.notes),
+      }),
+    });
+    return normalizeInventoryItem(data);
+  },
+
+  async listNearExpiryInventory(
+    filters?: NearExpiryFilters,
+  ): Promise<InventoryItem[]> {
+    const qs =
+      filters?.within_days === undefined
+        ? ""
+        : `?${new URLSearchParams({ within_days: String(filters.within_days) })}`;
+    const data = await request<InventoryItem[]>(
+      `/warehouse/inventory/near-expiry${qs}`,
+    );
+    return (data ?? []).map(normalizeInventoryItem);
+  },
+
+  async adjustWarehouseStock(body: AdjustStockInput): Promise<InventoryItem> {
+    const data = await request<InventoryItem>("/warehouse/stock/adjust", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: body.product_id,
+        quantity_delta: body.quantity_delta,
+        batch_code: optionalText(body.batch_code),
+        notes: optionalText(body.notes),
+      }),
+    });
+    return normalizeInventoryItem(data);
+  },
+
+  async wasteWarehouseStock(body: WasteStockInput): Promise<InventoryItem> {
+    const data = await request<InventoryItem>("/warehouse/stock/waste", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: body.product_id,
+        quantity: body.quantity,
+        movement_type: body.movement_type,
+        batch_code: optionalText(body.batch_code),
         notes: optionalText(body.notes),
       }),
     });

@@ -1,7 +1,15 @@
 "use client";
 
+import { MoreHorizontal, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import {
@@ -19,6 +27,10 @@ interface InventoryTableProps {
   isLoading: boolean;
   isError: boolean;
   onRetry?: () => void;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  onAdjust?: (item: InventoryItem) => void;
+  onWaste?: (item: InventoryItem) => void;
 }
 
 /**
@@ -31,7 +43,12 @@ export function InventoryTable({
   isLoading,
   isError,
   onRetry,
+  emptyTitle = "No stock on hand",
+  emptyDescription = "Items will appear here once stock is received into your warehouse.",
+  onAdjust,
+  onWaste,
 }: InventoryTableProps) {
+  const showActions = Boolean(onAdjust || onWaste);
   if (isLoading) {
     return (
       <Card>
@@ -58,10 +75,7 @@ export function InventoryTable({
     return (
       <Card>
         <CardContent className="p-0">
-          <EmptyState
-            title="No stock on hand"
-            description="Items will appear here once stock is received into your warehouse."
-          />
+          <EmptyState title={emptyTitle} description={emptyDescription} />
         </CardContent>
       </Card>
     );
@@ -78,6 +92,7 @@ export function InventoryTable({
               <TableHead>Batch</TableHead>
               <TableHead>Expiry</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
+              {showActions && <TableHead className="w-[72px]" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -98,6 +113,33 @@ export function InventoryTable({
                 <TableCell className="text-right font-medium text-content">
                   {item.quantity}
                 </TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Actions">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {onAdjust && (
+                          <DropdownMenuItem onClick={() => onAdjust(item)}>
+                            <SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust
+                            quantity
+                          </DropdownMenuItem>
+                        )}
+                        {onWaste && (
+                          <DropdownMenuItem
+                            className="text-danger"
+                            onClick={() => onWaste(item)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Mark waste
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
