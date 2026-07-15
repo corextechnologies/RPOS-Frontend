@@ -46,11 +46,17 @@ import {
 } from "@/lib/types/super-admin";
 import type {
   AdjustStockInput,
+  CreatePurchaseOrderInput,
   CreateWarehouseStaffInput,
   CreateWarehouseStaffResult,
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  StockLocationType,
+  WarehouseRequest,
+  WarehouseRequestFilters,
+  WarehouseRequestStatus,
+  WarehouseRequestType,
   WarehouseStaff,
   WasteStockInput,
 } from "@/lib/types/warehouse";
@@ -73,7 +79,7 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 12;
+const SEED_VERSION = 13;
 
 interface MockInvoiceRecord {
   id: number;
@@ -108,6 +114,15 @@ interface MockProduct extends ProductPricing {
 
 interface MockStockRequest extends StockRequest {
   restaurant_id: string;
+  // Warehouse-facing fields (Phase 3). One request store keeps the cross-portal
+  // flow honest — a PO raised here still lands in Admin's inbox, which reads the
+  // Admin projection and ignores everything below.
+  requester_id?: number | null;
+  assignee_id?: number | null;
+  source_location_type?: StockLocationType | null;
+  source_location_id?: string | null;
+  target_location_type?: StockLocationType | null;
+  target_location_id?: string | null;
 }
 
 interface MockInventoryItem extends InventoryItem {
@@ -582,6 +597,10 @@ function seedDb(): MockDb {
       notes: "PO for dry goods replenishment",
       from_label: "Main Warehouse",
       created_at: requestCreated,
+      // Raised by the demo warehouse manager (user id 3) from wh-001.
+      requester_id: 3,
+      source_location_type: "WAREHOUSE",
+      source_location_id: "wh-001",
       line_items: [
         {
           id: "li-005",
@@ -606,6 +625,9 @@ function seedDb(): MockDb {
       from_label: "Main Warehouse",
       created_at: requestCreated,
       updated_at: requestCreated,
+      requester_id: 3,
+      source_location_type: "WAREHOUSE",
+      source_location_id: "wh-001",
       line_items: [
         {
           id: "li-007",
@@ -898,6 +920,38 @@ function toPublicRequest(req: MockStockRequest): StockRequest {
     line_items: req.line_items,
     created_at: req.created_at,
     updated_at: req.updated_at,
+  };
+}
+
+/**
+ * Warehouse projection of a stored request.
+ *
+ * Only ever called for requests already filtered to warehouse-visible types, so
+ * the type/status narrowing below is safe: Admin-only values such as REJECTED or
+ * FORWARDED_TO_KITCHEN never reach it.
+ */
+function toPublicWarehouseRequest(req: MockStockRequest): WarehouseRequest {
+  return {
+    id: req.id,
+    restaurant_id: req.restaurant_id,
+    request_type: req.type as WarehouseRequestType,
+    status: req.status as WarehouseRequestStatus,
+    requester_id: req.requester_id != null ? String(req.requester_id) : null,
+    assignee_id: req.assignee_id != null ? String(req.assignee_id) : null,
+    source_location_type: req.source_location_type ?? null,
+    source_location_id: req.source_location_id ?? null,
+    target_location_type: req.target_location_type ?? null,
+    target_location_id: req.target_location_id ?? null,
+    notes: req.notes,
+    created_at: req.created_at,
+    updated_at: req.updated_at,
+    line_items: req.line_items.map((line) => ({
+      id: line.id,
+      product_id: line.product_id ?? "",
+      product_name: line.product_name,
+      quantity_requested: line.quantity_requested,
+      quantity_approved: line.quantity_approved ?? null,
+    })),
   };
 }
 
@@ -2237,5 +2291,109 @@ export const mockClient: ApiClient = {
       credential_email_sent: true,
     };
     return delay(result, 400);
+  },
+
+  async createWarehousePo(body: CreatePurchaseOrderInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const lines = body.lines ?? [];
+    if (lines.length === 0) {
+      throw new ApiError("At least one line is required", 422);
+    }
+
+    const stamp = Date.now();
+    const lineItems = lines.map((line, index) => {
+      const quantity = Number(line.quantity_requested);
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+      }
+      const product = db.products.find(
+        (p) => p.id === line.product_id && p.restaurant_id === warehouse.restaurant_id,
+      );
+      if (!product) throw new ApiError("Product not found", 404);
+      return {
+        id: `li-${stamp}-${index}`,
+        product_id: product.id,
+        product_name: product.name,
+        quantity_requested: quantity,
+        quantity_approved: null,
+      };
+    });
+
+    const created: MockStockRequest = {
+      id: `req-${stamp}`,
+      restaurant_id: warehouse.restaurant_id,
+      type: "WAREHOUSE_TO_ADMIN_PO",
+      status: "PENDING",
+      notes: body.notes?.trim() || null,
+      // Admin's inbox renders this label, so it must be set here too.
+      from_label: warehouse.name,
+      created_at: now(),
+      updated_at: now(),
+      line_items: lineItems,
+      requester_id: me.id,
+      assignee_id: null,
+      source_location_type: "WAREHOUSE",
+      source_location_id: warehouse.id,
+      target_location_type: null,
+      target_location_id: null,
+    };
+
+    db.requests.push(created);
+    saveDb(db);
+    return delay(toPublicWarehouseRequest(created));
+  },
+
+  async listWarehousePos(filters?: WarehouseRequestFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+
+    // ASSUMPTION: the contract says "list this manager's PO requests", read here
+    // as requester-scoped rather than warehouse-wide. If the live API returns
+    // every PO for the warehouse, drop the requester_id check below.
+    let rows = db.requests.filter(
+      (req) =>
+        req.type === "WAREHOUSE_TO_ADMIN_PO" &&
+        req.restaurant_id === warehouse.restaurant_id &&
+        req.requester_id === me.id,
+    );
+    if (filters?.status && filters.status !== "all") {
+      rows = rows.filter((req) => req.status === filters.status);
+    }
+
+    const start = (page - 1) * page_size;
+    const result: Paginated<WarehouseRequest> = {
+      items: rows.slice(start, start + page_size).map(toPublicWarehouseRequest),
+      page,
+      page_size,
+      total: rows.length,
+    };
+    return delay(result);
+  },
+
+  async getWarehouseRequest(requestId: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const found = db.requests.find(
+      (req) => req.id === requestId && req.restaurant_id === warehouse.restaurant_id,
+    );
+    // Only PO requests are warehouse-visible so far; kitchen requests join in
+    // the next slice. Anything else is invisible rather than forbidden.
+    if (!found || found.type !== "WAREHOUSE_TO_ADMIN_PO") {
+      throw new ApiError("Request not found", 404);
+    }
+    if (found.requester_id !== me.id) {
+      throw new ApiError("Request not found", 404);
+    }
+
+    return delay(toPublicWarehouseRequest(found));
   },
 };

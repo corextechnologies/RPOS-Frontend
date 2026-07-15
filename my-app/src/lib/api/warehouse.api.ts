@@ -1,11 +1,14 @@
 import type { Paginated } from "@/lib/types/admin";
 import type {
   AdjustStockInput,
+  CreatePurchaseOrderInput,
   CreateWarehouseStaffInput,
   CreateWarehouseStaffResult,
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  WarehouseRequest,
+  WarehouseRequestFilters,
   WarehouseStaff,
   WasteStockInput,
 } from "@/lib/types/warehouse";
@@ -45,6 +48,30 @@ function normalizeStaff(staff: WarehouseStaff): WarehouseStaff {
     ...staff,
     id: String(staff.id),
     warehouse_id: String(staff.warehouse_id),
+  };
+}
+
+function idOrNull(value: unknown): string | null {
+  return value == null ? null : String(value);
+}
+
+function normalizeWarehouseRequest(req: WarehouseRequest): WarehouseRequest {
+  return {
+    ...req,
+    id: String(req.id),
+    restaurant_id: String(req.restaurant_id),
+    requester_id: idOrNull(req.requester_id),
+    assignee_id: idOrNull(req.assignee_id),
+    source_location_id: idOrNull(req.source_location_id),
+    target_location_id: idOrNull(req.target_location_id),
+    line_items: (req.line_items ?? []).map((line) => ({
+      ...line,
+      id: String(line.id),
+      product_id: String(line.product_id),
+      quantity_requested: Number(line.quantity_requested),
+      quantity_approved:
+        line.quantity_approved == null ? null : Number(line.quantity_approved),
+    })),
   };
 }
 
@@ -155,5 +182,52 @@ export const warehouseApi = {
       user_id: String(data.user_id),
       warehouse_id: String(data.warehouse_id),
     };
+  },
+
+  async createWarehousePo(
+    body: CreatePurchaseOrderInput,
+  ): Promise<WarehouseRequest> {
+    const data = await request<WarehouseRequest>("/warehouse/requests/po", {
+      method: "POST",
+      body: JSON.stringify({
+        lines: body.lines.map((line) => ({
+          product_id: line.product_id,
+          quantity_requested: line.quantity_requested,
+        })),
+        notes: optionalText(body.notes),
+      }),
+    });
+    return normalizeWarehouseRequest(data);
+  },
+
+  async listWarehousePos(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>> {
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+    const qs = new URLSearchParams({
+      page: String(page),
+      page_size: String(page_size),
+    });
+    if (filters?.status && filters.status !== "all") {
+      qs.set("status", filters.status);
+    }
+    const { data, meta } = await requestEnvelope<WarehouseRequest[]>(
+      `/warehouse/requests/po?${qs.toString()}`,
+    );
+    const items = (data ?? []).map(normalizeWarehouseRequest);
+    return {
+      items,
+      page: numberFromMeta(meta, "page", page),
+      page_size: numberFromMeta(meta, "page_size", page_size),
+      total: numberFromMeta(meta, "total", items.length),
+    };
+  },
+
+  async getWarehouseRequest(requestId: string): Promise<WarehouseRequest> {
+    const data = await request<WarehouseRequest>(
+      `/warehouse/requests/${requestId}`,
+    );
+    return normalizeWarehouseRequest(data);
   },
 };

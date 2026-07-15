@@ -113,6 +113,68 @@ export interface NearExpiryFilters {
   within_days?: number;
 }
 
+// ---- Requests ----
+// Warehouse-local on purpose. The wire shape differs from Admin's StockRequest:
+// `request_type` (not `type`), `line_item_id` in approvals (not `line_id`), and
+// a DISPATCHED status Admin never sees. Do not reuse the Admin request types.
+
+export type WarehouseRequestType = "WAREHOUSE_TO_ADMIN_PO" | "KITCHEN_TO_WAREHOUSE";
+
+/** Purchase orders the warehouse raises to Admin. */
+export type PurchaseOrderStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "PARTIALLY_APPROVED"
+  | "IN_QUEUE"
+  | "RECEIVED";
+
+/** Requests the kitchen raises against this warehouse. */
+export type KitchenRequestStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "DISPATCHED"
+  | "RECEIVED";
+
+export type WarehouseRequestStatus = PurchaseOrderStatus | KitchenRequestStatus;
+
+export interface WarehouseRequestLineItem {
+  id: string;
+  product_id: string;
+  product_name: string;
+  quantity_requested: number;
+  /** Null until Admin approves; a partial approval sets it below requested. */
+  quantity_approved?: number | null;
+}
+
+export interface WarehouseRequest {
+  id: string;
+  restaurant_id: string;
+  request_type: WarehouseRequestType;
+  status: WarehouseRequestStatus;
+  requester_id: string | null;
+  assignee_id: string | null;
+  source_location_type: StockLocationType | null;
+  source_location_id: string | null;
+  target_location_type: StockLocationType | null;
+  target_location_id: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at?: string;
+  line_items: WarehouseRequestLineItem[];
+}
+
+/** Body for `POST /warehouse/requests/po` — at least one line is required. */
+export interface CreatePurchaseOrderInput {
+  lines: Array<{ product_id: string; quantity_requested: number }>;
+  notes?: string;
+}
+
+export interface WarehouseRequestFilters {
+  status?: WarehouseRequestStatus | "all";
+  page?: number;
+  page_size?: number;
+}
+
 /** 409 raised when a quantity is not greater than zero, or a delta is zero. */
 export const INVALID_QUANTITY = "invalid_quantity";
 

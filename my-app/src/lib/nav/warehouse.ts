@@ -1,5 +1,6 @@
 import {
   Boxes,
+  ClipboardList,
   LayoutDashboard,
   PackagePlus,
   Settings,
@@ -43,6 +44,18 @@ export const WAREHOUSE_NAV: NavSection[] = [
         icon: TriangleAlert,
         action: "stock:waste",
         match: "exact",
+      },
+    ],
+  },
+  {
+    title: "Requests",
+    items: [
+      {
+        label: "Purchase orders",
+        href: "/warehouse/requests/po",
+        icon: ClipboardList,
+        action: "po:read",
+        match: "prefix",
       },
     ],
   },

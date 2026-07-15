@@ -5,6 +5,7 @@ import type {
   SalesRecordFilters,
   SalesSummaryFilters,
 } from "@/lib/types/admin";
+import type { WarehouseRequestFilters } from "@/lib/types/warehouse";
 
 
 export const queryKeys = {
@@ -47,5 +48,8 @@ export const queryKeys = {
   warehouseNearExpiry: (withinDays: number) =>
     ["warehouse-near-expiry", withinDays] as const,
   warehouseStaff: (page?: number) => ["warehouse-staff", page] as const,
+  warehousePos: (filters?: WarehouseRequestFilters) =>
+    filters ? (["warehouse-pos", filters] as const) : (["warehouse-pos"] as const),
+  warehouseRequest: (id: string) => ["warehouse-request", id] as const,
 };
 

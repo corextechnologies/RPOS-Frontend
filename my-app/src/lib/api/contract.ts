@@ -30,11 +30,14 @@ import type {
 } from "@/lib/types/income";
 import type {
   AdjustStockInput,
+  CreatePurchaseOrderInput,
   CreateWarehouseStaffInput,
   CreateWarehouseStaffResult,
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  WarehouseRequest,
+  WarehouseRequestFilters,
   WarehouseStaff,
   WasteStockInput,
 } from "@/lib/types/warehouse";
@@ -145,4 +148,9 @@ export interface ApiClient {
   createWarehouseUser(
     body: CreateWarehouseStaffInput,
   ): Promise<CreateWarehouseStaffResult>;
+  createWarehousePo(body: CreatePurchaseOrderInput): Promise<WarehouseRequest>;
+  listWarehousePos(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>>;
+  getWarehouseRequest(requestId: string): Promise<WarehouseRequest>;
 }

@@ -31,7 +31,9 @@ export type AuthAction =
   | "stock:adjust"
   | "stock:waste"
   | "staff:read"
-  | "staff:create";
+  | "staff:create"
+  | "po:read"
+  | "po:create";
 
 import type { UserRole } from "@/lib/types/super-admin";
 
@@ -73,6 +75,8 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "stock:waste",
     "staff:read",
     "staff:create",
+    "po:read",
+    "po:create",
   ],
   KITCHEN_MANAGER: [],
   BRANCH_MANAGER: [],
