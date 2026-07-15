@@ -14,7 +14,9 @@ interface NearExpiryListProps {
   isLoading: boolean;
   isError: boolean;
   onRetry?: () => void;
-  onWaste: (item: InventoryItem) => void;
+  /** Omit for a read-only list — the dashboard links out instead of acting. */
+  onWaste?: (item: InventoryItem) => void;
+  headerAction?: React.ReactNode;
 }
 
 /** Whole days from today until `date` (`YYYY-MM-DD`); negative once past. */
@@ -42,20 +44,26 @@ export function NearExpiryList({
   isError,
   onRetry,
   onWaste,
+  headerAction,
 }: NearExpiryListProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-warning/10 text-warning">
-            <AlertTriangle className="h-4 w-4" />
-          </span>
-          Expiring soon
-        </CardTitle>
-        <CardDescription>
-          Stock expiring within {withinDays} {withinDays === 1 ? "day" : "days"},
-          including anything already past its date.
-        </CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <CardTitle className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-warning/10 text-warning">
+                <AlertTriangle className="h-4 w-4" />
+              </span>
+              Expiring soon
+            </CardTitle>
+            <CardDescription>
+              Stock expiring within {withinDays} {withinDays === 1 ? "day" : "days"},
+              including anything already past its date.
+            </CardDescription>
+          </div>
+          {headerAction}
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -99,9 +107,11 @@ export function NearExpiryList({
                         {label.text}
                       </Badge>
                     )}
-                    <Button variant="outline" size="sm" onClick={() => onWaste(item)}>
-                      Write off
-                    </Button>
+                    {onWaste && (
+                      <Button variant="outline" size="sm" onClick={() => onWaste(item)}>
+                        Write off
+                      </Button>
+                    )}
                   </div>
                 </li>
               );

@@ -2,7 +2,10 @@
 
 import type { BadgeProps } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
-import type { WarehouseRequestStatus } from "@/lib/types/warehouse";
+import type {
+  WarehouseRequestStatus,
+  WarehouseRequestType,
+} from "@/lib/types/warehouse";
 import { titleCase } from "@/lib/utils";
 
 /**
@@ -20,6 +23,10 @@ const STATUS_VARIANT: Record<
   DISPATCHED: "secondary",
   RECEIVED: "success",
 };
+
+export function formatWarehouseRequestType(type: WarehouseRequestType): string {
+  return type === "WAREHOUSE_TO_ADMIN_PO" ? "Purchase order" : "Kitchen request";
+}
 
 export function formatWarehouseStatus(status: string): string {
   return status
