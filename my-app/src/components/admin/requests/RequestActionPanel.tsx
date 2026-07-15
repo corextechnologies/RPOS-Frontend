@@ -11,7 +11,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useKitchens } from "@/lib/hooks/use-locations";
 import { requestActionSchema } from "@/lib/schemas/request-action";
 import type {
   RequestStatus,
@@ -49,12 +57,18 @@ export function RequestActionPanel({
   );
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [kitchenId, setKitchenId] = useState("");
+
+  // Only the forward action needs this, but the request is cached and shared, so
+  // fetching here keeps the picker colocated with its one consumer.
+  const kitchens = useKitchens();
 
   useEffect(() => {
     setSelected(null);
     setNotes("");
     setErrorMessage(undefined);
     setRejectOpen(false);
+    setKitchenId("");
     setLineQtys(
       Object.fromEntries(
         request.line_items.map((line) => [
@@ -109,10 +123,14 @@ export function RequestActionPanel({
           }))
         : undefined;
 
+    const forwarding = toStatus === "FORWARDED_TO_KITCHEN";
+
     const parsed = requestActionSchema.safeParse({
       to_status: toStatus,
       notes: notes.trim() || undefined,
       line_approvals,
+      target_location_type: forwarding ? "KITCHEN" : undefined,
+      target_location_id: forwarding ? kitchenId || undefined : undefined,
     });
 
     if (!parsed.success) {
@@ -140,12 +158,15 @@ export function RequestActionPanel({
       to_status: parsed.data.to_status,
       notes: parsed.data.notes,
       line_approvals: parsed.data.line_approvals,
+      target_location_type: parsed.data.target_location_type,
+      target_location_id: parsed.data.target_location_id,
     };
 
     try {
       await onSubmit(body);
       setSelected(null);
       setNotes("");
+      setKitchenId("");
       setRejectOpen(false);
     } catch (err) {
       if (err instanceof Error) {
@@ -159,6 +180,9 @@ export function RequestActionPanel({
   const showPartialEditor = selected === "PARTIALLY_APPROVED";
   const showConfirmPanel =
     selected !== null && selected !== "REJECTED" && selected !== "PARTIALLY_APPROVED";
+  const showKitchenPicker = selected === "FORWARDED_TO_KITCHEN";
+  const kitchenOptions = kitchens.data ?? [];
+  const forwardBlocked = showKitchenPicker && !kitchenId;
 
   return (
     <>
@@ -222,6 +246,46 @@ export function RequestActionPanel({
                 </div>
               )}
 
+              {showKitchenPicker && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="forward-kitchen">Kitchen</Label>
+                  {kitchens.isError ? (
+                    <p className="text-sm text-danger">
+                      Could not load kitchens.{" "}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() => void kitchens.refetch()}
+                      >
+                        Retry
+                      </button>
+                    </p>
+                  ) : kitchenOptions.length === 0 && !kitchens.isLoading ? (
+                    <p className="text-sm text-muted">
+                      No kitchens exist yet. Create one before forwarding this request.
+                    </p>
+                  ) : (
+                    <Select value={kitchenId} onValueChange={setKitchenId}>
+                      <SelectTrigger id="forward-kitchen" disabled={kitchens.isLoading}>
+                        <SelectValue
+                          placeholder={kitchens.isLoading ? "Loading…" : "Choose a kitchen"}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {kitchenOptions.map((kitchen) => (
+                          <SelectItem key={kitchen.id} value={kitchen.id}>
+                            {kitchen.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted">
+                    Only this kitchen will see the request.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <Label htmlFor="action-notes">Notes (optional)</Label>
                 <Textarea
@@ -249,7 +313,7 @@ export function RequestActionPanel({
                 </Button>
                 <Button
                   type="button"
-                  disabled={isSubmitting || !selected}
+                  disabled={isSubmitting || !selected || forwardBlocked}
                   onClick={() => selected && void submit(selected)}
                 >
                   {isSubmitting ? "Saving…" : "Confirm"}

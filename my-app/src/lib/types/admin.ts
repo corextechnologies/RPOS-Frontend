@@ -159,6 +159,12 @@ export interface UpdateProductPricingInput {
 // ---- Requests ----
 export type AdminRequestType = "BRANCH_TO_ADMIN" | "WAREHOUSE_TO_ADMIN_PO";
 
+/**
+ * The full branch-request vocabulary. PRODUCED and ALLOCATED are driven by the
+ * Kitchen portal (Phase 4) and never appear in Admin's transition map, but a
+ * forwarded request comes back through Admin's read screens carrying them, so
+ * they must parse here.
+ */
 export type RequestStatus =
   | "PENDING"
   | "APPROVED"
@@ -167,6 +173,8 @@ export type RequestStatus =
   | "FORWARDED_TO_KITCHEN"
   | "IN_QUEUE"
   | "IN_PRODUCTION"
+  | "PRODUCED"
+  | "ALLOCATED"
   | "RECEIVED";
 
 export interface RequestLineItem {
@@ -199,9 +207,32 @@ export interface LineApproval {
   quantity_approved: number;
 }
 
+/**
+ * Where a forwarded request is being sent. Only kitchens can receive one, so the
+ * type is a single literal rather than a location union — sending a warehouse or
+ * branch is rejected by the API (`invalid_kitchen_target`) and is better made
+ * unrepresentable here than validated at runtime.
+ */
+export interface ForwardTarget {
+  target_location_type: "KITCHEN";
+  target_location_id: string;
+}
+
 export interface UpdateRequestStatusInput {
   to_status: RequestStatus;
   line_approvals?: LineApproval[];
   notes?: string;
   assignee_id?: string;
+  /**
+   * Required when `to_status` is FORWARDED_TO_KITCHEN, ignored otherwise. The
+   * API has no default kitchen — omitting this is a 409, not a fallback.
+   */
+  target_location_type?: ForwardTarget["target_location_type"];
+  target_location_id?: string;
 }
+
+/** 409 raised when a forward carries no target kitchen. */
+export const MISSING_KITCHEN_TARGET = "missing_kitchen_target";
+
+/** 409 raised when a forward target is a warehouse or branch rather than a kitchen. */
+export const INVALID_KITCHEN_TARGET = "invalid_kitchen_target";

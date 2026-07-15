@@ -13,6 +13,8 @@ const STATUS_VARIANT: Record<RequestStatus, NonNullable<BadgeProps["variant"]>> 
   FORWARDED_TO_KITCHEN: "secondary",
   IN_QUEUE: "secondary",
   IN_PRODUCTION: "secondary",
+  PRODUCED: "secondary",
+  ALLOCATED: "secondary",
   RECEIVED: "success",
 };
 
@@ -24,14 +26,20 @@ export function RequestStatusBadge({ status }: { status: RequestStatus }) {
   );
 }
 
-export function formatStatus(status: string): string {
+/**
+ * Tolerates a missing value: these render one cell, and an unexpected payload
+ * should not take down the whole table with it.
+ */
+export function formatStatus(status: string | null | undefined): string {
+  if (!status) return "—";
   return status
     .split("_")
     .map((part) => titleCase(part.toLowerCase()))
     .join(" ");
 }
 
-export function formatRequestType(type: string): string {
+export function formatRequestType(type: string | null | undefined): string {
+  if (!type) return "—";
   if (type === "BRANCH_TO_ADMIN") return "Product request";
   if (type === "WAREHOUSE_TO_ADMIN_PO") return "Distribution / PO";
   return formatStatus(type);

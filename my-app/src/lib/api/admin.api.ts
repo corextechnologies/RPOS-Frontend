@@ -1,5 +1,6 @@
 import type {
   AdminProfile,
+  AdminRequestType,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -62,10 +63,23 @@ function normalizeSalesSummary(s: SalesSummary): SalesSummary {
   };
 }
 
-function normalizeStockRequest(r: StockRequest): StockRequest {
+/**
+ * The wire calls this field `request_type`; the Admin app has always called it
+ * `type`. One serializer serves every portal, so the raw payload is the same
+ * shape the Kitchen and Warehouse portals receive.
+ *
+ * The mock returns `type` directly, which is why the mismatch stayed invisible
+ * until the app was pointed at the live API. Both spellings are accepted here
+ * rather than renaming the field across the Admin UI.
+ */
+type RawStockRequest = StockRequest & { request_type?: AdminRequestType };
+
+function normalizeStockRequest(r: RawStockRequest): StockRequest {
+  const { request_type, ...rest } = r;
   return {
-    ...r,
+    ...rest,
     id: String(r.id),
+    type: r.type ?? (request_type as AdminRequestType),
     line_items: (r.line_items ?? []).map((line) => ({
       ...line,
       id: String(line.id),

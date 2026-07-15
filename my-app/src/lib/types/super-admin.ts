@@ -3,11 +3,17 @@ export type PlanStatus = "active" | "halted";
 export type AccessStatus = "active" | "revoked";
 export type RestaurantStatus = "ACTIVE" | "HALTED";
 
+/**
+ * SUB_CHEF shares the Kitchen portal with KITCHEN_MANAGER rather than having one
+ * of its own: the screens are identical, the manager-only actions are gated by
+ * AuthAction. It is the first role that is not 1:1 with a portal.
+ */
 export type UserRole =
   | "SUPER_ADMIN"
   | "ADMIN"
   | "WAREHOUSE_MANAGER"
   | "KITCHEN_MANAGER"
+  | "SUB_CHEF"
   | "BRANCH_MANAGER";
 
 export interface RestaurantAdmin {

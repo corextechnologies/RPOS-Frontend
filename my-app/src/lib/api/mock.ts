@@ -29,6 +29,36 @@ import type {
   UpdateRequestStatusInput,
   Warehouse,
 } from "@/lib/types/admin";
+import { INVALID_KITCHEN_TARGET, MISSING_KITCHEN_TARGET } from "@/lib/types/admin";
+import type {
+  CreateKitchenCountInput,
+  CreateKitchenStaffInput,
+  CreateKitchenStaffResult,
+  CreateKitchenWarehouseRequestInput,
+  KitchenCountFilters,
+  KitchenCountLine,
+  KitchenInventoryItem,
+  KitchenLabel,
+  KitchenLabelFilters,
+  KitchenNearExpiryFilters,
+  KitchenRequest,
+  KitchenRequestFilters,
+  KitchenRequestStatus,
+  KitchenRequestType,
+  KitchenStaff,
+  KitchenStockCount,
+  KitchenWarehouse,
+  KitchenWasteInput,
+  UpdateKitchenRequestStatusInput,
+} from "@/lib/types/kitchen";
+import {
+  KITCHEN_DUPLICATE_COUNT_LINE,
+  KITCHEN_INVALID_TRANSITION,
+  MISSING_KITCHEN_ASSIGNMENT,
+} from "@/lib/types/kitchen";
+// Mock and live agree on the state machine by sharing the real map, the same way
+// the warehouse mock does.
+import { kitchenAllowedTransitions } from "@/lib/kitchen/request-transitions";
 import {
   ApiError,
   type BillingSummary,
@@ -85,7 +115,7 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 14;
+const SEED_VERSION = 15;
 
 interface MockInvoiceRecord {
   id: number;
@@ -145,6 +175,11 @@ interface MockInventoryItem extends InventoryItem {
   restaurant_id: string;
 }
 
+/** A submitted kitchen stock count. Scoped to one kitchen and its author. */
+interface MockStockCount extends KitchenStockCount {
+  restaurant_id: string;
+}
+
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
@@ -159,6 +194,7 @@ interface MockDb {
   requests: MockStockRequest[];
   sales: SalesRecord[];
   inventory: MockInventoryItem[];
+  stock_counts: MockStockCount[];
 }
 
 const now = () => new Date().toISOString();
@@ -725,6 +761,68 @@ function seedDb(): MockDb {
         },
       ],
     },
+    {
+      // In transit: the warehouse has decremented, the kitchen is not credited
+      // until it confirms. This is the kitchen's only move on this type.
+      id: "req-009",
+      restaurant_id: "rest-001",
+      type: "KITCHEN_TO_WAREHOUSE",
+      status: "DISPATCHED",
+      notes: "Weekly top-up",
+      from_label: "Central Kitchen",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      requester_id: 4,
+      source_location_type: "KITCHEN",
+      source_location_id: "kit-001",
+      target_location_type: "WAREHOUSE",
+      target_location_id: "wh-001",
+      line_items: [
+        {
+          id: "li-011",
+          product_id: "prod-002",
+          product_name: "Tomato Sauce (Can)",
+          quantity_requested: 24,
+          // Null for the whole lifecycle: this type has no partial approval.
+          quantity_approved: null,
+        },
+      ],
+    },
+    {
+      // Forwarded here by Admin — the kitchen's production queue starts at this
+      // status. A request forwarded to another kitchen would be invisible.
+      id: "req-010",
+      restaurant_id: "rest-001",
+      type: "BRANCH_TO_ADMIN",
+      status: "FORWARDED_TO_KITCHEN",
+      notes: "Weekend prep for the downtown branch",
+      from_label: "Downtown Branch",
+      created_at: requestCreated,
+      updated_at: requestCreated,
+      requester_id: 5,
+      source_location_type: "BRANCH",
+      source_location_id: "br-001",
+      target_location_type: "KITCHEN",
+      target_location_id: "kit-001",
+      line_items: [
+        {
+          id: "li-012",
+          product_id: "prod-001",
+          product_name: "House Blend Coffee Beans",
+          quantity_requested: 20,
+          quantity_approved: 20,
+        },
+        {
+          // Partially approved: the kitchen produces and allocates the approved
+          // amount, and the UI must show both numbers.
+          id: "li-013",
+          product_id: "prod-003",
+          product_name: "Mozzarella Block",
+          quantity_requested: 15,
+          quantity_approved: 10,
+        },
+      ],
+    },
   ];
 
   const daysAgo = (n: number) =>
@@ -820,6 +918,65 @@ function seedDb(): MockDb {
       location_type: "WAREHOUSE",
       location_id: "wh-001",
     },
+    // ---- Kitchen (Phase 4) ----
+    // Two batches of the same product, so the portal's "one row per product AND
+    // batch" rule is visible without setting it up by hand.
+    {
+      id: "inv-101",
+      restaurant_id: "rest-001",
+      product_id: "prod-001",
+      product: { id: "prod-001", name: "House Blend Coffee Beans", sku: "BN-COF-001" },
+      quantity: 40,
+      batch_code: "B-COF-07",
+      expiry_date: expiryInDays(30),
+      location_type: "KITCHEN",
+      location_id: "kit-001",
+    },
+    {
+      id: "inv-102",
+      restaurant_id: "rest-001",
+      product_id: "prod-001",
+      product: { id: "prod-001", name: "House Blend Coffee Beans", sku: "BN-COF-001" },
+      quantity: 12,
+      batch_code: "B-COF-08",
+      expiry_date: expiryInDays(3),
+      location_type: "KITCHEN",
+      location_id: "kit-001",
+    },
+    {
+      id: "inv-103",
+      restaurant_id: "rest-001",
+      product_id: "prod-003",
+      product: { id: "prod-003", name: "Mozzarella Block", sku: "DAI-MOZ-10" },
+      quantity: 25,
+      batch_code: "B-MOZ-11",
+      expiry_date: expiryInDays(1),
+      location_type: "KITCHEN",
+      location_id: "kit-001",
+    },
+    {
+      // Unbatched: empty batch code and no expiry. Renders as "No batch".
+      id: "inv-104",
+      restaurant_id: "rest-001",
+      product_id: "prod-004",
+      product: { id: "prod-004", name: "Paper Napkins (Pack)", sku: "SUP-NAP-50" },
+      quantity: 80,
+      batch_code: "",
+      expiry_date: null,
+      location_type: "KITCHEN",
+      location_id: "kit-001",
+    },
+    {
+      id: "inv-105",
+      restaurant_id: "rest-001",
+      product_id: "prod-002",
+      product: { id: "prod-002", name: "Tomato Sauce (Can)", sku: "ING-TOM-02" },
+      quantity: 30,
+      batch_code: "B-TOM-03",
+      expiry_date: expiryInDays(20),
+      location_type: "KITCHEN",
+      location_id: "kit-001",
+    },
   ];
 
   return {
@@ -836,6 +993,7 @@ function seedDb(): MockDb {
     requests,
     sales,
     inventory,
+    stock_counts: [],
   };
 }
 
@@ -955,6 +1113,58 @@ function resolveMyWarehouse(db: MockDb, me: MeResponse): Warehouse {
     );
   }
   return warehouse;
+}
+
+/**
+ * Resolve the kitchen the signed-in user is assigned to.
+ *
+ * Mirrors `resolveMyWarehouse`: kitchen staff are not restaurant owners, so the
+ * assignment lives on the employee record rather than on `me`. Both a manager
+ * and a sub-chef resolve through the same path.
+ */
+function resolveMyKitchen(db: MockDb, me: MeResponse): Kitchen {
+  const employee = db.employees.find(
+    (e) => e.email.toLowerCase() === me.email.toLowerCase(),
+  );
+  const kitchen = employee?.kitchen_id
+    ? db.kitchens.find((k) => k.id === employee.kitchen_id)
+    : undefined;
+  if (!kitchen) {
+    throw new ApiError(
+      "Kitchen staff must be assigned to a kitchen.",
+      409,
+      MISSING_KITCHEN_ASSIGNMENT,
+    );
+  }
+  return kitchen;
+}
+
+/**
+ * The manager-only endpoints. The server enforces this independently of the UI,
+ * so the mock does too — a sub-chef reaching these gets the same 403 they would
+ * get live, which is what makes the hidden-action gating testable.
+ */
+function requireKitchenManager(me: MeResponse) {
+  if (me.role !== "KITCHEN_MANAGER") {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+/** Locate one kitchen stock row by product and batch. See `findWarehouseStock`. */
+function findKitchenStock(
+  db: MockDb,
+  kitchen: Kitchen,
+  productId: string,
+  batchCode?: string,
+): MockInventoryItem | undefined {
+  const batch = batchCode?.trim() ?? "";
+  return db.inventory.find(
+    (item) =>
+      item.location_type === "KITCHEN" &&
+      item.location_id === kitchen.id &&
+      item.product_id === productId &&
+      item.batch_code === batch,
+  );
 }
 
 /**
@@ -1115,6 +1325,216 @@ function isWarehouseVisibleRequest(
     );
   }
   return false;
+}
+
+function toPublicKitchenInventoryItem(item: MockInventoryItem): KitchenInventoryItem {
+  return {
+    id: item.id,
+    product_id: item.product_id,
+    // Note the absence of cost_price: procurement cost is Admin-only, and the
+    // field is missing from the projection rather than hidden at render time.
+    product: item.product,
+    quantity: item.quantity,
+    batch_code: item.batch_code,
+    expiry_date: item.expiry_date,
+    location_type: "KITCHEN",
+    location_id: item.location_id,
+  };
+}
+
+function toPublicStockCount(count: MockStockCount): KitchenStockCount {
+  return {
+    id: count.id,
+    location_type: count.location_type,
+    location_id: count.location_id,
+    counted_by_id: count.counted_by_id,
+    notes: count.notes,
+    created_at: count.created_at,
+    lines: count.lines,
+  };
+}
+
+/**
+ * Kitchen projection of a stored request.
+ *
+ * Only ever called for requests already filtered to kitchen-visible ones, so the
+ * narrowing is safe: a warehouse PO never reaches it.
+ */
+function toPublicKitchenRequest(req: MockStockRequest): KitchenRequest {
+  return {
+    id: req.id,
+    restaurant_id: req.restaurant_id,
+    request_type: req.type as KitchenRequestType,
+    status: req.status as KitchenRequestStatus,
+    requester_id: req.requester_id != null ? String(req.requester_id) : null,
+    assignee_id: req.assignee_id != null ? String(req.assignee_id) : null,
+    source_location_type: req.source_location_type ?? null,
+    source_location_id: req.source_location_id ?? null,
+    target_location_type: req.target_location_type ?? null,
+    target_location_id: req.target_location_id ?? null,
+    notes: req.notes,
+    created_at: req.created_at,
+    updated_at: req.updated_at,
+    line_items: req.line_items.map((line) => ({
+      id: line.id,
+      product_id: line.product_id ?? "",
+      product_name: line.product_name,
+      quantity_requested: line.quantity_requested,
+      quantity_approved: line.quantity_approved ?? null,
+    })),
+  };
+}
+
+/**
+ * Both kitchen inboxes page and filter identically; only the predicate differs.
+ * Newest first, matching the live API.
+ */
+function paginateKitchenRequests(
+  source: MockStockRequest[],
+  filters?: KitchenRequestFilters,
+): Paginated<KitchenRequest> {
+  const page = filters?.page ?? 1;
+  const page_size = filters?.page_size ?? 20;
+
+  const all = source
+    .filter(
+      (r) =>
+        !filters?.status ||
+        filters.status === "all" ||
+        r.status === filters.status,
+    )
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+  const start = (page - 1) * page_size;
+  return {
+    items: all.slice(start, start + page_size).map(toPublicKitchenRequest),
+    page,
+    page_size,
+    total: all.length,
+  };
+}
+
+/**
+ * A request this kitchen may see: its own warehouse requests, or a branch
+ * request Admin forwarded here. Anything else — another kitchen's work, a
+ * warehouse PO — is a 404 rather than a 403, so the UI cannot tell "not yours"
+ * from "does not exist".
+ */
+function findKitchenVisibleRequest(
+  db: MockDb,
+  kitchen: Kitchen,
+  requestId: string,
+): MockStockRequest {
+  const found = db.requests.find(
+    (r) => r.id === requestId && r.restaurant_id === kitchen.restaurant_id,
+  );
+  if (!found) throw new ApiError("Request not found", 404);
+
+  const isMyWarehouseRequest =
+    found.type === "KITCHEN_TO_WAREHOUSE" && found.source_location_id === kitchen.id;
+  const isForwardedToMe =
+    found.type === "BRANCH_TO_ADMIN" &&
+    found.target_location_type === "KITCHEN" &&
+    found.target_location_id === kitchen.id;
+
+  if (!isMyWarehouseRequest && !isForwardedToMe) {
+    throw new ApiError("Request not found", 404);
+  }
+  return found;
+}
+
+/**
+ * Every kitchen row holding this product, soonest-expiring first. Unbatched and
+ * no-expiry rows sort last — they are the ones with no deadline to beat.
+ */
+function kitchenStockForProduct(
+  db: MockDb,
+  kitchen: Kitchen,
+  productId: string,
+): MockInventoryItem[] {
+  return db.inventory
+    .filter(
+      (item) =>
+        item.location_type === "KITCHEN" &&
+        item.location_id === kitchen.id &&
+        item.product_id === productId &&
+        item.quantity > 0,
+    )
+    .sort((a, b) => (a.expiry_date ?? "9999-12-31").localeCompare(b.expiry_date ?? "9999-12-31"));
+}
+
+/**
+ * ALLOCATED ships the approved quantities out of the kitchen.
+ *
+ * ASSUMPTION: a request line names a product but no batch, so this draws across
+ * batches, soonest-expiring first. Judging it per batch (the way waste does,
+ * where the caller picks the batch) would fail against stock that plainly
+ * exists. If the live API allocates differently — a single batch, or newest
+ * first — this function is the only place that needs to change.
+ */
+function applyAllocationToKitchenStock(
+  db: MockDb,
+  kitchen: Kitchen,
+  req: MockStockRequest,
+) {
+  // Check every line before mutating any: a partial write would leave the
+  // status un-moved but the stock already spent.
+  const debits = req.line_items.map((line) => {
+    const quantity = line.quantity_approved ?? line.quantity_requested;
+    const rows = kitchenStockForProduct(db, kitchen, line.product_id ?? "");
+    const onHand = rows.reduce((sum, item) => sum + item.quantity, 0);
+    if (onHand < quantity) {
+      throw new ApiError(
+        `Only ${onHand} of ${line.product_name} on hand; ${quantity} needed.`,
+        409,
+        INSUFFICIENT_STOCK,
+      );
+    }
+    return { rows, quantity };
+  });
+
+  for (const { rows, quantity } of debits) {
+    let remaining = quantity;
+    for (const item of rows) {
+      if (remaining === 0) break;
+      const taken = Math.min(item.quantity, remaining);
+      item.quantity -= taken;
+      remaining -= taken;
+    }
+  }
+}
+
+/** RECEIVED credits the kitchen with what the warehouse dispatched. */
+function applyKitchenReceiptToStock(
+  db: MockDb,
+  kitchen: Kitchen,
+  req: MockStockRequest,
+) {
+  for (const line of req.line_items) {
+    const quantity = line.quantity_approved ?? line.quantity_requested;
+    const productId = line.product_id ?? "";
+    const existing = findKitchenStock(db, kitchen, productId, "");
+    if (existing) {
+      existing.quantity += quantity;
+      continue;
+    }
+    const product = db.products.find((p) => p.id === productId);
+    db.inventory.push({
+      id: `inv-${Date.now()}-${productId}`,
+      restaurant_id: kitchen.restaurant_id,
+      product_id: productId,
+      product: {
+        id: productId,
+        name: product?.name ?? line.product_name,
+        sku: product?.sku,
+      },
+      quantity,
+      batch_code: "",
+      expiry_date: null,
+      location_type: "KITCHEN",
+      location_id: kitchen.id,
+    });
+  }
 }
 
 /**
@@ -2196,6 +2616,34 @@ export const mockClient: ApiClient = {
       );
     }
 
+    // Forwarding must name a kitchen: the API has no default, and this is what
+    // scopes the request so only that kitchen ever sees it.
+    if (body.to_status === "FORWARDED_TO_KITCHEN") {
+      if (!body.target_location_id) {
+        throw new ApiError(
+          "A target kitchen is required to forward this request.",
+          409,
+          MISSING_KITCHEN_TARGET,
+        );
+      }
+      if (body.target_location_type !== "KITCHEN") {
+        throw new ApiError(
+          "Requests can only be forwarded to a kitchen.",
+          409,
+          INVALID_KITCHEN_TARGET,
+        );
+      }
+      const kitchen = db.kitchens.find(
+        (k) => k.id === body.target_location_id && k.restaurant_id === r.id,
+      );
+      // A kitchen from another restaurant is a 404, not a 403 — scope leaks
+      // nothing about what exists elsewhere.
+      if (!kitchen) throw new ApiError("Kitchen not found", 404);
+
+      found.target_location_type = "KITCHEN";
+      found.target_location_id = body.target_location_id;
+    }
+
     if (body.to_status === "PARTIALLY_APPROVED") {
       const approvals = body.line_approvals ?? [];
       if (approvals.length === 0) {
@@ -2690,5 +3138,468 @@ export const mockClient: ApiClient = {
 
     saveDb(db);
     return delay(toPublicWarehouseRequest(found));
+  },
+
+  // ---- Kitchen (Phase 4) ----
+
+  async listKitchenInventory() {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const items = db.inventory
+      .filter(
+        (item) =>
+          item.location_type === "KITCHEN" && item.location_id === kitchen.id,
+      )
+      .map(toPublicKitchenInventoryItem);
+    return delay(items);
+  },
+
+  async listKitchenNearExpiry(filters?: KitchenNearExpiryFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const withinDays = filters?.within_days ?? 7;
+    if (!Number.isInteger(withinDays) || withinDays < 0 || withinDays > 365) {
+      throw new ApiError("within_days must be between 0 and 365", 422);
+    }
+
+    const cutoff = localYmd(new Date(Date.now() + withinDays * 24 * 60 * 60 * 1000));
+    const items = db.inventory
+      .filter(
+        (item) =>
+          item.location_type === "KITCHEN" &&
+          item.location_id === kitchen.id &&
+          item.quantity > 0 &&
+          item.expiry_date != null &&
+          item.expiry_date <= cutoff,
+      )
+      .sort((a, b) => (a.expiry_date ?? "").localeCompare(b.expiry_date ?? ""))
+      .map(toPublicKitchenInventoryItem);
+
+    return delay(items);
+  },
+
+  async listKitchenLabels(filters?: KitchenLabelFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const batch = filters?.batch_code?.trim();
+    const labels: KitchenLabel[] = db.inventory
+      .filter(
+        (item) =>
+          item.location_type === "KITCHEN" &&
+          item.location_id === kitchen.id &&
+          // Sticker data for stock that isn't there would just be waste paper.
+          item.quantity > 0 &&
+          (!filters?.product_id || item.product_id === filters.product_id) &&
+          (!batch || item.batch_code === batch),
+      )
+      .map((item) => ({
+        product_id: item.product_id,
+        product_name: item.product.name,
+        sku: item.product.sku,
+        batch_code: item.batch_code,
+        expiry_date: item.expiry_date,
+        quantity: item.quantity,
+        location_type: "KITCHEN" as const,
+        location_id: kitchen.id,
+      }));
+
+    // A non-matching batch is an empty list, not a 404.
+    return delay(labels);
+  },
+
+  async wasteKitchenStock(body: KitchenWasteInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const movementType = body.movement_type ?? "WASTE";
+    if (movementType !== "WASTE" && movementType !== "EXPIRY") {
+      throw new ApiError(
+        "Movement type must be WASTE or EXPIRY",
+        409,
+        INVALID_MOVEMENT_TYPE,
+      );
+    }
+
+    if (!body.waste_reason) {
+      throw new ApiError("Request validation failed", 422);
+    }
+
+    const quantity = Number(body.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+    }
+
+    const item = findKitchenStock(db, kitchen, body.product_id, body.batch_code);
+    // No row at all is a 404 — the common outcome of a mistyped batch code, and
+    // deliberately distinct from having the batch but not enough of it.
+    if (!item) throw new ApiError("No stock found for that product/batch", 404);
+
+    if (quantity > item.quantity) {
+      throw new ApiError(
+        `Only ${item.quantity} on hand for this batch`,
+        409,
+        INSUFFICIENT_STOCK,
+      );
+    }
+
+    item.quantity -= quantity;
+    saveDb(db);
+    return delay(toPublicKitchenInventoryItem(item));
+  },
+
+  async createKitchenCount(body: CreateKitchenCountInput) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const lines = body.lines ?? [];
+    if (lines.length === 0) {
+      throw new ApiError("At least one line is required", 422);
+    }
+
+    const seen = new Set<string>();
+    for (const line of lines) {
+      const key = `${line.product_id}::${line.batch_code?.trim() ?? ""}`;
+      if (seen.has(key)) {
+        throw new ApiError(
+          "The same product and batch appears twice in this count.",
+          409,
+          KITCHEN_DUPLICATE_COUNT_LINE,
+        );
+      }
+      seen.add(key);
+
+      if (!Number.isInteger(line.counted_quantity) || line.counted_quantity < 0) {
+        throw new ApiError("Counted quantity must be 0 or greater", 422);
+      }
+    }
+
+    const countId = `cnt-${Date.now()}`;
+    const countLines: KitchenCountLine[] = lines.map((line, index) => {
+      const item = findKitchenStock(db, kitchen, line.product_id, line.batch_code);
+      if (!item) throw new ApiError("No stock found for that product/batch", 404);
+
+      const variance = line.counted_quantity - item.quantity;
+
+      // A count is not a report: a non-zero variance rewrites on-hand to the
+      // counted number. That correction is the whole point of the endpoint.
+      const systemQuantity = item.quantity;
+      item.quantity = line.counted_quantity;
+
+      return {
+        id: `${countId}-l${index + 1}`,
+        product_id: line.product_id,
+        product_name: item.product.name,
+        batch_code: item.batch_code || null,
+        counted_quantity: line.counted_quantity,
+        system_quantity: systemQuantity,
+        variance,
+      };
+    });
+
+    const count: MockStockCount = {
+      id: countId,
+      restaurant_id: kitchen.restaurant_id,
+      location_type: "KITCHEN",
+      location_id: kitchen.id,
+      counted_by_id: String(me.id),
+      notes: body.notes ?? null,
+      created_at: now(),
+      lines: countLines,
+    };
+    db.stock_counts.push(count);
+
+    saveDb(db);
+    return delay(toPublicStockCount(count));
+  },
+
+  async listKitchenCounts(filters?: KitchenCountFilters) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+
+    const all = db.stock_counts
+      .filter((c) => c.location_id === kitchen.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    const start = (page - 1) * page_size;
+    const result: Paginated<KitchenStockCount> = {
+      items: all.slice(start, start + page_size).map(toPublicStockCount),
+      page,
+      page_size,
+      total: all.length,
+    };
+    return delay(result);
+  },
+
+  async listKitchenUsers(params) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const page = params?.page ?? 1;
+    const page_size = params?.page_size ?? 20;
+
+    // Creator-scoped: another manager's sub-chefs are invisible, and an empty
+    // list is the correct answer rather than a bug.
+    const createdByMe = new Set(
+      db.users
+        .filter((u) => u.me.created_by_id === me.id)
+        .map((u) => u.email.toLowerCase()),
+    );
+    const all = db.employees.filter(
+      (e) => e.kitchen_id === kitchen.id && createdByMe.has(e.email.toLowerCase()),
+    );
+
+    const start = (page - 1) * page_size;
+    const items: KitchenStaff[] = all.slice(start, start + page_size).map((e) => ({
+      id: e.id,
+      email: e.email,
+      full_name: e.full_name,
+      role: e.role,
+      is_active: e.is_active,
+      kitchen_id: kitchen.id,
+      created_at: e.created_at,
+    }));
+
+    const result: Paginated<KitchenStaff> = {
+      items,
+      page,
+      page_size,
+      total: all.length,
+    };
+    return delay(result);
+  },
+
+  async createKitchenUser(body: CreateKitchenStaffInput) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const email = body.email.trim().toLowerCase();
+    if (findUser(db, email)) {
+      throw new ApiError("A user with this email already exists.", 409, "conflict");
+    }
+
+    const fullName = body.full_name?.trim() || null;
+    const nextId =
+      db.users.reduce(
+        (max, u) => Math.max(max, typeof u.me.id === "number" ? u.me.id : 0),
+        0,
+      ) + 1;
+
+    // The live API emails a generated password and never returns it. The mock
+    // reuses the shared demo password so created sub-chefs stay testable
+    // offline — it is deliberately absent from the response either way.
+    db.users.push({
+      email,
+      password: "Demo@1234",
+      me: {
+        id: nextId,
+        email,
+        full_name: fullName,
+        role: "SUB_CHEF",
+        restaurant_id: me.restaurant_id ?? 1,
+        created_by_id: me.id,
+        is_active: true,
+      },
+    });
+
+    db.employees.push({
+      id: `emp-${nextId}`,
+      restaurant_id: kitchen.restaurant_id,
+      email,
+      full_name: fullName ?? "",
+      role: "SUB_CHEF",
+      is_active: true,
+      branch_id: null,
+      kitchen_id: kitchen.id,
+      warehouse_id: null,
+      created_at: now(),
+    });
+
+    saveDb(db);
+
+    const result: CreateKitchenStaffResult = {
+      user_id: String(nextId),
+      email,
+      role: "SUB_CHEF",
+      kitchen_id: kitchen.id,
+      credential_email_sent: true,
+    };
+    return delay(result, 400);
+  },
+
+  async listKitchenWarehouses() {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    // Every warehouse Admin has added to this restaurant, ordered by id. Reading
+    // the real store — not a fixed list — is what makes the Admin → Kitchen
+    // wiring testable offline: create a warehouse in Admin, pick it here.
+    const warehouses: KitchenWarehouse[] = db.warehouses
+      .filter((w) => w.restaurant_id === kitchen.restaurant_id)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((w) => ({
+        id: w.id,
+        restaurant_id: w.restaurant_id,
+        name: w.name,
+        location: w.location ?? null,
+        created_at: w.created_at,
+      }));
+    return delay(warehouses);
+  },
+
+  async createKitchenWarehouseRequest(body: CreateKitchenWarehouseRequestInput) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const lines = body.lines ?? [];
+    if (lines.length === 0) {
+      throw new ApiError("At least one line is required", 422);
+    }
+
+    // A restaurant can run several warehouses; this picks which one is debited.
+    const warehouse = db.warehouses.find(
+      (w) => w.id === body.warehouse_id && w.restaurant_id === kitchen.restaurant_id,
+    );
+    if (!warehouse) throw new ApiError("Warehouse not found", 404);
+
+    for (const line of lines) {
+      if (!Number.isInteger(line.quantity_requested) || line.quantity_requested <= 0) {
+        throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+      }
+    }
+
+    const id = `req-${Date.now()}`;
+    const created: MockStockRequest = {
+      id,
+      restaurant_id: kitchen.restaurant_id,
+      type: "KITCHEN_TO_WAREHOUSE",
+      status: "PENDING",
+      notes: body.notes ?? null,
+      from_label: kitchen.name,
+      created_at: now(),
+      updated_at: now(),
+      requester_id: typeof me.id === "number" ? me.id : null,
+      assignee_id: null,
+      source_location_type: "KITCHEN",
+      source_location_id: kitchen.id,
+      target_location_type: "WAREHOUSE",
+      target_location_id: warehouse.id,
+      line_items: lines.map((line, index) => ({
+        id: `${id}-l${index + 1}`,
+        product_id: line.product_id,
+        product_name:
+          db.products.find((p) => p.id === line.product_id)?.name ?? "Unknown product",
+        quantity_requested: line.quantity_requested,
+        // No partial approval on this type — stays null for the whole lifecycle.
+        quantity_approved: null,
+      })),
+    };
+    db.requests.push(created);
+
+    saveDb(db);
+    return delay(toPublicKitchenRequest(created));
+  },
+
+  async listKitchenWarehouseRequests(filters?: KitchenRequestFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    return delay(
+      paginateKitchenRequests(
+        db.requests.filter(
+          (r) =>
+            r.type === "KITCHEN_TO_WAREHOUSE" && r.source_location_id === kitchen.id,
+        ),
+        filters,
+      ),
+    );
+  },
+
+  async listKitchenBranchRequests(filters?: KitchenRequestFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    // Only requests Admin actually forwarded here. One forwarded elsewhere is
+    // invisible, which is what the Admin-side target enforcement buys.
+    return delay(
+      paginateKitchenRequests(
+        db.requests.filter(
+          (r) =>
+            r.type === "BRANCH_TO_ADMIN" &&
+            r.target_location_type === "KITCHEN" &&
+            r.target_location_id === kitchen.id,
+        ),
+        filters,
+      ),
+    );
+  },
+
+  async getKitchenRequest(requestId: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = findKitchenVisibleRequest(db, kitchen, requestId);
+    return delay(toPublicKitchenRequest(found));
+  },
+
+  async updateKitchenRequestStatus(
+    requestId: string,
+    body: UpdateKitchenRequestStatusInput,
+  ) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = findKitchenVisibleRequest(db, kitchen, requestId);
+
+    const allowed = kitchenAllowedTransitions(
+      found.type as KitchenRequestType,
+      found.status as KitchenRequestStatus,
+    );
+    if (!allowed.includes(body.to_status)) {
+      throw new ApiError(
+        `Cannot transition from ${found.status} to ${body.to_status}.`,
+        409,
+        KITCHEN_INVALID_TRANSITION,
+      );
+    }
+
+    // ALLOCATED is the only kitchen move that touches stock. IN_PRODUCTION and
+    // PRODUCED are markers: there is no recipe/BOM yet, so producing consumes
+    // nothing. If stock is short the status must not move.
+    if (body.to_status === "ALLOCATED") {
+      applyAllocationToKitchenStock(db, kitchen, found);
+    }
+
+    // Crediting the kitchen closes the in-transit window opened by the
+    // warehouse's DISPATCHED.
+    if (body.to_status === "RECEIVED" && found.type === "KITCHEN_TO_WAREHOUSE") {
+      applyKitchenReceiptToStock(db, kitchen, found);
+    }
+
+    found.status = body.to_status;
+    if (body.notes !== undefined) found.notes = body.notes;
+    found.updated_at = now();
+
+    saveDb(db);
+    return delay(toPublicKitchenRequest(found));
   },
 };

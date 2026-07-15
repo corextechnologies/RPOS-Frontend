@@ -9,7 +9,8 @@ import { PortalLoadingScreen, PortalShell } from "@/components/layout/PortalShel
 import type { UserRole } from "@/lib/types/super-admin";
 
 interface ProtectedPortalLayoutProps {
-  role: UserRole;
+  /** One role, or every role the portal admits. */
+  role: UserRole | readonly UserRole[];
   children: React.ReactNode;
 }
 
@@ -36,5 +37,8 @@ export function ProtectedPortalLayout({ role, children }: ProtectedPortalLayoutP
     return <PortalLoadingScreen />;
   }
 
-  return <PortalShell role={role}>{children}</PortalShell>;
+  // The shell keys off the user's own role, not the portal's admitted set: for
+  // single-role portals these are the same, and for shared ones the nav must
+  // reflect who is actually signed in.
+  return <PortalShell role={user.role}>{children}</PortalShell>;
 }

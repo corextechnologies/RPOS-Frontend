@@ -34,7 +34,20 @@ export type AuthAction =
   | "staff:create"
   | "po:read"
   | "po:create"
-  | "kitchen-requests:read";
+  | "kitchen-requests:read"
+  // Kitchen (Phase 4). Namespaced away from the Warehouse's stock actions: the
+  // two portals grant them to different roles against different endpoints.
+  | "kitchen-inventory:read"
+  | "kitchen-labels:read"
+  | "kitchen-stock:waste"
+  | "kitchen-counts:read"
+  | "kitchen-counts:create"
+  | "kitchen-staff:read"
+  | "kitchen-staff:create"
+  | "kitchen-warehouse-requests:read"
+  | "kitchen-warehouse-requests:create"
+  | "kitchen-branch-requests:read"
+  | "kitchen-requests:update";
 
 import type { UserRole } from "@/lib/types/super-admin";
 
@@ -82,7 +95,34 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     // Same operation name as Admin's, scoped by this role's own transition map.
     "requests:update",
   ],
-  KITCHEN_MANAGER: [],
+  KITCHEN_MANAGER: [
+    "kitchen-inventory:read",
+    "kitchen-labels:read",
+    "kitchen-stock:waste",
+    "kitchen-counts:read",
+    "kitchen-counts:create",
+    "kitchen-staff:read",
+    "kitchen-staff:create",
+    "kitchen-warehouse-requests:read",
+    "kitchen-warehouse-requests:create",
+    "kitchen-branch-requests:read",
+    "kitchen-requests:update",
+  ],
+  /**
+   * Read-only, plus logging waste. No approvals, transitions, stock requests,
+   * counts, or user creation — and note that stock counts are manager-only to
+   * *read* as well, since a count is an inventory rewrite rather than a report.
+   *
+   * This mirrors the server, which enforces the same split independently and
+   * answers 403. Treat what is hidden here as convenience, not security.
+   */
+  SUB_CHEF: [
+    "kitchen-inventory:read",
+    "kitchen-labels:read",
+    "kitchen-stock:waste",
+    "kitchen-warehouse-requests:read",
+    "kitchen-branch-requests:read",
+  ],
   BRANCH_MANAGER: [],
 };
 

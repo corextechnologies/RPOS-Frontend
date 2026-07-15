@@ -14,6 +14,7 @@ import type {
   WasteStockInput,
 } from "@/lib/types/warehouse";
 import { request, requestEnvelope } from "./client";
+import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
 /**
  * Backend ids are numeric; the app keys off strings everywhere.
@@ -34,26 +35,12 @@ function normalizeInventoryItem(item: InventoryItem): InventoryItem {
   };
 }
 
-/**
- * Optional string fields are dropped when blank rather than sent as "".
- * The stock endpoints reject empty-but-present values (`notes` must be at least
- * one character if included), so an omitted key is the only safe encoding.
- */
-function optionalText(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 function normalizeStaff(staff: WarehouseStaff): WarehouseStaff {
   return {
     ...staff,
     id: String(staff.id),
     warehouse_id: String(staff.warehouse_id),
   };
-}
-
-function idOrNull(value: unknown): string | null {
-  return value == null ? null : String(value);
 }
 
 function normalizeWarehouseRequest(req: WarehouseRequest): WarehouseRequest {
@@ -74,14 +61,6 @@ function normalizeWarehouseRequest(req: WarehouseRequest): WarehouseRequest {
         line.quantity_approved == null ? null : Number(line.quantity_approved),
     })),
   };
-}
-
-function numberFromMeta(
-  meta: Record<string, unknown> | undefined,
-  key: string,
-  fallback: number,
-): number {
-  return typeof meta?.[key] === "number" ? (meta[key] as number) : fallback;
 }
 
 /** Both request inboxes page and filter identically; only the path differs. */

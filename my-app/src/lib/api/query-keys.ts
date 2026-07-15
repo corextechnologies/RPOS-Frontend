@@ -6,6 +6,7 @@ import type {
   SalesSummaryFilters,
 } from "@/lib/types/admin";
 import type { WarehouseRequestFilters } from "@/lib/types/warehouse";
+import type { KitchenLabelFilters, KitchenRequestFilters } from "@/lib/types/kitchen";
 
 
 export const queryKeys = {
@@ -55,5 +56,23 @@ export const queryKeys = {
       ? (["warehouse-kitchen-requests", filters] as const)
       : (["warehouse-kitchen-requests"] as const),
   warehouseRequest: (id: string) => ["warehouse-request", id] as const,
+
+  kitchenInventory: ["kitchen-inventory"] as const,
+  kitchenWarehouses: ["kitchen-warehouses"] as const,
+  kitchenNearExpiry: (withinDays: number) =>
+    ["kitchen-near-expiry", withinDays] as const,
+  kitchenLabels: (filters?: KitchenLabelFilters) =>
+    filters ? (["kitchen-labels", filters] as const) : (["kitchen-labels"] as const),
+  kitchenCounts: (page?: number) => ["kitchen-counts", page] as const,
+  kitchenStaff: (page?: number) => ["kitchen-staff", page] as const,
+  kitchenWarehouseRequests: (filters?: KitchenRequestFilters) =>
+    filters
+      ? (["kitchen-warehouse-requests", filters] as const)
+      : (["kitchen-warehouse-requests"] as const),
+  kitchenBranchRequests: (filters?: KitchenRequestFilters) =>
+    filters
+      ? (["kitchen-branch-requests", filters] as const)
+      : (["kitchen-branch-requests"] as const),
+  kitchenRequest: (id: string) => ["kitchen-request", id] as const,
 };
 

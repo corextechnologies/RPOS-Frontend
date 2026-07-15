@@ -43,6 +43,24 @@ import type {
   WasteStockInput,
 } from "@/lib/types/warehouse";
 import type {
+  CreateKitchenCountInput,
+  CreateKitchenStaffInput,
+  CreateKitchenStaffResult,
+  CreateKitchenWarehouseRequestInput,
+  KitchenCountFilters,
+  KitchenInventoryItem,
+  KitchenLabel,
+  KitchenLabelFilters,
+  KitchenNearExpiryFilters,
+  KitchenRequest,
+  KitchenRequestFilters,
+  KitchenStaff,
+  KitchenStockCount,
+  KitchenWarehouse,
+  KitchenWasteInput,
+  UpdateKitchenRequestStatusInput,
+} from "@/lib/types/kitchen";
+import type {
   BillingSummary,
   ChangePasswordInput,
   CreateRestaurantInput,
@@ -161,4 +179,38 @@ export interface ApiClient {
     requestId: string,
     body: UpdateWarehouseRequestStatusInput,
   ): Promise<WarehouseRequest>;
+
+  // Kitchen (Phase 4) — auto-scoped to the caller's kitchen.
+  listKitchenInventory(): Promise<KitchenInventoryItem[]>;
+  listKitchenNearExpiry(
+    filters?: KitchenNearExpiryFilters,
+  ): Promise<KitchenInventoryItem[]>;
+  listKitchenLabels(filters?: KitchenLabelFilters): Promise<KitchenLabel[]>;
+  wasteKitchenStock(body: KitchenWasteInput): Promise<KitchenInventoryItem>;
+  createKitchenCount(body: CreateKitchenCountInput): Promise<KitchenStockCount>;
+  listKitchenCounts(
+    filters?: KitchenCountFilters,
+  ): Promise<Paginated<KitchenStockCount>>;
+  listKitchenUsers(params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<Paginated<KitchenStaff>>;
+  createKitchenUser(
+    body: CreateKitchenStaffInput,
+  ): Promise<CreateKitchenStaffResult>;
+  listKitchenWarehouses(): Promise<KitchenWarehouse[]>;
+  createKitchenWarehouseRequest(
+    body: CreateKitchenWarehouseRequestInput,
+  ): Promise<KitchenRequest>;
+  listKitchenWarehouseRequests(
+    filters?: KitchenRequestFilters,
+  ): Promise<Paginated<KitchenRequest>>;
+  listKitchenBranchRequests(
+    filters?: KitchenRequestFilters,
+  ): Promise<Paginated<KitchenRequest>>;
+  getKitchenRequest(requestId: string): Promise<KitchenRequest>;
+  updateKitchenRequestStatus(
+    requestId: string,
+    body: UpdateKitchenRequestStatusInput,
+  ): Promise<KitchenRequest>;
 }
