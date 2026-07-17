@@ -1,15 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CloudOff, Globe, Loader2, LogOut, Receipt, Settings, Wallet, Utensils } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Globe, Loader2, LogOut, Receipt, Settings, Wallet, Utensils } from "lucide-react";
 import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
 import { POS_REGIONS, posSession } from "@/lib/pos/session";
 import { packCountryCode } from "@/lib/pos/capabilities";
-import { PosGate } from "./PosGate";
-import { SyncIndicator } from "./SyncIndicator";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { AUTH_ROUTES } from "@/lib/auth/actions";
+import { StubTaxBanner } from "@/components/pos/StubTaxBanner";
+import type { PosBootstrapUser } from "@/lib/types/pos";
 
 /**
  * The till chrome.
@@ -21,6 +24,11 @@ import { Button } from "@/components/ui/button";
  */
 export function PosShell({ children }: { children: React.ReactNode }) {
   const { bootstrap, loading } = usePosSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !bootstrap) router.replace(AUTH_ROUTES.login);
+  }, [bootstrap, loading, router]);
 
   if (loading) {
     return (
@@ -30,7 +38,13 @@ export function PosShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!bootstrap) return <PosGate />;
+  if (!bootstrap) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-bg">
+        <Loader2 className="size-6 animate-spin text-brand" aria-label="Redirecting to login" />
+      </div>
+    );
+  }
 
   return <AuthenticatedShell>{children}</AuthenticatedShell>;
 }
@@ -44,8 +58,9 @@ const TABS = [
 
 function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const bootstrap = usePosBootstrap();
-  const { signOut, stale } = usePosSession();
+  const { signOut } = usePosSession();
   const pathname = usePathname();
+  const operator = displayUser(bootstrap.user);
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
@@ -53,11 +68,13 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-3 px-4 py-2">
           <div className="min-w-0">
             <p className="truncate font-display text-sm font-semibold text-content">
+              Logged in as {operator}
+            </p>
+            <p className="truncate text-xs text-muted">
               {bootstrap.branch.code}
               <span className="text-faint"> · </span>
               {bootstrap.device.code}
-            </p>
-            <p className="truncate text-xs text-muted">
+              <span className="text-faint"> · </span>
               {bootstrap.user.position
                 ? bootstrap.user.position.toLowerCase().replace(/_/g, " ")
                 : bootstrap.user.role.toLowerCase().replace(/_/g, " ")}
@@ -87,8 +104,6 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <SyncIndicator />
-
           <Button
             variant="ghost"
             size="icon"
@@ -100,19 +115,17 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
-        {stale && (
-          <div className="flex items-center gap-2 bg-warning/10 px-4 py-1.5 text-xs text-warning">
-            <CloudOff className="size-3.5" aria-hidden />
-            Working offline — menu and prices are from the last sync.
-          </div>
-        )}
-
+        <StubTaxBanner className="mx-4 mb-2" />
         <RegionMismatchNotice />
       </header>
 
       <main className="flex-1">{children}</main>
     </div>
   );
+}
+
+function displayUser(user: PosBootstrapUser): string {
+  return user.full_name || user.name || user.email || `User #${user.id}`;
 }
 
 /**

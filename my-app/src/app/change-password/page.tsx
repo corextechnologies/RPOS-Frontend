@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useChangePassword } from "@/lib/hooks/use-auth-mutations";
+import { upgradeBranchStaffToPos } from "@/lib/pos/upgrade";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -39,6 +40,9 @@ export default function ChangePasswordPage() {
       new_password: newPassword,
     });
     const me = await api.me();
+    if (me.role === "BRANCH_STAFF" && !requiresPasswordChange(me)) {
+      await upgradeBranchStaffToPos(me.email, newPassword);
+    }
     await refresh();
     router.replace(postAuthPath(me));
   };

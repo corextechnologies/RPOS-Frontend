@@ -22,8 +22,11 @@ import type {
   ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
+import type { DeviceRegisterInput, PosDevice } from "@/lib/types/pos";
 import { request, requestEnvelope } from "./client";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
+
+const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
 
 function qs(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams();
@@ -73,6 +76,25 @@ function normalizeProductionRun(r: ProductionRun): ProductionRun {
 }
 
 export const branchApi = {
+  // ---- Terminals ----
+  //
+  // Moved off `/v1/pos/devices` (gone — 404). Branch Manager portal token only;
+  // Admin always gets 403. Same ownership as staff provisioning: the manager
+  // who runs the floor registers tills, then creates cashiers.
+
+  listDevices(): Promise<PosDevice[]> {
+    return request<PosDevice[]>("/branch/devices");
+  },
+
+  /**
+   * `device_uid` is the till's durable identity (UUID from first launch, or a
+   * seeded dev value). `code` is the short receipt label (`T1`). Both required;
+   * both permanent in practice.
+   */
+  registerDevice(input: DeviceRegisterInput): Promise<PosDevice> {
+    return request<PosDevice>("/branch/devices", { method: "POST", ...json(input) });
+  },
+
   // ---- Staff ----
   //
   // Live on the server, absent from the wiring guide. This is the endpoint that

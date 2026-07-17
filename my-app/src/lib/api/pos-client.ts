@@ -16,8 +16,7 @@
  *    (missing → 422). Putting that here means no call site can forget it.
  *
  * Session expiry is surfaced by callback rather than by navigating: this module
- * is imported by non-React code (the offline outbox) and must not reach for a
- * router.
+ * is imported by hooks and helpers, and the shell owns routing.
  */
 
 import { apiConfig } from "./config";
@@ -28,7 +27,7 @@ import { ApiError } from "@/lib/types/super-admin";
 type ExpiryListener = () => void;
 const expiryListeners = new Set<ExpiryListener>();
 
-/** The POS shell subscribes to bounce the user to PIN unlock. */
+/** The POS shell subscribes to bounce the user back to `/login`. */
 export function onPosSessionExpired(fn: ExpiryListener): () => void {
   expiryListeners.add(fn);
   return () => expiryListeners.delete(fn);
@@ -76,22 +75,10 @@ async function send(path: string, opts?: PosRequestOptions): Promise<Response> {
   });
 }
 
-/**
- * A failed fetch is a *network* failure, not an HTTP error, and on this surface
- * it usually means the branch's link is down rather than that anything is
- * wrong. It is given a distinguishable shape so the outbox can tell "queue this
- * and retry" apart from "the server rejected this, retrying won't help".
- */
-export class PosOfflineError extends Error {
-  constructor(cause?: unknown) {
-    super("The terminal is offline");
-    this.name = "PosOfflineError";
-    this.cause = cause;
-  }
-}
-
-export function isOfflineError(err: unknown): err is PosOfflineError {
-  return err instanceof PosOfflineError;
+function networkError(cause: unknown): Error {
+  const err = new Error("Network error. Check the connection and try again.");
+  err.cause = cause;
+  return err;
 }
 
 async function handle<T>(res: Response, wantHeaders: boolean): Promise<T> {
@@ -120,7 +107,7 @@ export async function posRequest<T>(path: string, opts?: PosRequestOptions): Pro
   try {
     res = await send(path, opts);
   } catch (cause) {
-    throw new PosOfflineError(cause);
+    throw networkError(cause);
   }
   return handle<T>(res, opts?.wantHeaders ?? false);
 }
@@ -137,7 +124,7 @@ export async function posRequestEnvelope<T>(
   try {
     res = await send(path, opts);
   } catch (cause) {
-    throw new PosOfflineError(cause);
+    throw networkError(cause);
   }
 
   if (res.status === 401) {
@@ -174,7 +161,7 @@ export async function posRequestWithEtag<T>(
       headers: etag ? { "If-None-Match": etag } : undefined,
     });
   } catch (cause) {
-    throw new PosOfflineError(cause);
+    throw networkError(cause);
   }
 
   if (res.status === 304) return { status: 304 };

@@ -9,7 +9,8 @@ import {
   useState,
 } from "react";
 import { api, tokens } from "@/lib/api";
-import { canPerform, postAuthPath, type AuthAction } from "@/lib/auth/actions";
+import { canPerform, postAuthPath, requiresPasswordChange, type AuthAction } from "@/lib/auth/actions";
+import { upgradeBranchStaffToPos } from "@/lib/pos/upgrade";
 import type { MeResponse } from "@/lib/types/super-admin";
 
 interface AuthContextValue {
@@ -79,6 +80,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     await api.login(email, password);
     const me = await api.me();
+    if (me.role === "BRANCH_STAFF" && !requiresPasswordChange(me)) {
+      await upgradeBranchStaffToPos(email, password);
+    }
     setUser(me);
     setLoading(false);
     return postAuthPath(me);

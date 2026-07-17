@@ -4,9 +4,10 @@
  * Deliberately separate from `@/lib/api/tokens`, which holds the portal
  * session. These are two different lifecycles that happen to share an origin:
  *
- * - **The device identity** (`device_uid`) outlives every user. It is set once
- *   when the terminal is commissioned and survives sign-out, because signing
- *   out of a till does not move it to another branch.
+ * - **The device identity** (`device_uid`) outlives every user. Minted once on
+ *   first launch (UUID, or `DEV-TERMINAL-01` in development), persisted in
+ *   localStorage, and reused forever — the same value the Branch Manager
+ *   registers via `POST /v1/branch/devices` and this till sends at login.
  * - **The user session** (`access_token`) is short and swaps constantly — one
  *   till, many cashiers, PIN unlock between them.
  *
@@ -15,11 +16,19 @@
  * refresh". That is simpler than the portal's flow, not a gap in it.
  */
 
-const DEVICE_UID_KEY = "rpos-pos-device-uid";
+const DEVICE_UID_KEY = "rpos-device-uid";
+const LEGACY_DEVICE_UID_KEY = "rpos-pos-device-uid";
 const TOKEN_KEY = "rpos-pos-access-token";
 const CONTEXT_KEY = "rpos-pos-context";
 const LAST_EMAIL_KEY = "rpos-pos-last-email";
 const REGION_KEY = "rpos-pos-region";
+
+/**
+ * Dev-build shortcut: seed one COUNTER terminal per branch with this uid so
+ * local login doesn't need a fresh registration every wipe. Must match what
+ * the Branch Manager registers (or what the backend seed creates).
+ */
+export const DEV_TERMINAL_UID = "DEV-TERMINAL-01";
 
 /**
  * The regions offered on the sign-in screen.
@@ -52,15 +61,39 @@ export const posSession = {
    * the same till tomorrow.
    */
   get deviceUid(): string | null {
-    return ls()?.getItem(DEVICE_UID_KEY) ?? null;
+    const store = ls();
+    if (!store) return null;
+    const current = store.getItem(DEVICE_UID_KEY);
+    if (current) return current;
+    const legacy = store.getItem(LEGACY_DEVICE_UID_KEY);
+    if (!legacy) return null;
+    store.setItem(DEVICE_UID_KEY, legacy);
+    store.removeItem(LEGACY_DEVICE_UID_KEY);
+    return legacy;
   },
 
   setDeviceUid(uid: string) {
     ls()?.setItem(DEVICE_UID_KEY, uid.trim());
   },
 
+  /**
+   * First launch: mint a durable `device_uid` and persist it. Later launches
+   * reuse the stored value. Development builds hardcode `DEV-TERMINAL-01` so
+   * registration isn't part of every local login loop.
+   */
+  ensureDeviceUid(): string {
+    const existing = this.deviceUid;
+    if (existing) return existing;
+    const uid =
+      process.env.NODE_ENV === "development" ? DEV_TERMINAL_UID : crypto.randomUUID();
+    this.setDeviceUid(uid);
+    return uid;
+  },
+
   clearDeviceUid() {
-    ls()?.removeItem(DEVICE_UID_KEY);
+    const store = ls();
+    store?.removeItem(DEVICE_UID_KEY);
+    store?.removeItem(LEGACY_DEVICE_UID_KEY);
   },
 
   get token(): string | null {
@@ -122,6 +155,7 @@ export const posSession = {
     store.removeItem(CONTEXT_KEY);
     store.removeItem(LAST_EMAIL_KEY);
     store.removeItem(DEVICE_UID_KEY);
+    store.removeItem(LEGACY_DEVICE_UID_KEY);
     store.removeItem(REGION_KEY);
   },
 };

@@ -37,13 +37,9 @@ import type {
   PriceQuoteInput,
   RefundInput,
   RefundResult,
-  SetAvailabilityInput,
   Shift,
   ShiftReport,
-  SyncBatchResult,
-  SyncEnvelope,
 } from "@/lib/types/pos";
-import { SYNC_BATCH_MAX } from "@/lib/types/pos";
 import { posRequest, posRequestEnvelope, posRequestWithEtag } from "./pos-client";
 import { numberFromMeta } from "./normalize";
 
@@ -248,22 +244,6 @@ export const posApi = {
       method: "PATCH",
       ...json(input),
     });
-  },
-
-  // ---- Offline sync ----
-
-  /**
-   * Caller must chunk to `SYNC_BATCH_MAX`; beyond it the server 422s the whole
-   * call rather than partially accepting. Throwing here rather than silently
-   * slicing keeps the bug at the call site that made it.
-   */
-  syncBatch(envelopes: SyncEnvelope[]): Promise<SyncBatchResult> {
-    if (envelopes.length > SYNC_BATCH_MAX) {
-      throw new RangeError(
-        `sync batch is capped at ${SYNC_BATCH_MAX} envelopes, got ${envelopes.length}`,
-      );
-    }
-    return posRequest<SyncBatchResult>("/pos/sync/batch", { method: "POST", ...json({ envelopes }) });
   },
 
   // ---- Back-office ----

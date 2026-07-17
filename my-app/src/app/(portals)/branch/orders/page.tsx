@@ -50,8 +50,8 @@ export default function BranchOrdersPage() {
         <Info className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
         <span>
           The till at <code className="rounded bg-surface px-1 py-0.5 text-xs">/pos</code> takes
-          payment, prints tickets and works offline. Recording an order here is the fallback for
-          when there isn&apos;t one — it prices from the catalogue but takes no money.
+          payment and prints tickets. Recording an order here is the fallback for when there
+          isn&apos;t one — it prices from the catalogue but takes no money.
         </span>
       </p>
 

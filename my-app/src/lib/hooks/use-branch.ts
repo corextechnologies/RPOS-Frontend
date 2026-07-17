@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { branchApi } from "@/lib/api/branch.api";
+import { posErrorMessage } from "@/lib/api/errors";
 import { ApiError } from "@/lib/types/super-admin";
 import type {
   BranchCustomerFilters,
@@ -13,8 +15,10 @@ import type {
   ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
+import type { DeviceRegisterInput } from "@/lib/types/pos";
 
 export const branchKeys = {
+  devices: ["branch-devices"] as const,
   customers: (filters?: BranchCustomerFilters) =>
     filters ? (["branch-customers", filters] as const) : (["branch-customers"] as const),
   customer: (id: string) => ["branch-customer", id] as const,
@@ -25,6 +29,31 @@ export const branchKeys = {
     filters ? (["branch-production", filters] as const) : (["branch-production"] as const),
   productionRun: (id: string) => ["branch-production-run", id] as const,
 };
+
+// ---- Terminals ----
+//
+// Live HTTP only (same as former pos-admin device calls) — POS login has no
+// mock path, so a mocked registry would lie about what can sign in.
+
+export function useBranchDevices() {
+  return useQuery({
+    queryKey: branchKeys.devices,
+    queryFn: () => branchApi.listDevices(),
+    retry: false,
+  });
+}
+
+export function useRegisterBranchDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: DeviceRegisterInput) => branchApi.registerDevice(input),
+    onSuccess: (device) => {
+      qc.invalidateQueries({ queryKey: branchKeys.devices });
+      toast.success(`Terminal ${device.code ?? ""} registered — it can sign in now.`);
+    },
+    onError: (err) => toast.error(posErrorMessage(err)),
+  });
+}
 
 function message(err: unknown, fallback: string): string {
   return err instanceof ApiError || err instanceof Error ? err.message : fallback;

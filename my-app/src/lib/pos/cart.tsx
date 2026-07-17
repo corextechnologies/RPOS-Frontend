@@ -25,11 +25,10 @@ import type {
  * Two rules this file exists to enforce:
  *
  * 1. **`local_id` is minted once, when the cart is created, and never
- *    regenerated.** It is the order's identity forever — the same cart replayed
- *    from a rebuilt offline queue weeks later carries the same `local_id` and
- *    is therefore recognised as the same order, whatever `Idempotency-Key` it
- *    arrives with. Regenerating it on, say, a re-render would turn one order
- *    into two sales.
+ *    regenerated.** It is the order's identity forever, so a retry of the same
+ *    cart is recognised as the same order whatever `Idempotency-Key` it arrives
+ *    with. Regenerating it on, say, a re-render would turn one order into two
+ *    sales.
  * 2. **Totals here are a PROPOSAL, never an authority.** The server prices. We
  *    compute a subtotal so the customer can see a number while ordering, and we
  *    send it as `expected_total_minor` so a disagreement surfaces as a 409

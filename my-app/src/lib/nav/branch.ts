@@ -69,7 +69,7 @@ export const BRANCH_NAV: NavSection[] = [
       },
       {
         label: "Terminals",
-        href: "/branch/terminals",
+        href: "/branch/devices",
         icon: MonitorSmartphone,
         action: "devices:read",
         match: "exact",

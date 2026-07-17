@@ -6,39 +6,15 @@ import { posAdminApi } from "@/lib/api/pos-admin.api";
 import { posErrorMessage } from "@/lib/api/errors";
 import type {
   CreateDiscountRuleInput,
-  DeviceRegisterInput,
   CreateMenuItemInput,
   CreateModifierGroupInput,
 } from "@/lib/types/pos";
 
 export const posAdminKeys = {
-  devices: ["pos-admin-devices"] as const,
   sellable: ["pos-admin-sellable-products"] as const,
   menu: (version?: number) => ["pos-admin-menu", version ?? "published"] as const,
   discountRules: ["pos-admin-discount-rules"] as const,
 };
-
-// ---- Devices ----
-
-export function useDevices() {
-  return useQuery({
-    queryKey: posAdminKeys.devices,
-    queryFn: () => posAdminApi.listDevices(),
-    retry: false,
-  });
-}
-
-export function useRegisterDevice() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: DeviceRegisterInput) => posAdminApi.registerDevice(input),
-    onSuccess: (device) => {
-      qc.invalidateQueries({ queryKey: posAdminKeys.devices });
-      toast.success(`Terminal ${device.code ?? ""} registered — it can sign in now.`);
-    },
-    onError: (err) => toast.error(posErrorMessage(err)),
-  });
-}
 
 // ---- Menu ----
 
