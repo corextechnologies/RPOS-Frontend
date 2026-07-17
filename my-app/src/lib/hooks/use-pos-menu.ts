@@ -4,38 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { posApi } from "@/lib/api/pos.api";
 import { posAdminApi } from "@/lib/api/pos-admin.api";
-import { isOfflineError } from "@/lib/api/pos-client";
 import { posErrorMessage } from "@/lib/api/errors";
 import type { AvailabilityRow, MenuItem, PosMenu, SetAvailabilityInput } from "@/lib/types/pos";
 import { toast } from "sonner";
-
-const MENU_CACHE_KEY = "rpos-pos-menu";
-const MENU_ETAG_KEY = "rpos-pos-menu-etag";
-
-/**
- * The menu is cached to localStorage rather than to React Query alone, for one
- * reason: a till that reloads with no network must still be able to sell. React
- * Query's cache dies with the tab.
- *
- * A *published* menu version is immutable server-side, which is what makes this
- * safe to cache indefinitely — the ETag can be trusted absolutely and a 304 is
- * the expected answer on every reload, not a nice-to-have.
- */
-function readCachedMenu(): { menu: PosMenu; etag: string | null } | null {
-  if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(MENU_CACHE_KEY);
-  if (!raw) return null;
-  try {
-    return { menu: JSON.parse(raw) as PosMenu, etag: window.localStorage.getItem(MENU_ETAG_KEY) };
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedMenu(menu: PosMenu, etag: string | null) {
-  window.localStorage.setItem(MENU_CACHE_KEY, JSON.stringify(menu));
-  if (etag) window.localStorage.setItem(MENU_ETAG_KEY, etag);
-}
 
 export const posMenuKeys = {
   menu: (version?: number) => ["pos-menu", version ?? "published"] as const,
@@ -45,19 +16,13 @@ export const posMenuKeys = {
 /**
  * The menu.
  *
- * Two distinct jobs, and conflating them corrupts the offline cache:
+ * Two distinct jobs:
  *
- * - **`version` omitted** — the published menu the till sells from. This is the
- *   one persisted to localStorage, because a till that reloads with no network
- *   must still be able to sell.
+ * - **`version` omitted** — the published menu the till sells from.
  * - **`version` given** — a *historical* version, fetched to reprint an old
- *   order at the prices it was sold at. This must NOT touch the persisted
- *   cache: writing version 2's items over the published cache would leave the
- *   till selling last month's menu the next time it started up offline.
+ *   order at the prices it was sold at.
  */
 export function usePosMenu(version?: number) {
-  const isPublished = version === undefined;
-
   return useQuery({
     queryKey: posMenuKeys.menu(version),
     // Immutable once published — never refetch on focus, never expire.
@@ -66,30 +31,9 @@ export function usePosMenu(version?: number) {
     retry: false,
     enabled: version === undefined || Number.isFinite(version),
     queryFn: async (): Promise<PosMenu> => {
-      // Only the published menu reads or writes the durable cache.
-      const cached = isPublished ? readCachedMenu() : null;
-      try {
-        const res = await posApi.menu(cached?.etag ?? null, version);
-        if (res.status === 304 && cached) return cached.menu;
-        if (res.status === 200) {
-          if (isPublished) writeCachedMenu(res.data, res.etag);
-          return res.data;
-        }
-        // 304 with no cache: the ETag we sent came from a cache that has since
-        // been cleared. Ask again unconditionally rather than return nothing.
-        const fresh = await posApi.menu(null, version);
-        if (fresh.status === 200) {
-          if (isPublished) writeCachedMenu(fresh.data, fresh.etag);
-          return fresh.data;
-        }
-        throw new Error("Menu unavailable");
-      } catch (err) {
-        // Selling from a stale menu beats not selling. The shell already tells
-        // the user they're offline. A historical version has no fallback and
-        // shouldn't invent one — the reprint simply isn't available offline.
-        if (isOfflineError(err) && cached) return cached.menu;
-        throw err;
-      }
+      const res = await posApi.menu(null, version);
+      if (res.status === 200) return res.data;
+      throw new Error("Menu unavailable");
     },
   });
 }
@@ -121,11 +65,10 @@ export interface ResolvedMenuItem extends MenuItem {
 }
 
 /**
- * The menu as the grid should render it: cached items, live availability.
+ * The menu as the grid should render it: published items, live availability.
  *
- * Availability wins where the two disagree — the menu blob may be hours old,
- * the poll is seconds old. Where availability is silent (offline, or an item it
- * doesn't mention) the menu's own flag stands.
+ * Availability wins where the two disagree. Where availability is silent, the
+ * menu's own flag stands.
  */
 export function useResolvedMenu(version?: number) {
   const menu = usePosMenu(version);

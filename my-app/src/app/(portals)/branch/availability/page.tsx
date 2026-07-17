@@ -64,7 +64,7 @@ export default function BranchAvailabilityPage() {
 
       {/*
         Flagged = accepted, but priced differently from what the terminal
-        expected — usually the menu moved while the till was offline. Policy is
+        expected — usually the menu moved before the till refreshed. Policy is
         "device wins for facts, server wins for rules": the sale stands and a
         human rules on the difference. It is neither rejected nor silently fixed.
       */}

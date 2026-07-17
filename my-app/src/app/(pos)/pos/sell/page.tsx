@@ -56,16 +56,14 @@ function Sell() {
    * two. `cart.order_id` is what remembers that, and it survives a reload
    * because the cart is persisted.
    */
-  async function ensureOrder(acceptServerPrice: boolean): Promise<PosOrder | null> {
+  async function ensureOrder(acceptServerPrice: boolean): Promise<PosOrder> {
     if (cart.cart.order_id) {
       return { id: cart.cart.order_id } as PosOrder;
     }
     const input = cart.toCreateInput();
     if (acceptServerPrice) delete input.expected_total_minor;
 
-    const res = await createOrder.mutateAsync({ input, totalMinor: cart.subtotalMinor });
-    if (res.kind === "queued") return null; // offline: it's safe in the outbox
-    return res.order;
+    return createOrder.mutateAsync(input);
   }
 
   /**
@@ -77,12 +75,6 @@ function Sell() {
     try {
       const order = await ensureOrder(acceptServerPrice);
       setMismatch(null);
-
-      if (!order) {
-        // Queued offline — no server order to send or tender against yet.
-        cart.reset();
-        return;
-      }
 
       const sent = await sendOrder.mutateAsync(order.id);
       cart.reset();
@@ -99,13 +91,6 @@ function Sell() {
   async function park() {
     try {
       const order = await ensureOrder(false);
-      if (!order) {
-        // Offline. The order is in the outbox but has no server id, so there is
-        // nothing to park — say so rather than pretend.
-        toast.info("Saved offline. It'll sync, but can't be parked until it does.");
-        cart.reset();
-        return;
-      }
       await parkOrder.mutateAsync({ id: order.id, status: "PARKED" });
       cart.reset();
     } catch (err) {
@@ -142,7 +127,7 @@ function Sell() {
       <div className="p-8 text-center">
         <p className="text-sm text-danger">{posErrorMessage(error)}</p>
         <p className="mt-1 text-sm text-muted">
-          This terminal has no menu cached, so it can&apos;t sell yet.
+          This terminal needs an online menu before it can sell.
         </p>
       </div>
     );

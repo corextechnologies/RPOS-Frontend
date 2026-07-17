@@ -18,9 +18,8 @@ import type { ApiError } from "@/lib/types/super-admin";
  *
  * This is why `ApiError` had to learn `details`: the server returns EVERY
  * mismatched line in one response, precisely so a stale device isn't
- * round-tripped once per line — a device that has been offline has a stale
- * *snapshot*, plural. Rendering that as a toast would throw away the breakdown
- * and the whole reason the contract is shaped this way.
+ * round-tripped once per line. Rendering that as a toast would throw away the
+ * breakdown and the whole reason the contract is shaped this way.
  *
  * The action offered is "charge the new price", not "cancel". A price mismatch
  * is a menu that moved, not a mistake by the cashier, and the customer is

@@ -8,11 +8,10 @@ export type RestaurantStatus = "ACTIVE" | "HALTED";
  * of its own: the screens are identical, the manager-only actions are gated by
  * AuthAction. It is the first role that is not 1:1 with a portal.
  *
- * BRANCH_STAFF shares /branch with BRANCH_MANAGER on exactly that precedent.
- * Note the axis differs by surface: the branch portal gates on role, because
- * `/auth/me` returns role and nothing finer. The POS gates on the capability
- * list from `/pos/session/bootstrap`, which already folds in position and
- * device profile. Do not gate POS UI on role — see `@/lib/pos/capabilities`.
+ * BRANCH_STAFF lands in `/pos` rather than the Branch Manager portal. The POS
+ * gates on the capability list from `/pos/session/bootstrap`, which already
+ * folds in position and device profile. Do not gate POS UI on role — see
+ * `@/lib/pos/capabilities`.
  */
 export type UserRole =
   | "SUPER_ADMIN"

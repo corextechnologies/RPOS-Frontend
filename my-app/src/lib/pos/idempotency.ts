@@ -10,8 +10,8 @@
  *
  * **`local_id`** is *business* dedupe: this is one order the device minted, and
  * it is the same order forever. Minted once when the cart is created, persisted
- * with the cart, and reused on every submission of it — including a replay from
- * a rebuilt offline queue weeks later carrying a brand-new `Idempotency-Key`.
+ * with the cart, and reused on every submission of it — including retrying an
+ * order after a network timeout with a brand-new `Idempotency-Key`.
  *
  * The rule that follows: a key belongs to an *attempt at an intent*; a local_id
  * belongs to an *order*. One cart has one local_id and potentially several keys

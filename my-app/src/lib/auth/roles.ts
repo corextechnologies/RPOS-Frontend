@@ -7,7 +7,7 @@ export const PORTAL_HOME: Record<UserRole, string> = {
   KITCHEN_MANAGER: "/kitchen/dashboard",
   SUB_CHEF: "/kitchen/dashboard",
   BRANCH_MANAGER: "/branch/dashboard",
-  BRANCH_STAFF: "/branch/dashboard",
+  BRANCH_STAFF: "/pos",
 };
 
 export const PORTAL_PREFIX: Record<UserRole, string> = {
@@ -17,7 +17,7 @@ export const PORTAL_PREFIX: Record<UserRole, string> = {
   KITCHEN_MANAGER: "/kitchen",
   SUB_CHEF: "/kitchen",
   BRANCH_MANAGER: "/branch",
-  BRANCH_STAFF: "/branch",
+  BRANCH_STAFF: "/pos",
 };
 
 export const PORTAL_LABEL: Record<UserRole, string> = {
@@ -27,19 +27,19 @@ export const PORTAL_LABEL: Record<UserRole, string> = {
   KITCHEN_MANAGER: "Kitchen",
   SUB_CHEF: "Kitchen",
   BRANCH_MANAGER: "Branch",
-  BRANCH_STAFF: "Branch",
+  BRANCH_STAFF: "POS",
 };
 
-/** Every role the Branch portal admits, in the shape ProtectedPortalLayout wants. */
-export const BRANCH_PORTAL_ROLES = ["BRANCH_MANAGER", "BRANCH_STAFF"] as const;
+/** The Branch portal is for managers; staff sell through `/pos`. */
+export const BRANCH_PORTAL_ROLES = ["BRANCH_MANAGER"] as const;
 
 export function portalPathForRole(role: UserRole): string {
   return PORTAL_HOME[role] ?? "/login";
 }
 
 /**
- * Note that KITCHEN_MANAGER/SUB_CHEF share `/kitchen` and BRANCH_MANAGER/
- * BRANCH_STAFF share `/branch`, so this resolves those paths to the manager of
+ * Note that KITCHEN_MANAGER/SUB_CHEF share `/kitchen`, so this resolves those
+ * paths to the manager of
  * each pair — whichever key `PORTAL_PREFIX` lists first. Callers wanting the
  * signed-in user's actual role should read it from the user, not infer it from
  * the URL.

@@ -27,8 +27,6 @@
 
 import type {
   CreateDiscountRuleInput,
-  DeviceRegisterInput,
-  PosDevice,
   CreateMenuItemInput,
   CreateModifierGroupInput,
   DiscountRule,
@@ -61,28 +59,8 @@ function qs(params: Record<string, string | number | undefined>): string {
 export const FEED_MAX_DAYS = 400;
 
 export const posAdminApi = {
-  // ---- Device registry ----
-  //
-  // Absent from the wiring guide entirely, which is why a new terminal answered
-  // `unknown_device` at sign-in with nothing in the UI to fix it.
-  //
-  // Note this one is NOT an assumption: registering a device *must* accept a
-  // portal token, because a device-bound token cannot exist before the device
-  // does. It's the chicken-and-egg that proves the rest of this module's
-  // reasoning.
-
-  listDevices(): Promise<PosDevice[]> {
-    return request<PosDevice[]>("/pos/devices");
-  },
-
-  /**
-   * The `device_uid` is what the terminal types at sign-in; `code` is what
-   * prints on the receipt (`{branch_code}-{terminal_code}-{seq}`). They are
-   * different fields on purpose and both are required.
-   */
-  registerDevice(input: DeviceRegisterInput): Promise<PosDevice> {
-    return request<PosDevice>("/pos/devices", { method: "POST", ...json(input) });
-  },
+  // Terminal registration lives on `/v1/branch/devices` (Branch Manager portal
+  // token) — see `branch.api.ts`. Admin always gets 403 there.
 
   // ---- Manager-side POS reads/writes ----
   //

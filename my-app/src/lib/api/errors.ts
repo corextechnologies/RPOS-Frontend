@@ -212,7 +212,7 @@ export function posErrorMessage(err: unknown): string {
     case POS_ERROR.DEVICE_NOT_BOUND:
       return "This session isn't bound to a terminal. Sign in again on the till.";
     case POS_ERROR.UNKNOWN_DEVICE:
-      return "This terminal isn't registered. Ask an admin to add it.";
+      return "This terminal isn't registered. Ask your branch manager to add it.";
     case POS_ERROR.DEVICE_BRANCH_MISMATCH:
       return "This terminal belongs to a different branch.";
     case POS_ERROR.IDEMPOTENCY_KEY_REUSE:

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Sparkles, Clipboard } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AUTH_ROUTES, postAuthPath } from "@/lib/auth/actions";
 import { AuthLayout } from "@/components/auth/AuthLayout";
@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { apiConfig, USE_MOCK } from "@/lib/api";
 import { ApiError } from "@/lib/types/super-admin";
 import { notify } from "@/lib/toast";
+import { isApiCode, POS_ERROR } from "@/lib/api/errors";
+import { posSession } from "@/lib/pos/session";
 
 const MOCK_ACCOUNTS = [
   { label: "Super Admin", email: apiConfig.mockDemoEmail, password: apiConfig.mockDemoPassword },
@@ -32,11 +34,13 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pairingUid, setPairingUid] = useState<string | null>(null);
 
   const showDemo = USE_MOCK;
 
   useEffect(() => {
     if (!loading && user) {
+      if (user.role === "BRANCH_STAFF" && !posSession.token) return;
       router.replace(postAuthPath(user));
     }
   }, [user, loading, router]);
@@ -50,9 +54,17 @@ export default function LoginPage() {
       notify("success", "Welcome back");
       router.replace(path);
     } catch (err) {
-      if (err instanceof ApiError && err.code === "restaurant_halted") {
+      if (isApiCode(err, POS_ERROR.UNKNOWN_DEVICE)) {
+        setPairingUid(posSession.deviceUid);
+        setError("This browser isn't registered as a till. Ask your Branch Manager to register it.");
+      } else if (isApiCode(err, POS_ERROR.DEVICE_BRANCH_MISMATCH)) {
+        setPairingUid(null);
+        setError("Your account belongs to another branch.");
+      } else if (err instanceof ApiError && err.code === "restaurant_halted") {
+        setPairingUid(null);
         setError("This restaurant's plan is currently halted.");
       } else {
+        setPairingUid(null);
         const msg = err instanceof ApiError ? err.message : "Something went wrong";
         setError(msg);
       }
@@ -64,7 +76,7 @@ export default function LoginPage() {
   return (
     <AuthLayout
       title="Sign in to continue"
-      subtitle="One login for Super Admin, Admin, Warehouse, Kitchen, and Branch portals."
+      subtitle="One login for portals and POS tills."
       footer={
         <Link href={AUTH_ROUTES.forgotPassword} className="font-medium text-brand hover:underline">
           Forgot your password?
@@ -115,8 +127,28 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="rounded-xl border border-danger/25 bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
-            {error}
+          <div className="space-y-3 rounded-xl border border-danger/25 bg-danger/10 px-3.5 py-2.5 text-sm text-danger">
+            <p>{error}</p>
+            {pairingUid && (
+              <div className="rounded-lg border border-danger/20 bg-surface/70 p-2 text-content">
+                <p className="text-xs text-muted">Device UID for Branch → Terminals</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate font-mono text-xs">{pairingUid}</code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(pairingUid);
+                      notify("success", "Device UID copied");
+                    }}
+                  >
+                    <Clipboard className="size-3.5" aria-hidden />
+                    Copy
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

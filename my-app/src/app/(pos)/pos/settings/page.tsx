@@ -11,7 +11,6 @@ import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
 import { posApi } from "@/lib/api/pos.api";
 import { posSession } from "@/lib/pos/session";
 import { posErrorMessage } from "@/lib/api/errors";
-import { outbox } from "@/lib/pos/outbox";
 import { toast } from "sonner";
 
 export default function PosSettingsPage() {
@@ -147,9 +146,7 @@ function SetPinCard() {
 
 /**
  * Decommissioning clears the device identity, so the till has to be set up
- * again. It refuses while anything is unsynced — that queue is the only copy of
- * those sales, and `posSession.reset()` plus a browser-data wipe would be the
- * end of them.
+ * again.
  */
 function DecommissionButton() {
   const [busy, setBusy] = useState(false);
@@ -157,13 +154,6 @@ function DecommissionButton() {
   async function decommission() {
     setBusy(true);
     try {
-      const pending = await outbox.pending();
-      if (pending.length) {
-        toast.error(
-          `${pending.length} order(s) still haven't synced. Sync them before resetting.`,
-        );
-        return;
-      }
       posSession.reset();
       window.location.reload();
     } finally {

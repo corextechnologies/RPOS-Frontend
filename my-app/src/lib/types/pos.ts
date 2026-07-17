@@ -52,18 +52,22 @@ export interface PosBootstrapDevice {
 // ---- Device registry ----
 
 /**
- * Registering a terminal.
+ * Registering a terminal via `POST /v1/branch/devices`.
  *
- * `POST /v1/pos/devices` exists on the server but is **absent from the wiring
- * guide** — which is why a fresh terminal answers `unknown_device` at sign-in
- * and there was nothing to click. It has to be a portal-token call by
- * necessity: you cannot hold a device-bound token before the device exists.
+ * Branch Manager portal token only — Admin gets 403. The old
+ * `POST /v1/pos/devices` is gone (404). Must use a portal token: you cannot
+ * hold a device-bound token before the device exists.
  */
 export interface DeviceRegisterInput {
-  /** What the terminal identifies itself as at sign-in. Immutable in practice. */
+  /**
+   * The till's durable identity — UUID minted on first launch (or a seeded
+   * dev value). Same string at register and at `POST /v1/pos/session/login`.
+   * ≥8 chars.
+   */
   device_uid: string;
-  /** Short code printed on receipts — the `{terminal_code}` in `order_no`. */
+  /** Short receipt label (`T1`) — unique per restaurant; treat as permanent. */
   code: string;
+  /** `COUNTER` = cash drawer; `CURBSIDE` = no cash (`device_cannot_take_cash`). */
   profile: DeviceProfile;
   name?: string | null;
 }
@@ -83,6 +87,9 @@ export interface PosBootstrapUser {
   id: number;
   role: UserRole;
   position: BranchPosition | null;
+  full_name?: string | null;
+  name?: string | null;
+  email?: string | null;
 }
 
 /**
@@ -518,34 +525,6 @@ export interface ShiftReport {
   opened_at: string;
   closed_at?: string | null;
 }
-
-// ---- Offline sync ----
-
-export interface SyncEnvelope {
-  order: PosOrderCreate;
-  device_total_minor: Minor;
-}
-
-export type SyncElementStatus = "accepted" | "duplicate" | "flagged" | "failed";
-
-export interface SyncElementResult {
-  local_id: string;
-  status: SyncElementStatus;
-  order_id?: number;
-  error_code?: string;
-  message?: string;
-}
-
-export interface SyncBatchResult {
-  accepted: number;
-  duplicates: number;
-  flagged: number;
-  failed: number;
-  results: SyncElementResult[];
-}
-
-/** The server's cap. Chunk to this; beyond it is a 422, not a partial accept. */
-export const SYNC_BATCH_MAX = 50;
 
 // ---- Sellable products (menu picker) ----
 
