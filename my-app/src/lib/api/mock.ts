@@ -63,6 +63,32 @@ import {
   KITCHEN_INVALID_TRANSITION,
   MISSING_KITCHEN_ASSIGNMENT,
 } from "@/lib/types/kitchen";
+import type {
+  CreateKitchenProductInput,
+  CreateKitchenRecipeInput,
+  KitchenCatalogueItem,
+  KitchenProduceInput,
+  KitchenRecipe,
+} from "@/lib/types/kitchen";
+import type {
+  BranchCustomer,
+  BranchCustomerFilters,
+  BranchStaff,
+  CreateBranchStaffInput,
+  CreateBranchStaffResult,
+  BranchInventoryItem,
+  BranchOrder,
+  BranchOrderFilters,
+  CreateBranchCustomerInput,
+  CreateBranchOrderInput,
+  CreateProductionRunInput,
+  ProductionRun,
+  ProductionRunFilters,
+  UpdateBranchCustomerInput,
+} from "@/lib/types/branch";
+import { INVALID_PRODUCTION_RUN, MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
+import { POS_ERROR } from "@/lib/api/errors";
+import type { BranchPosition } from "@/lib/types/super-admin";
 // Mock and live agree on the state machine by sharing the real map, the same way
 // the warehouse mock does.
 import { kitchenAllowedTransitions } from "@/lib/kitchen/request-transitions";
@@ -96,6 +122,7 @@ import type {
   WarehouseRequest,
   WarehouseRequestFilters,
   WarehouseProduct,
+  WarehouseProductFilters,
   CreateWarehouseProductInput,
   ReorderLevel,
   UpdateReorderLevelInput,
@@ -130,7 +157,16 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
-const SEED_VERSION = 16;
+/**
+ * Bump this whenever `MockDb`'s SHAPE changes, not just its contents — an
+ * existing database in localStorage is reseeded only on a version change, so a
+ * new table added without a bump loads as `undefined` and the first `.filter()`
+ * on it throws.
+ *
+ * 17: branch portal — `customers`, `branch_orders`, `production_runs`, a second
+ *     branch (br-002), and selling_price/category/is_available on products.
+ */
+const SEED_VERSION = 17;
 
 interface MockInvoiceRecord {
   id: number;
@@ -200,6 +236,35 @@ interface MockStockCount extends KitchenStockCount {
   restaurant_id: string;
 }
 
+/**
+ * A branch customer.
+ *
+ * Scoped to a branch, not a restaurant — cross-branch duplicates are expected
+ * and correct. Two branches of the same chain each holding "Ali, 0300…" are two
+ * records; deduping them is CRM, which is out of scope.
+ *
+ * `deleted_at` because the delete is soft: past orders keep their customer, but
+ * a deleted one can't be attached to a new order.
+ */
+interface MockCustomer extends BranchCustomer {
+  restaurant_id: string;
+  deleted_at: string | null;
+}
+
+interface MockBranchOrder extends BranchOrder {
+  restaurant_id: string;
+  branch_id: string;
+}
+
+interface MockProductionRun extends ProductionRun {
+  restaurant_id: string;
+}
+
+interface MockRecipe extends KitchenRecipe {
+  restaurant_id: string;
+  kitchen_id: string;
+}
+
 interface MockDb {
   _seed: number;
   restaurants: Restaurant[];
@@ -216,6 +281,10 @@ interface MockDb {
   inventory: MockInventoryItem[];
   stock_counts: MockStockCount[];
   notifications: MockNotification[];
+  customers: MockCustomer[];
+  kitchen_recipes: MockRecipe[];
+  branch_orders: MockBranchOrder[];
+  production_runs: MockProductionRun[];
   /**
    * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
    * limit is compared against total on hand across every batch, so it cannot
@@ -238,6 +307,9 @@ interface MockReorderLevel {
 }
 
 const now = () => new Date().toISOString();
+
+const isoDaysAgo = (n: number) =>
+  new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
 
 /** Local calendar date as YYYY-MM-DD (avoids UTC off-by-one in onboarding counts). */
 function localYmd(d = new Date()): string {
@@ -477,6 +549,18 @@ function seedDb(): MockDb {
       location: "City Center",
       created_at: now(),
     },
+    /**
+     * A second branch of the same restaurant. It exists so that branch scoping
+     * is *demonstrable* rather than merely asserted: with one branch, a query
+     * that forgot to filter looks identical to one that didn't.
+     */
+    {
+      id: "br-002",
+      restaurant_id: "rest-001",
+      name: "Gulberg Branch",
+      location: "Gulberg III",
+      created_at: now(),
+    },
   ];
 
   const kitchens: Kitchen[] = [
@@ -596,6 +680,11 @@ function seedDb(): MockDb {
       name: "House Blend Coffee Beans",
       sku: "BN-COF-001",
       cost_price: "18.50",
+      selling_price: null,
+      category: null,
+      is_available: true,
+      kind: "RAW_MATERIAL",
+      is_sellable: false,
     },
     {
       id: "prod-002",
@@ -603,6 +692,11 @@ function seedDb(): MockDb {
       name: "Tomato Sauce (Can)",
       sku: "ING-TOM-02",
       cost_price: null,
+      selling_price: null,
+      category: null,
+      is_available: true,
+      kind: "RAW_MATERIAL",
+      is_sellable: false,
     },
     {
       id: "prod-003",
@@ -610,6 +704,11 @@ function seedDb(): MockDb {
       name: "Mozzarella Block",
       sku: "DAI-MOZ-10",
       cost_price: "9.75",
+      selling_price: null,
+      category: null,
+      is_available: true,
+      kind: "RAW_MATERIAL",
+      is_sellable: false,
     },
     {
       id: "prod-004",
@@ -617,6 +716,40 @@ function seedDb(): MockDb {
       name: "Paper Napkins (Pack)",
       sku: "SUP-NAP-50",
       cost_price: null,
+      selling_price: null,
+      category: null,
+      is_available: true,
+      kind: "RAW_MATERIAL",
+      is_sellable: false,
+    },
+    /**
+     * Bought and sold untouched — neither a raw material nor kitchen-made.
+     * This is the row that would be unsellable without the RESALE kind.
+     */
+    {
+      id: "prod-005",
+      restaurant_id: "rest-001",
+      name: "Bottled Cola",
+      sku: "BEV-COLA-33",
+      cost_price: "40.00",
+      selling_price: "100.00",
+      category: "Drinks",
+      is_available: true,
+      kind: "RESALE",
+      is_sellable: true,
+    },
+    /** Kitchen-made. Sellable, and needs a recipe before it can be produced. */
+    {
+      id: "prod-006",
+      restaurant_id: "rest-001",
+      name: "Classic Burger",
+      sku: "FG-BURG-01",
+      cost_price: null,
+      selling_price: "500.00",
+      category: "Mains",
+      is_available: true,
+      kind: "FINISHED_GOOD",
+      is_sellable: true,
     },
   ];
 
@@ -1036,7 +1169,48 @@ function seedDb(): MockDb {
     stock_counts: [],
     reorder_levels: [],
     notifications: seedNotifications(),
+    customers: seedCustomers(),
+    kitchen_recipes: [],
+    branch_orders: [],
+    production_runs: [],
   };
+}
+
+/**
+ * Two customers on br-001 and one on br-002 — the third exists specifically so
+ * branch scoping is visible in the mock rather than only under test: signed in
+ * at br-001 you must never see "Bilal Ahmed".
+ */
+function seedCustomers(): MockCustomer[] {
+  return [
+    {
+      id: "cust-001",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      name: "Ayesha Khan",
+      phone: "0300 1234567",
+      created_at: isoDaysAgo(12),
+      deleted_at: null,
+    },
+    {
+      id: "cust-002",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      name: "Hassan Raza",
+      phone: "0321 9876543",
+      created_at: isoDaysAgo(4),
+      deleted_at: null,
+    },
+    {
+      id: "cust-003",
+      restaurant_id: "rest-001",
+      branch_id: "br-002",
+      name: "Bilal Ahmed",
+      phone: "0333 5551234",
+      created_at: isoDaysAgo(2),
+      deleted_at: null,
+    },
+  ];
 }
 
 /**
@@ -1236,6 +1410,59 @@ function requireKitchenManager(me: MeResponse) {
   if (me.role !== "KITCHEN_MANAGER") {
     throw new ApiError("You do not have access to this operation.", 403);
   }
+}
+
+/**
+ * Resolve the branch the signed-in user is assigned to.
+ *
+ * Mirrors `resolveMyKitchen`/`resolveMyWarehouse`. Both BRANCH_MANAGER and
+ * BRANCH_STAFF resolve through the same path — the employee record — because
+ * `/auth/me` carries no `branch_id` today. That is a real gap and it is why
+ * this exists: it is the single place the frontend answers "which branch am I",
+ * so when `/auth/me` grows the field, only this function changes.
+ */
+function resolveMyBranch(db: MockDb, me: MeResponse): Branch {
+  const employee = db.employees.find((e) => e.email.toLowerCase() === me.email.toLowerCase());
+  const branch = employee?.branch_id
+    ? db.branches.find((b) => b.id === employee.branch_id)
+    : undefined;
+  if (!branch) {
+    throw new ApiError("No branch is assigned to your account", 409, MISSING_BRANCH_ASSIGNMENT);
+  }
+  return branch;
+}
+
+/** Branch writes the counter staff may not do. The server enforces it too. */
+function requireBranchManager(me: MeResponse) {
+  if (me.role !== "BRANCH_MANAGER") {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+function toPublicCustomer(c: MockCustomer): BranchCustomer {
+  return {
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    branch_id: c.branch_id,
+    created_at: c.created_at,
+  };
+}
+
+/**
+ * Find a customer **within the caller's branch**.
+ *
+ * 404, not 403, when it belongs to another branch — a 403 would confirm the row
+ * exists, which is exactly the leak the scoping is there to close. Soft-deleted
+ * customers are invisible here for the same reason they can't be attached to a
+ * new order.
+ */
+function findMyCustomer(db: MockDb, branchId: string, id: string): MockCustomer {
+  const found = db.customers.find(
+    (c) => c.id === id && c.branch_id === branchId && c.deleted_at === null,
+  );
+  if (!found) throw new ApiError("Customer not found", 404);
+  return found;
 }
 
 /** Locate one kitchen stock row by product and batch. See `findWarehouseStock`. */
@@ -2766,14 +2993,31 @@ export const mockClient: ApiClient = {
     const r = resolveMyRestaurant(db, me);
     const items: ProductPricing[] = db.products
       .filter((p) => p.restaurant_id === r.id)
-      // `unpriced=true` is Admin's pricing queue; once priced, a product drops
-      // off it. An absent param means every product.
-      .filter((p) => !filters?.unpriced || p.cost_price == null)
+      /**
+       * `unpriced=true` is Admin's pricing queue; once priced, a product drops
+       * off it. An absent param means every product.
+       *
+       * Which price does "unpriced" mean, now that there are two? Selling —
+       * because that is the one that blocks a sale (409 `product_not_priced`),
+       * whereas a missing cost price only dents a margin report. Flagged to the
+       * backend team as a contract question; if the server disagrees, this is
+       * the line to change.
+       */
+      .filter((p) => !filters?.kind || p.kind === filters.kind)
+      .filter((p) => !filters?.sellable_only || p.is_sellable)
+      // "Unpriced" only ever means a *sellable* thing with no price. A sack of
+      // flour is not waiting to be priced; it is never priced.
+      .filter((p) => !filters?.unpriced || (p.is_sellable && p.selling_price == null))
       .map((p) => ({
         id: p.id,
         name: p.name,
         sku: p.sku,
+        kind: p.kind,
+        is_sellable: p.is_sellable,
         cost_price: p.cost_price,
+        selling_price: p.selling_price,
+        category: p.category,
+        is_available: p.is_available,
       }));
     return delay(items);
   },
@@ -2785,19 +3029,55 @@ export const mockClient: ApiClient = {
     const product = db.products.find((p) => p.id === productId && p.restaurant_id === r.id);
     if (!product) throw new ApiError("Product not found", 404);
 
-    const raw = typeof body.cost_price === "number" ? body.cost_price : Number(body.cost_price);
-    if (!Number.isFinite(raw) || raw < 0) {
-      throw new ApiError("cost_price must be 0 or greater", 400);
+    /**
+     * Partial, and the mock enforces the same rule as the server so the UI's
+     * dirty-field handling is actually exercised: a key that is absent is left
+     * alone, an explicit `null` clears. `"cost_price" in body` — not a
+     * truthiness check — is what distinguishes the two.
+     */
+    const money = (value: unknown, field: string): string | null => {
+      if (value === null || value === "") return null;
+      const n = typeof value === "number" ? value : Number(value);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new ApiError(`${field} must be 0 or greater`, 400);
+      }
+      return n.toFixed(2);
+    };
+
+    // The server refuses rather than trusting the UI to have hidden the field —
+    // so the mock does too, or the hidden-field rule is untested.
+    const touchesSellFields =
+      ("selling_price" in body && body.selling_price !== null) ||
+      ("category" in body && body.category != null) ||
+      "is_available" in body;
+    if (!product.is_sellable && touchesSellFields) {
+      throw new ApiError(
+        "This product can't be sold, so it can't be priced or categorised.",
+        409,
+        POS_ERROR.PRODUCT_NOT_SELLABLE,
+        { product_id: product.id, kind: product.kind },
+      );
     }
 
-    product.cost_price = raw.toFixed(2);
+    if ("cost_price" in body) product.cost_price = money(body.cost_price, "cost_price");
+    if ("selling_price" in body) {
+      product.selling_price = money(body.selling_price, "selling_price");
+    }
+    if ("category" in body) product.category = body.category?.trim() || null;
+    if ("is_available" in body) product.is_available = body.is_available ?? true;
+
     saveDb(db);
 
     const result: ProductPricing = {
       id: product.id,
       name: product.name,
       sku: product.sku,
+      kind: product.kind,
+      is_sellable: product.is_sellable,
       cost_price: product.cost_price,
+      selling_price: product.selling_price,
+      category: product.category,
+      is_available: product.is_available,
     };
     return delay(result);
   },
@@ -3000,7 +3280,7 @@ export const mockClient: ApiClient = {
     return delay(found as AppNotification);
   },
 
-  async listWarehouseProducts() {
+  async listWarehouseProducts(filters?: WarehouseProductFilters) {
     const me = requireAuth();
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
@@ -3019,6 +3299,13 @@ export const mockClient: ApiClient = {
 
     const name = body.name?.trim() ?? "";
     if (!name) throw new ApiError("Request validation failed", 422);
+
+    const kind = body.kind ?? "RAW_MATERIAL";
+    // The server 422s a FINISHED_GOOD here; the type already forbids it, but a
+    // hand-rolled call shouldn't slip past the mock either.
+    if (kind !== "RAW_MATERIAL" && kind !== "RESALE") {
+      throw new ApiError("A warehouse can't create kitchen-made products", 422);
+    }
 
     const sku = body.sku?.trim() || null;
     if (
@@ -3041,8 +3328,18 @@ export const mockClient: ApiClient = {
       restaurant_id: warehouse.restaurant_id,
       name,
       sku,
+      // The warehouse buys things. RAW_MATERIAL by default; RESALE when it's
+      // bought and sold untouched. It can never create a FINISHED_GOOD — the
+      // kitchen makes those, and the server 422s the attempt.
+      kind,
+      is_sellable: kind === "RESALE",
       // Unpriced until Admin sets it — this is what puts it on Admin's queue.
+      // `selling_price` is the one that blocks a sale outright: until it's set
+      // the server answers 409 `product_not_priced`.
       cost_price: null,
+      selling_price: null,
+      category: null,
+      is_available: true,
     };
     db.products.push(created);
     saveDb(db);
@@ -4041,5 +4338,699 @@ export const mockClient: ApiClient = {
 
     saveDb(db);
     return delay(toPublicKitchenRequest(found));
+  },
+
+  // ---- Kitchen: finished goods, recipes, production ----
+
+  async listKitchenCatalogue(): Promise<KitchenCatalogueItem[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    return delay(
+      db.products
+        .filter((p) => p.restaurant_id === kitchen.restaurant_id && p.kind === "FINISHED_GOOD")
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku ?? null,
+          kind: "FINISHED_GOOD" as const,
+          has_recipe: db.kitchen_recipes.some(
+            (r) => String(r.product_id) === p.id && r.is_active,
+          ),
+        })),
+    );
+  },
+
+  async createKitchenProduct(body: CreateKitchenProductInput): Promise<KitchenCatalogueItem> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const name = body.name?.trim();
+    if (!name) throw new ApiError("Request validation failed", 422);
+
+    const product: MockProduct = {
+      id: `prod-${Date.now()}`,
+      restaurant_id: kitchen.restaurant_id,
+      name,
+      sku: body.sku?.trim() || null,
+      // No `kind` in the body — the kitchen makes finished goods and nothing
+      // else. That is the endpoint's whole reason to exist separately.
+      kind: "FINISHED_GOOD",
+      is_sellable: true,
+      cost_price: null,
+      selling_price: null,
+      category: null,
+      is_available: true,
+    };
+
+    db.products.push(product);
+    saveDb(db);
+    return delay({
+      id: product.id,
+      name: product.name,
+      sku: product.sku ?? null,
+      kind: "FINISHED_GOOD",
+      has_recipe: false,
+    });
+  },
+
+  async listKitchenRecipes(): Promise<KitchenRecipe[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    return delay(db.kitchen_recipes.filter((r) => r.kitchen_id === kitchen.id));
+  },
+
+  async getKitchenRecipe(id: string): Promise<KitchenRecipe> {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = db.kitchen_recipes.find((r) => r.id === id && r.kitchen_id === kitchen.id);
+    if (!found) throw new ApiError("Recipe not found", 404);
+    return delay(found);
+  },
+
+  async createKitchenRecipe(body: CreateKitchenRecipeInput): Promise<KitchenRecipe> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const product = db.products.find((p) => p.id === String(body.product_id));
+    if (!product) throw new ApiError("Product not found", 404);
+    if (product.kind !== "FINISHED_GOOD") {
+      throw new ApiError(
+        "Only kitchen-made items can have a recipe.",
+        409,
+        POS_ERROR.PRODUCT_CANNOT_HAVE_RECIPE,
+      );
+    }
+    if (!body.components.length) throw new ApiError("A recipe needs components", 422);
+
+    for (const c of body.components) {
+      const component = db.products.find((p) => p.id === String(c.component_product_id));
+      if (!component) throw new ApiError("Component not found", 404);
+      // A burger made of burgers. The server refuses; so does the mock, or the
+      // UI's guard is untested.
+      if (component.kind === "FINISHED_GOOD") {
+        throw new ApiError(
+          "A recipe's components must be raw materials or resale items.",
+          409,
+          POS_ERROR.NESTED_RECIPE_UNSUPPORTED,
+        );
+      }
+    }
+
+    // Versioned, not edited: the previous active recipe for this product is
+    // superseded rather than mutated, so a run already made keeps its history.
+    const previous = db.kitchen_recipes.filter(
+      (r) => String(r.product_id) === product.id && r.kitchen_id === kitchen.id,
+    );
+    for (const r of previous) r.is_active = false;
+
+    const recipe: MockRecipe = {
+      id: `rec-${Date.now()}`,
+      restaurant_id: kitchen.restaurant_id,
+      kitchen_id: kitchen.id,
+      product_id: Number(product.id.replace(/\D/g, "")) || 0,
+      product_name: product.name,
+      version: previous.length + 1,
+      is_active: true,
+      yield_qty: body.yield_qty ?? 1,
+      note: body.note ?? null,
+      components: body.components.map((c) => {
+        const cp = db.products.find((p) => p.id === String(c.component_product_id));
+        return {
+          component_product_id: c.component_product_id,
+          component_name: cp?.name,
+          quantity: c.quantity,
+          wastage_bp: c.wastage_bp ?? 0,
+        };
+      }),
+      created_at: now(),
+    };
+
+    db.kitchen_recipes.push(recipe);
+    saveDb(db);
+    return delay(recipe);
+  },
+
+  async listKitchenProduction(): Promise<ProductionRun[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    return delay(
+      db.production_runs
+        .filter((r) => r.location_type === "KITCHEN" && r.location_id === kitchen.id)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    );
+  },
+
+  async getKitchenProductionRun(id: string): Promise<ProductionRun> {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = db.production_runs.find(
+      (r) => r.id === id && r.location_type === "KITCHEN" && r.location_id === kitchen.id,
+    );
+    if (!found) throw new ApiError("Production run not found", 404);
+    return delay(found);
+  },
+
+  async produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const product = db.products.find((p) => p.id === String(body.product_id));
+    if (!product) throw new ApiError("Product not found", 404);
+    if (product.kind !== "FINISHED_GOOD") {
+      throw new ApiError("Only kitchen-made items can be produced.", 409, POS_ERROR.NOT_A_FINISHED_GOOD);
+    }
+
+    const recipe = db.kitchen_recipes.find(
+      (r) => String(r.product_id) === product.id.replace(/\D/g, "") && r.is_active,
+    ) ?? db.kitchen_recipes.find((r) => r.product_name === product.name && r.is_active);
+    if (!recipe) {
+      throw new ApiError("This item has no recipe yet.", 409, POS_ERROR.NO_ACTIVE_RECIPE);
+    }
+
+    const batches = Math.ceil(body.quantity / (recipe.yield_qty || 1));
+
+    // Check every component BEFORE moving any of it. Components are consumed
+    // before the output is credited, so a shortfall can never mint stock.
+    for (const c of recipe.components) {
+      const needed = c.quantity * batches;
+      const onHand = db.inventory
+        .filter(
+          (i) =>
+            i.location_type === "KITCHEN" &&
+            i.location_id === kitchen.id &&
+            i.product_id === String(c.component_product_id),
+        )
+        .reduce((sum, i) => sum + i.quantity, 0);
+      if (onHand < needed) {
+        throw new ApiError(
+          `Not enough ${c.component_name ?? "stock"} — ${onHand} on hand, ${needed} needed.`,
+          409,
+          "insufficient_stock",
+        );
+      }
+    }
+
+    for (const c of recipe.components) {
+      let remaining = c.quantity * batches;
+      for (const item of db.inventory) {
+        if (remaining <= 0) break;
+        if (
+          item.location_type !== "KITCHEN" ||
+          item.location_id !== kitchen.id ||
+          item.product_id !== String(c.component_product_id)
+        ) {
+          continue;
+        }
+        const take = Math.min(item.quantity, remaining);
+        item.quantity -= take;
+        remaining -= take;
+      }
+    }
+
+    const existing = db.inventory.find(
+      (i) =>
+        i.location_type === "KITCHEN" &&
+        i.location_id === kitchen.id &&
+        i.product_id === product.id &&
+        (i.batch_code || "") === (body.batch_code || ""),
+    );
+    if (existing) {
+      existing.quantity += body.quantity;
+    } else {
+      db.inventory.push({
+        id: `inv-${Date.now()}-${product.id}`,
+        restaurant_id: kitchen.restaurant_id,
+        product_id: product.id,
+        product: { id: product.id, name: product.name, sku: product.sku ?? null },
+        quantity: body.quantity,
+        batch_code: body.batch_code || "",
+        expiry_date: null,
+        location_type: "KITCHEN",
+        location_id: kitchen.id,
+      });
+    }
+
+    const run: MockProductionRun = {
+      id: `kprod-${Date.now()}`,
+      restaurant_id: kitchen.restaurant_id,
+      location_type: "KITCHEN",
+      location_id: kitchen.id,
+      // Set, unlike a branch run — a recipe decided these lines.
+      recipe_id: recipe.id,
+      lines: [
+        ...recipe.components.map((c, i) => ({
+          id: `kline-${Date.now()}-i${i}`,
+          product_id: String(c.component_product_id),
+          product_name: c.component_name,
+          role: "INPUT" as const,
+          quantity: c.quantity * batches,
+        })),
+        {
+          id: `kline-${Date.now()}-out`,
+          product_id: product.id,
+          product_name: product.name,
+          role: "OUTPUT" as const,
+          quantity: body.quantity,
+        },
+      ],
+      note: body.note ?? null,
+      created_at: now(),
+      created_by_id: String(me.id),
+    };
+
+    db.production_runs.push(run);
+    saveDb(db);
+    return delay(run);
+  },
+
+  // ---- Branch (Phase 5) ----
+
+  async listBranchStaff(): Promise<BranchStaff[]> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    return delay(
+      db.employees
+        .filter((e) => e.branch_id === branch.id && e.role === "BRANCH_STAFF")
+        .map((e) => ({
+          id: e.id,
+          email: e.email,
+          full_name: e.full_name ?? null,
+          position: (e.position as BranchPosition | undefined) ?? null,
+          is_active: e.is_active,
+          branch_id: branch.id,
+          created_at: e.created_at,
+        })),
+    );
+  },
+
+  async createBranchStaff(body: CreateBranchStaffInput): Promise<CreateBranchStaffResult> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    if (db.users.some((u) => u.email.toLowerCase() === body.email.toLowerCase())) {
+      throw new ApiError("A user with this email already exists", 409);
+    }
+
+    const password = randomPassword();
+    const id = `emp-${Date.now()}`;
+
+    db.employees.push({
+      id,
+      restaurant_id: branch.restaurant_id,
+      email: body.email,
+      full_name: body.full_name ?? "",
+      role: "BRANCH_STAFF",
+      is_active: true,
+      branch_id: branch.id,
+      position: body.position,
+      created_at: now(),
+    } as MockEmployee);
+
+    // A staff member who can't sign in isn't staff. The mock mints a working
+    // account for the same reason the live server does.
+    db.users.push({
+      email: body.email,
+      password,
+      me: {
+        id: Date.now(),
+        email: body.email,
+        full_name: body.full_name ?? null,
+        role: "BRANCH_STAFF",
+        restaurant_id: 1,
+        created_by_id: me.id,
+        is_active: true,
+      },
+    });
+
+    saveDb(db);
+    return delay({
+      user_id: id,
+      email: body.email,
+      position: body.position,
+      temporary_password: password,
+      credential_email_sent: false,
+    });
+  },
+
+  async listBranchCustomers(filters?: BranchCustomerFilters): Promise<Paginated<BranchCustomer>> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    // Strictly equal, no `OR IS NULL`. A customer with no branch is not "mine".
+    let rows = db.customers.filter((c) => c.branch_id === branch.id && c.deleted_at === null);
+
+    const search = filters?.search?.trim().toLowerCase();
+    if (search) {
+      rows = rows.filter(
+        (c) =>
+          c.name.toLowerCase().includes(search) ||
+          (c.phone ?? "").replace(/\s/g, "").includes(search.replace(/\s/g, "")),
+      );
+    }
+
+    const page = filters?.page ?? 1;
+    const pageSize = filters?.page_size ?? 50;
+    const start = (page - 1) * pageSize;
+
+    return delay({
+      items: rows.slice(start, start + pageSize).map(toPublicCustomer),
+      page,
+      page_size: pageSize,
+      total: rows.length,
+    });
+  },
+
+  async getBranchCustomer(id: string): Promise<BranchCustomer> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    return delay(toPublicCustomer(findMyCustomer(db, branch.id, id)));
+  },
+
+  async createBranchCustomer(body: CreateBranchCustomerInput): Promise<BranchCustomer> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const customer: MockCustomer = {
+      id: `cust-${Date.now()}`,
+      restaurant_id: branch.restaurant_id,
+      // From the token's branch, never from the body — the input type has no
+      // `branch_id` field at all, so there is nothing here to trust.
+      branch_id: branch.id,
+      name: body.name,
+      phone: body.phone?.trim() || null,
+      created_at: now(),
+      deleted_at: null,
+    };
+
+    db.customers.push(customer);
+    saveDb(db);
+    return delay(toPublicCustomer(customer));
+  },
+
+  async updateBranchCustomer(
+    id: string,
+    body: UpdateBranchCustomerInput,
+  ): Promise<BranchCustomer> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const found = findMyCustomer(db, branch.id, id);
+
+    if (body.name !== undefined) found.name = body.name;
+    if (body.phone !== undefined) found.phone = body.phone?.trim() || null;
+
+    saveDb(db);
+    return delay(toPublicCustomer(found));
+  },
+
+  async deleteBranchCustomer(id: string): Promise<void> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const found = findMyCustomer(db, branch.id, id);
+
+    // Soft. Past orders keep pointing at this row; it just stops being
+    // attachable to a new one.
+    found.deleted_at = now();
+    saveDb(db);
+    return delay(undefined);
+  },
+
+  async listBranchOrders(filters?: BranchOrderFilters): Promise<Paginated<BranchOrder>> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const rows = db.branch_orders
+      .filter((o) => o.branch_id === branch.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    const page = filters?.page ?? 1;
+    const pageSize = filters?.page_size ?? 50;
+    const start = (page - 1) * pageSize;
+
+    return delay({
+      items: rows.slice(start, start + pageSize),
+      page,
+      page_size: pageSize,
+      total: rows.length,
+    });
+  },
+
+  async createBranchOrder(body: CreateBranchOrderInput): Promise<BranchOrder> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    if (!body.lines.length) throw new ApiError("An order needs at least one line", 422);
+
+    // Another branch's customer is a 404, not a 403 — the same rule as
+    // `findMyCustomer`, and the leak the live server closed in Phase 5.
+    if (body.customer_id) findMyCustomer(db, branch.id, body.customer_id);
+
+    const mismatches: Array<Record<string, string>> = [];
+    const lines = body.lines.map((line, i) => {
+      const product = db.products.find((p) => p.id === line.product_id);
+      if (!product) throw new ApiError("Product not found", 404);
+
+      // The server prices. `selling_price` isn't on the mock's product shape
+      // yet (it arrives with the Admin pricing delta), so cost_price stands in
+      // as the authoritative number here — the *contract* being exercised is
+      // "the client's proposal is checked and may be rejected", which is what
+      // the UI has to get right.
+      const serverPrice = product.cost_price ?? "0.00";
+
+      if (line.unit_price && line.unit_price !== serverPrice) {
+        mismatches.push({
+          product_id: product.id,
+          product_name: product.name,
+          proposed_unit_price: line.unit_price,
+          server_unit_price: serverPrice,
+        });
+      }
+
+      const total = (parseFloat(serverPrice) * line.quantity).toFixed(2);
+      return {
+        id: `bol-${Date.now()}-${i}`,
+        product_id: product.id,
+        product_name: product.name,
+        quantity: line.quantity,
+        unit_price: serverPrice,
+        line_total: total,
+      };
+    });
+
+    // One 409 listing EVERY mismatched line — a stale client has a stale
+    // snapshot, plural, and round-tripping it line by line is miserable.
+    if (mismatches.length) {
+      throw new ApiError("Prices have changed", 409, "price_mismatch", { lines: mismatches });
+    }
+
+    const order: MockBranchOrder = {
+      id: `bord-${Date.now()}`,
+      restaurant_id: branch.restaurant_id,
+      branch_id: branch.id,
+      customer_id: body.customer_id ?? null,
+      customer_name: body.customer_id
+        ? (db.customers.find((c) => c.id === body.customer_id)?.name ?? null)
+        : null,
+      lines,
+      total: lines.reduce((sum, l) => sum + parseFloat(l.line_total), 0).toFixed(2),
+      note: body.note ?? null,
+      created_at: now(),
+    };
+
+    db.branch_orders.push(order);
+    saveDb(db);
+    return delay(order);
+  },
+
+  async listBranchInventory(): Promise<BranchInventoryItem[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    return delay(
+      db.inventory
+        .filter((i) => i.location_type === "BRANCH" && i.location_id === branch.id)
+        .map((i) => ({
+          id: i.id,
+          product_id: i.product_id,
+          product_name: i.product.name,
+          sku: i.product.sku ?? null,
+          quantity: i.quantity,
+          batch_code: i.batch_code ?? "",
+          expiry_date: i.expiry_date ?? null,
+          location_id: i.location_id,
+          // No cost_price. Structurally absent, not nulled — the branch has no
+          // business seeing it and `pricing-leak.test.ts` guards the type.
+        })),
+    );
+  },
+
+  async listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const rows = db.production_runs
+      .filter((r) => r.location_type === "BRANCH" && r.location_id === branch.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    const page = filters?.page ?? 1;
+    const pageSize = filters?.page_size ?? 50;
+    const start = (page - 1) * pageSize;
+
+    return delay({
+      items: rows.slice(start, start + pageSize),
+      page,
+      page_size: pageSize,
+      total: rows.length,
+    });
+  },
+
+  async getProductionRun(id: string): Promise<ProductionRun> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const found = db.production_runs.find(
+      (r) => r.id === id && r.location_type === "BRANCH" && r.location_id === branch.id,
+    );
+    if (!found) throw new ApiError("Production run not found", 404);
+    return delay(found);
+  },
+
+  async createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const inputs = body.lines.filter((l) => l.role === "INPUT");
+    const outputs = body.lines.filter((l) => l.role === "OUTPUT");
+    if (!inputs.length || !outputs.length) {
+      throw new ApiError(
+        "A production run needs at least one input and one output.",
+        409,
+        INVALID_PRODUCTION_RUN,
+      );
+    }
+
+    // All-or-nothing: check every input has stock BEFORE moving any of it,
+    // otherwise a half-applied run leaves the branch's stock lying about what
+    // happened.
+    for (const line of inputs) {
+      const onHand = db.inventory
+        .filter(
+          (i) =>
+            i.location_type === "BRANCH" &&
+            i.location_id === branch.id &&
+            i.product_id === line.product_id,
+        )
+        .reduce((sum, i) => sum + i.quantity, 0);
+      if (onHand < line.quantity) {
+        const product = db.products.find((p) => p.id === line.product_id);
+        throw new ApiError(
+          `Not enough ${product?.name ?? "stock"} — ${onHand} on hand, ${line.quantity} needed.`,
+          409,
+          "insufficient_stock",
+        );
+      }
+    }
+
+    for (const line of inputs) {
+      let remaining = line.quantity;
+      for (const item of db.inventory) {
+        if (remaining <= 0) break;
+        if (
+          item.location_type !== "BRANCH" ||
+          item.location_id !== branch.id ||
+          item.product_id !== line.product_id
+        ) {
+          continue;
+        }
+        const take = Math.min(item.quantity, remaining);
+        item.quantity -= take;
+        remaining -= take;
+      }
+    }
+
+    for (const line of outputs) {
+      const existing = db.inventory.find(
+        (i) =>
+          i.location_type === "BRANCH" &&
+          i.location_id === branch.id &&
+          i.product_id === line.product_id &&
+          !i.batch_code,
+      );
+      if (existing) {
+        existing.quantity += line.quantity;
+      } else {
+        const product = db.products.find((p) => p.id === line.product_id);
+        db.inventory.push({
+          id: `inv-${Date.now()}-${line.product_id}`,
+          restaurant_id: branch.restaurant_id,
+          product_id: line.product_id,
+          product: {
+            id: line.product_id,
+            name: product?.name ?? "Unknown",
+            sku: product?.sku ?? null,
+          },
+          quantity: line.quantity,
+          batch_code: "",
+          expiry_date: null,
+          location_type: "BRANCH",
+          location_id: branch.id,
+        });
+      }
+    }
+
+    const run: MockProductionRun = {
+      id: `prod-${Date.now()}`,
+      restaurant_id: branch.restaurant_id,
+      location_type: "BRANCH",
+      location_id: branch.id,
+      // A branch sub-kitchen run states its own inputs and outputs, so no
+      // recipe drove it. That is exactly what distinguishes it from a kitchen
+      // run in the shared ledger.
+      recipe_id: null,
+      lines: body.lines.map((l, i) => ({
+        id: `prodline-${Date.now()}-${i}`,
+        product_id: l.product_id,
+        product_name: db.products.find((p) => p.id === l.product_id)?.name,
+        role: l.role,
+        quantity: l.quantity,
+      })),
+      note: body.note ?? null,
+      created_at: now(),
+      created_by_id: String(me.id),
+    };
+
+    db.production_runs.push(run);
+    saveDb(db);
+    return delay(run);
   },
 };

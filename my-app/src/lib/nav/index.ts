@@ -17,6 +17,7 @@ const NAV_BY_ROLE: Record<UserRole, NavSection[]> = {
   // Same nav as the manager; `visibleNavItems` narrows it by action.
   SUB_CHEF: KITCHEN_NAV,
   BRANCH_MANAGER: BRANCH_NAV,
+  BRANCH_STAFF: BRANCH_NAV,
 };
 
 export function navForRole(role: UserRole): NavSection[] {

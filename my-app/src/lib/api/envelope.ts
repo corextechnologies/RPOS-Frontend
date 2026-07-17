@@ -9,7 +9,8 @@ interface ErrorEnvelope {
   error?: {
     code?: string;
     message?: string;
-    details?: unknown[];
+    /** Object, not array — the POS surface sends `{ lines: [...] }`-shaped bodies. */
+    details?: unknown;
   };
   detail?: string;
   message?: string;
@@ -29,5 +30,5 @@ export function parseApiError(json: unknown, status: number): ApiError {
     body.detail ??
     body.message ??
     "Request failed";
-  return new ApiError(message, status, body.error?.code);
+  return new ApiError(message, status, body.error?.code, body.error?.details);
 }

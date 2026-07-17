@@ -35,3 +35,6 @@ my-app/restaurant-os-frontend-implementation-plan.pdf
 /my-app/docs
 my-app/restaurant-os-frontend-implementation-plan (1).pdf
 package-lock.json
+.claude/
+.claude/launch.json
+.claude/history.json

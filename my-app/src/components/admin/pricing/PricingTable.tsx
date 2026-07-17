@@ -1,6 +1,7 @@
 "use client";
 
 import { Pencil } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ProductPricing } from "@/lib/types/admin";
+import type { ProductKind, ProductPricing } from "@/lib/types/admin";
 import { formatPlanAmount } from "@/lib/types/super-admin";
 
 interface PricingTableProps {
@@ -25,6 +26,20 @@ interface PricingTableProps {
   onEdit: (product: ProductPricing) => void;
   emptyTitle?: string;
   emptyDescription?: string;
+}
+
+const KIND_LABEL: Record<ProductKind, string> = {
+  RAW_MATERIAL: "raw",
+  FINISHED_GOOD: "made",
+  RESALE: "resale",
+};
+
+function KindBadge({ kind }: { kind: ProductKind }) {
+  return (
+    <Badge variant={kind === "RAW_MATERIAL" ? "outline" : "secondary"} className="shrink-0">
+      {KIND_LABEL[kind] ?? kind.toLowerCase()}
+    </Badge>
+  );
 }
 
 export function PricingTable({
@@ -76,7 +91,8 @@ export function PricingTable({
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>SKU</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Selling price</TableHead>
               <TableHead>Cost price</TableHead>
               {canEdit && <TableHead className="w-12" />}
             </TableRow>
@@ -85,10 +101,39 @@ export function PricingTable({
             {items.map((product) => (
               <TableRow key={product.id}>
                 <TableCell>
-                  <p className="font-medium text-content">{product.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-content">{product.name}</p>
+                    {/* Unavailable is a catalogue-wide switch, distinct from
+                        a branch 86-ing something for the night. */}
+                    <KindBadge kind={product.kind} />
+                    {product.is_sellable && !product.is_available && (
+                      <Badge variant="outline">Unavailable</Badge>
+                    )}
+                  </div>
+                  {product.sku && (
+                    <p className="font-mono text-xs text-faint">{product.sku}</p>
+                  )}
                 </TableCell>
-                <TableCell className="text-muted">{product.sku || "—"}</TableCell>
-                <TableCell className="text-muted">
+                <TableCell className="text-muted">{product.category || "—"}</TableCell>
+                <TableCell>
+                  {/*
+                    A raw material is not "unpriced" — it is unsellable. Showing
+                    "Not priced" here would imply someone forgot, and send an
+                    admin hunting for a field that does not exist for flour.
+                  */}
+                  {!product.is_sellable ? (
+                    <span className="text-faint">—</span>
+                  ) : product.selling_price == null ? (
+                    // Not cosmetic: an unpriced sellable product can't be sold
+                    // at all — the server answers 409 `product_not_priced`.
+                    <Badge variant="warning">Not priced</Badge>
+                  ) : (
+                    <span className="tabular-nums text-content">
+                      {formatPlanAmount(product.selling_price)}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="tabular-nums text-muted">
                   {product.cost_price == null ? "—" : formatPlanAmount(product.cost_price)}
                 </TableCell>
                 {canEdit && (
@@ -97,7 +142,7 @@ export function PricingTable({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      aria-label={`Edit cost for ${product.name}`}
+                      aria-label={`Edit pricing for ${product.name}`}
                       onClick={() => onEdit(product)}
                     >
                       <Pencil className="h-4 w-4" />

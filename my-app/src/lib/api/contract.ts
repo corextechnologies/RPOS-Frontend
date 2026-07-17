@@ -45,11 +45,17 @@ import type {
   WarehouseStaff,
   WasteStockInput,
   WarehouseProduct,
+  WarehouseProductFilters,
   CreateWarehouseProductInput,
   ReorderLevel,
   UpdateReorderLevelInput,
 } from "@/lib/types/warehouse";
 import type {
+  CreateKitchenProductInput,
+  CreateKitchenRecipeInput,
+  KitchenCatalogueItem,
+  KitchenProduceInput,
+  KitchenRecipe,
   CreateKitchenCountInput,
   CreateKitchenStaffInput,
   CreateKitchenStaffResult,
@@ -71,6 +77,22 @@ import type {
   AppNotification,
   NotificationFilters,
 } from "@/lib/types/notification";
+import type {
+  BranchCustomer,
+  BranchCustomerFilters,
+  BranchStaff,
+  CreateBranchStaffInput,
+  CreateBranchStaffResult,
+  BranchInventoryItem,
+  BranchOrder,
+  BranchOrderFilters,
+  CreateBranchCustomerInput,
+  CreateBranchOrderInput,
+  CreateProductionRunInput,
+  ProductionRun,
+  ProductionRunFilters,
+  UpdateBranchCustomerInput,
+} from "@/lib/types/branch";
 import type {
   BillingSummary,
   ChangePasswordInput,
@@ -175,7 +197,7 @@ export interface ApiClient {
 
   // Warehouse (Phase 3) — auto-scoped to the caller's warehouse.
   listWarehouseInventory(): Promise<InventoryItem[]>;
-  listWarehouseProducts(): Promise<WarehouseProduct[]>;
+  listWarehouseProducts(filters?: WarehouseProductFilters): Promise<WarehouseProduct[]>;
   createWarehouseProduct(
     body: CreateWarehouseProductInput,
   ): Promise<WarehouseProduct>;
@@ -238,9 +260,42 @@ export interface ApiClient {
   listKitchenBranchRequests(
     filters?: KitchenRequestFilters,
   ): Promise<Paginated<KitchenRequest>>;
+  // Finished goods, recipes & production. Recipes moved here from Admin when
+  // products gained a `kind`: a recipe describes what the KITCHEN does with the
+  // components the kitchen holds, and under Admin there was no catalogue to
+  // attach it to.
+  listKitchenCatalogue(): Promise<KitchenCatalogueItem[]>;
+  createKitchenProduct(body: CreateKitchenProductInput): Promise<KitchenCatalogueItem>;
+  listKitchenRecipes(): Promise<KitchenRecipe[]>;
+  getKitchenRecipe(id: string): Promise<KitchenRecipe>;
+  createKitchenRecipe(body: CreateKitchenRecipeInput): Promise<KitchenRecipe>;
+  listKitchenProduction(): Promise<ProductionRun[]>;
+  getKitchenProductionRun(id: string): Promise<ProductionRun>;
+  produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun>;
+
   getKitchenRequest(requestId: string): Promise<KitchenRequest>;
   updateKitchenRequestStatus(
     requestId: string,
     body: UpdateKitchenRequestStatusInput,
   ): Promise<KitchenRequest>;
+
+  // Branch (Phase 5) — auto-scoped to the caller's branch.
+  //
+  // Note the POS (`/v1/pos`) is deliberately NOT on this contract: it needs a
+  // device-bound token, server-authoritative tax packs and idempotent replay,
+  // which are precisely the things a mock would get wrong. It lives in
+  // `pos.api.ts` and talks to the live backend only.
+  listBranchStaff(): Promise<BranchStaff[]>;
+  createBranchStaff(body: CreateBranchStaffInput): Promise<CreateBranchStaffResult>;
+  listBranchCustomers(filters?: BranchCustomerFilters): Promise<Paginated<BranchCustomer>>;
+  getBranchCustomer(id: string): Promise<BranchCustomer>;
+  createBranchCustomer(body: CreateBranchCustomerInput): Promise<BranchCustomer>;
+  updateBranchCustomer(id: string, body: UpdateBranchCustomerInput): Promise<BranchCustomer>;
+  deleteBranchCustomer(id: string): Promise<void>;
+  listBranchOrders(filters?: BranchOrderFilters): Promise<Paginated<BranchOrder>>;
+  createBranchOrder(body: CreateBranchOrderInput): Promise<BranchOrder>;
+  listBranchInventory(): Promise<BranchInventoryItem[]>;
+  listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
+  getProductionRun(id: string): Promise<ProductionRun>;
+  createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun>;
 }

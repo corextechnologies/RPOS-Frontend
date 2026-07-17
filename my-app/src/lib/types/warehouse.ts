@@ -1,5 +1,6 @@
 import { ApiError } from "@/lib/types/super-admin";
 import type { WasteReason } from "@/lib/stock/waste-reason";
+import type { ProductKind } from "@/lib/types/admin";
 
 // Warehouse (Phase 3) DTOs — mirrors the /v1/warehouse/* backend contract.
 //
@@ -88,7 +89,17 @@ export interface WarehouseProduct {
   id: string;
   name: string;
   sku?: string | null;
+  /** Only ever `RAW_MATERIAL` or `RESALE` here — the warehouse buys, it doesn't cook. */
+  kind?: WarehouseProductKind;
 }
+
+/**
+ * The two kinds a warehouse may create.
+ *
+ * `FINISHED_GOOD` is deliberately absent: the kitchen makes those, and sending
+ * one here is a 422. Narrowing the type means the form cannot offer it.
+ */
+export type WarehouseProductKind = Extract<ProductKind, "RAW_MATERIAL" | "RESALE">;
 
 /** Body for `POST /warehouse/products`. */
 export interface CreateWarehouseProductInput {
@@ -96,6 +107,12 @@ export interface CreateWarehouseProductInput {
   name: string;
   /** Up to 100 characters, unique per restaurant. */
   sku?: string;
+  /** Defaults to `RAW_MATERIAL` server-side when omitted. */
+  kind?: WarehouseProductKind;
+}
+
+export interface WarehouseProductFilters {
+  kind?: WarehouseProductKind;
 }
 
 /** Body for `PUT /warehouse/products/{product_id}/reorder-level`. */

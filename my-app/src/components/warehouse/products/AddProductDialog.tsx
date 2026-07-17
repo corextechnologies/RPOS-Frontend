@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   createWarehouseProductDefaults,
   createWarehouseProductSchema,
@@ -40,6 +41,19 @@ interface AddProductDialogProps {
  * There is deliberately no cost field: the response has no `cost_price` at all,
  * and procurement cost is Admin-only.
  */
+const KINDS = [
+  {
+    value: "RAW_MATERIAL" as const,
+    label: "Raw material",
+    hint: "Bought and consumed — flour, patties. Never sold on its own.",
+  },
+  {
+    value: "RESALE" as const,
+    label: "For resale",
+    hint: "Bought and sold untouched — bottled drinks.",
+  },
+];
+
 export function AddProductDialog({
   open,
   onOpenChange,
@@ -77,6 +91,41 @@ export function AddProductDialog({
                   <FormControl>
                     <Input placeholder="Flour" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="kind"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>What is it?</FormLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {KINDS.map((k) => (
+                      <button
+                        key={k.value}
+                        type="button"
+                        onClick={() => field.onChange(k.value)}
+                        className={cn(
+                          "rounded-xl border p-3 text-left transition",
+                          field.value === k.value
+                            ? "border-brand bg-brand/10"
+                            : "border-line bg-surface hover:border-brand/50",
+                        )}
+                      >
+                        <span className="text-sm font-medium text-content">{k.label}</span>
+                        <span className="mt-0.5 block text-xs text-faint">{k.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {/* The kitchen makes finished goods, so there is no third
+                      option here — offering one would imply the warehouse could
+                      create a burger. */}
+                  <p className="text-xs text-muted">
+                    Things the kitchen makes are added by the kitchen, not here.
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

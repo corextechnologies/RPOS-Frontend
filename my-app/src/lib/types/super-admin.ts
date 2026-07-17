@@ -7,6 +7,12 @@ export type RestaurantStatus = "ACTIVE" | "HALTED";
  * SUB_CHEF shares the Kitchen portal with KITCHEN_MANAGER rather than having one
  * of its own: the screens are identical, the manager-only actions are gated by
  * AuthAction. It is the first role that is not 1:1 with a portal.
+ *
+ * BRANCH_STAFF shares /branch with BRANCH_MANAGER on exactly that precedent.
+ * Note the axis differs by surface: the branch portal gates on role, because
+ * `/auth/me` returns role and nothing finer. The POS gates on the capability
+ * list from `/pos/session/bootstrap`, which already folds in position and
+ * device profile. Do not gate POS UI on role — see `@/lib/pos/capabilities`.
  */
 export type UserRole =
   | "SUPER_ADMIN"
@@ -14,7 +20,16 @@ export type UserRole =
   | "WAREHOUSE_MANAGER"
   | "KITCHEN_MANAGER"
   | "SUB_CHEF"
-  | "BRANCH_MANAGER";
+  | "BRANCH_MANAGER"
+  | "BRANCH_STAFF";
+
+/**
+ * The org label stored against a BRANCH_STAFF user. Read-only here: the server
+ * resolves it into capabilities and the client consumes those instead, so this
+ * exists to *explain* a permission ("your position cannot take cash"), never to
+ * decide one.
+ */
+export type BranchPosition = "CASHIER" | "SALESPERSON" | "ORDER_TAKER";
 
 export interface RestaurantAdmin {
   id?: string;
@@ -198,6 +213,16 @@ export class ApiError extends Error {
     message: string,
     public status: number = 400,
     public code?: string,
+    /**
+     * The server's structured explanation. `parseApiError` already read this
+     * off the envelope and dropped it, which made the POS's mandated
+     * "409 with the server's breakdown" contract impossible to render — a
+     * `price_mismatch` listing five lines is a dialog, not a toast.
+     *
+     * Shape varies by `code`; narrow with the `is*Details` guards in
+     * `@/lib/api/errors` rather than casting at the call site.
+     */
+    public details?: unknown,
   ) {
     super(message);
     this.name = "ApiError";

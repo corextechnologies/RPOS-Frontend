@@ -325,3 +325,100 @@ export function isNoSuchStock(error: unknown): boolean {
 export function isStaleStatus(error: unknown): boolean {
   return error instanceof ApiError && error.code === KITCHEN_STALE_STATUS;
 }
+
+// ---- Finished goods, recipes & production (kitchen-owned) ----
+
+/**
+ * The unit a component is stocked in.
+ *
+ * Recipe quantities are whole numbers of these — "30g of sauce" is `30`,
+ * because sauce is stocked in grams. Same trick as money in minor units: one
+ * mental model, no fractional stock, nothing to round.
+ */
+export type StockUnit = "EACH" | "GRAM" | "ML";
+
+/**
+ * The kitchen's own catalogue.
+ *
+ * **Takes no `kind`** — everything created here is a `FINISHED_GOOD` by
+ * construction. That is the point of the endpoint: the kitchen makes things,
+ * the warehouse buys them, and a burger created by the warehouse was the bug.
+ */
+export interface CreateKitchenProductInput {
+  name: string;
+  sku?: string;
+}
+
+/**
+ * An item in the kitchen's own catalogue.
+ *
+ * Distinct from `KitchenProduct` above, which is a product as it appears in
+ * kitchen *inventory* — anything the kitchen holds, including the warehouse's
+ * raw materials. This is the narrower thing: what the kitchen itself *makes*.
+ */
+export interface KitchenCatalogueItem {
+  id: string;
+  name: string;
+  sku: string | null;
+  /** Always FINISHED_GOOD here — the endpoint makes nothing else. */
+  kind?: "FINISHED_GOOD";
+  /** False means it's on the catalogue but the kitchen can't yet produce it. */
+  has_recipe?: boolean;
+  stock_unit?: StockUnit;
+}
+
+export interface RecipeComponentInput {
+  component_product_id: number;
+  /** Whole units of the component's `stock_unit`. */
+  quantity: number;
+  /** Basis points of expected loss. 250 = 2.5%. */
+  wastage_bp?: number;
+}
+
+/**
+ * Recipes are **versioned, not edited**. Re-publishing the same product
+ * supersedes: v1 becomes v2 and the old one deactivates. There is no PATCH, so
+ * there is nothing in this app that edits one — a recipe that changed under a
+ * production run already made would rewrite history.
+ */
+export interface CreateKitchenRecipeInput {
+  product_id: number;
+  yield_qty?: number;
+  note?: string | null;
+  components: RecipeComponentInput[];
+}
+
+export interface KitchenRecipeComponent {
+  component_product_id: number;
+  /** Included by the server, so no second lookup to render a recipe. */
+  component_name?: string;
+  quantity: number;
+  wastage_bp: number;
+  stock_unit?: StockUnit;
+}
+
+export interface KitchenRecipe {
+  id: string;
+  product_id: number;
+  product_name?: string;
+  version: number;
+  is_active: boolean;
+  yield_qty: number;
+  note?: string | null;
+  components: KitchenRecipeComponent[];
+  created_at?: string;
+}
+
+/**
+ * Making things. Consumes the recipe's components from KITCHEN stock and
+ * credits the finished goods back to it.
+ *
+ * Components are consumed before the output is credited, so a shortfall can
+ * never mint stock from nothing.
+ */
+export interface KitchenProduceInput {
+  product_id: number;
+  quantity: number;
+  batch_code?: string | null;
+  note?: string | null;
+}

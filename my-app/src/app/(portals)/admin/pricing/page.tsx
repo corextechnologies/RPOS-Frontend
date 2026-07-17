@@ -14,10 +14,9 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 import { useProductPricing, useUpdateProductPricing } from "@/lib/hooks/use-pricing";
-import type { UpdatePricingForm } from "@/lib/schemas/pricing";
-import type { ProductPricing } from "@/lib/types/admin";
+import type { ProductPricing, UpdateProductPricingInput } from "@/lib/types/admin";
 
-type PricingView = "all" | "unpriced";
+type PricingView = "all" | "unpriced" | "sellable" | "raw";
 
 export default function AdminPricingPage() {
   const { can } = useAuth();
@@ -26,9 +25,13 @@ export default function AdminPricingPage() {
   const [editing, setEditing] = useState<ProductPricing | null>(null);
 
   const all = useProductPricing();
-  // Kept mounted in both views so the queue count stays visible from "All products".
-  const unpriced = useProductPricing(true);
-  const active = view === "unpriced" ? unpriced : all;
+  // Kept mounted in every view so the queue count stays visible from "All products".
+  const unpriced = useProductPricing({ unpriced: true });
+  const sellable = useProductPricing({ sellable_only: true });
+  const raw = useProductPricing({ kind: "RAW_MATERIAL" });
+
+  const active =
+    view === "unpriced" ? unpriced : view === "sellable" ? sellable : view === "raw" ? raw : all;
 
   const updatePricing = useUpdateProductPricing();
 
@@ -45,12 +48,11 @@ export default function AdminPricingPage() {
 
   const unpricedCount = unpriced.data?.length ?? 0;
 
-  const handleSave = async (values: UpdatePricingForm) => {
+  const handleSave = async (patch: UpdateProductPricingInput) => {
     if (!editing) return;
-    await updatePricing.mutateAsync({
-      productId: editing.id,
-      body: { cost_price: values.cost_price },
-    });
+    // The dialog already narrowed this to dirty fields only — passing it
+    // through unchanged is what preserves "absent leaves, null clears".
+    await updatePricing.mutateAsync({ productId: editing.id, body: patch });
     setEditing(null);
   };
 
@@ -61,7 +63,7 @@ export default function AdminPricingPage() {
           Pricing
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Admin-only product cost prices for your restaurant.
+          Cost applies to everything. Sell price only to what can actually be sold.
         </p>
       </div>
 
@@ -73,6 +75,9 @@ export default function AdminPricingPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All products</SelectItem>
+              {/* The buy/sell split the kinds exist to make possible. */}
+              <SelectItem value="sellable">What we sell</SelectItem>
+              <SelectItem value="raw">What we buy</SelectItem>
               <SelectItem value="unpriced">Needs pricing</SelectItem>
             </SelectContent>
           </Select>
@@ -99,8 +104,10 @@ export default function AdminPricingPage() {
         emptyTitle={view === "unpriced" ? "Nothing waiting" : "No products yet"}
         emptyDescription={
           view === "unpriced"
-            ? "Every product has a price."
-            : "Products will appear here once they exist for your restaurant."
+            ? "Everything sellable has a price."
+            : view === "sellable"
+              ? "Nothing sellable yet. The kitchen creates made items; the warehouse creates resale ones."
+              : "Products will appear here once they exist for your restaurant."
         }
       />
 

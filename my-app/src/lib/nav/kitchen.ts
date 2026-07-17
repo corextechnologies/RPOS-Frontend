@@ -1,6 +1,7 @@
 import {
   Boxes,
   ClipboardCheck,
+  Factory,
   Inbox,
   LayoutDashboard,
   Settings,
@@ -8,6 +9,7 @@ import {
   TriangleAlert,
   Truck,
   Users,
+  Utensils,
   Warehouse,
 } from "lucide-react";
 import type { NavSection } from "./types";
@@ -26,6 +28,25 @@ export const KITCHEN_NAV: NavSection[] = [
         label: "Dashboard",
         href: "/kitchen/dashboard",
         icon: LayoutDashboard,
+        match: "exact",
+      },
+    ],
+  },
+  {
+    title: "Production",
+    items: [
+      {
+        label: "What we make",
+        href: "/kitchen/recipes",
+        icon: Utensils,
+        action: "kitchen-inventory:read",
+        match: "exact",
+      },
+      {
+        label: "Production",
+        href: "/kitchen/production",
+        icon: Factory,
+        action: "kitchen-inventory:read",
         match: "exact",
       },
     ],

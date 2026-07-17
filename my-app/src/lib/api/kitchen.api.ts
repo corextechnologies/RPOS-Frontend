@@ -17,6 +17,14 @@ import type {
   KitchenWasteInput,
   UpdateKitchenRequestStatusInput,
 } from "@/lib/types/kitchen";
+import type {
+  CreateKitchenProductInput,
+  CreateKitchenRecipeInput,
+  KitchenCatalogueItem,
+  KitchenProduceInput,
+  KitchenRecipe,
+} from "@/lib/types/kitchen";
+import type { ProductionRun } from "@/lib/types/branch";
 import { request, requestEnvelope } from "./client";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
@@ -319,4 +327,112 @@ export const kitchenApi = {
     );
     return normalizeKitchenRequest(data);
   },
+
+  // ---- Finished goods, recipes & production (Phase: product kinds) ----
+  //
+  // Recipes moved here from `/v1/pos/recipes` (Admin-owned), which is now
+  // removed. The move is the point, not a refactor: a recipe describes what the
+  // KITCHEN does with the components the kitchen holds. Under Admin it had no
+  // catalogue to attach to.
+
+  async listKitchenCatalogue(): Promise<KitchenCatalogueItem[]> {
+    const data = await request<KitchenCatalogueItem[]>("/kitchen/products");
+    return (data ?? []).map((p) => ({ ...p, id: String(p.id), sku: p.sku ?? null }));
+  },
+
+  /** Takes no `kind` — everything here is a FINISHED_GOOD by construction. */
+  async createKitchenProduct(body: CreateKitchenProductInput): Promise<KitchenCatalogueItem> {
+    const data = await request<KitchenCatalogueItem>("/kitchen/products", {
+      method: "POST",
+      body: JSON.stringify({ name: body.name.trim(), sku: optionalText(body.sku) }),
+    });
+    return { ...data, id: String(data.id), sku: data.sku ?? null };
+  },
+
+  async listKitchenRecipes(): Promise<KitchenRecipe[]> {
+    const data = await request<KitchenRecipe[]>("/kitchen/recipes");
+    return (data ?? []).map(normalizeRecipe);
+  },
+
+  async getKitchenRecipe(id: string): Promise<KitchenRecipe> {
+    return normalizeRecipe(await request<KitchenRecipe>(`/kitchen/recipes/${id}`));
+  },
+
+  /**
+   * Versioned, not edited. Posting the same `product_id` again supersedes the
+   * previous recipe (v1 -> v2) and deactivates it — there is no PATCH, so this
+   * is the only way to change one.
+   */
+  async createKitchenRecipe(body: CreateKitchenRecipeInput): Promise<KitchenRecipe> {
+    return normalizeRecipe(
+      await request<KitchenRecipe>("/kitchen/recipes", {
+        method: "POST",
+        body: JSON.stringify({
+          product_id: body.product_id,
+          yield_qty: body.yield_qty ?? 1,
+          note: optionalText(body.note ?? undefined) ?? null,
+          components: body.components.map((c) => ({
+            component_product_id: c.component_product_id,
+            quantity: c.quantity,
+            wastage_bp: c.wastage_bp ?? 0,
+          })),
+        }),
+      }),
+    );
+  },
+
+  async listKitchenProduction(): Promise<ProductionRun[]> {
+    const data = await request<ProductionRun[]>("/kitchen/production");
+    return (data ?? []).map(normalizeRun);
+  },
+
+  async getKitchenProductionRun(id: string): Promise<ProductionRun> {
+    return normalizeRun(await request<ProductionRun>(`/kitchen/production/${id}`));
+  },
+
+  /**
+   * Actually make something. Consumes the recipe's components from kitchen
+   * stock and credits the finished goods back to it — components first, so a
+   * shortfall can never mint stock from nothing.
+   */
+  async produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun> {
+    return normalizeRun(
+      await request<ProductionRun>("/kitchen/production", {
+        method: "POST",
+        body: JSON.stringify({
+          product_id: body.product_id,
+          quantity: body.quantity,
+          batch_code: optionalText(body.batch_code ?? undefined) ?? null,
+          note: optionalText(body.note ?? undefined) ?? null,
+        }),
+      }),
+    );
+  },
 };
+
+function normalizeRecipe(r: KitchenRecipe): KitchenRecipe {
+  return {
+    ...r,
+    id: String(r.id),
+    components: (r.components ?? []).map((c) => ({
+      ...c,
+      quantity: Number(c.quantity),
+      wastage_bp: Number(c.wastage_bp ?? 0),
+    })),
+  };
+}
+
+function normalizeRun(r: ProductionRun): ProductionRun {
+  return {
+    ...r,
+    id: String(r.id),
+    location_id: String(r.location_id),
+    recipe_id: r.recipe_id == null ? null : String(r.recipe_id),
+    lines: (r.lines ?? []).map((l) => ({
+      ...l,
+      id: String(l.id),
+      product_id: String(l.product_id),
+      quantity: Number(l.quantity),
+    })),
+  };
+}

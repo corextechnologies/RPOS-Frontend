@@ -25,6 +25,15 @@ export type AuthAction =
   | "sales:read"
   | "sales:create"
   | "overview:read"
+  // POS back-office (Admin). The till reads these and cannot change them.
+  | "devices:read"
+  | "devices:create"
+  | "menu:read"
+  | "menu:publish"
+  | "discounts:read"
+  | "discounts:create"
+  | "recipes:read"
+  | "recipes:create"
   // Warehouse (Phase 3)
   | "inventory:read"
   | "stock:receive"
@@ -47,7 +56,31 @@ export type AuthAction =
   | "kitchen-warehouse-requests:read"
   | "kitchen-warehouse-requests:create"
   | "kitchen-branch-requests:read"
-  | "kitchen-requests:update";
+  | "kitchen-requests:update"
+  // Branch (Phase 5). Namespaced away from Kitchen/Warehouse for the same
+  // reason those are namespaced from each other: different roles, different
+  // endpoints, same English words.
+  //
+  // These gate on ROLE, not position — `/auth/me` returns role and nothing
+  // finer, so the portal can only distinguish manager from staff. The POS is
+  // the surface with position-grain authority, and it gates on the capability
+  // list from `/pos/session/bootstrap` instead. Don't conflate the two.
+  | "branch-orders:read"
+  | "branch-orders:create"
+  | "branch-customers:read"
+  | "branch-customers:create"
+  | "branch-customers:update"
+  | "branch-customers:delete"
+  | "branch-inventory:read"
+  | "branch-waste:log"
+  | "branch-production:read"
+  | "branch-production:create"
+  | "branch-requests:read"
+  | "branch-requests:create"
+  | "branch-planning:read"
+  | "branch-sales:read"
+  | "branch-staff:read"
+  | "branch-staff:create";
 
 import type { UserRole } from "@/lib/types/super-admin";
 
@@ -81,6 +114,12 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "sales:read",
     "sales:create",
     "overview:read",
+    "menu:read",
+    "menu:publish",
+    "discounts:read",
+    "discounts:create",
+    "recipes:read",
+    "recipes:create",
   ],
   WAREHOUSE_MANAGER: [
     "inventory:read",
@@ -123,7 +162,51 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "kitchen-warehouse-requests:read",
     "kitchen-branch-requests:read",
   ],
-  BRANCH_MANAGER: [],
+  BRANCH_MANAGER: [
+    "branch-orders:read",
+    "branch-orders:create",
+    "branch-customers:read",
+    "branch-customers:create",
+    "branch-customers:update",
+    "branch-customers:delete",
+    "branch-inventory:read",
+    "branch-waste:log",
+    "branch-production:read",
+    "branch-production:create",
+    "branch-requests:read",
+    "branch-requests:create",
+    "branch-planning:read",
+    "branch-sales:read",
+    "branch-staff:read",
+    "branch-staff:create",
+    // A terminal belongs to a branch, and its manager is the one who registers
+    // it — using their ordinary portal token, because no device token can exist
+    // until the device does.
+    "devices:read",
+    "devices:create",
+  ],
+  /**
+   * The counter staff profile. Takes orders and captures customers; cannot log
+   * waste, run a sub-kitchen production run, or raise a stock request — those
+   * are the manager's, and the server enforces it independently.
+   *
+   * Inventory is READ-able here on purpose: the Phase 5 delta opened
+   * `GET /branch/inventory` to sub-staff specifically so a salesperson can see
+   * what has run out. Waste stayed manager-only.
+   *
+   * Deleting a customer is withheld pending confirmation — the wiring guide
+   * documents the soft-delete endpoint but not who may call it, so this errs
+   * closed. If the server allows staff, widening this is a one-line change; the
+   * reverse costs a customer record.
+   */
+  BRANCH_STAFF: [
+    "branch-orders:read",
+    "branch-orders:create",
+    "branch-customers:read",
+    "branch-customers:create",
+    "branch-customers:update",
+    "branch-inventory:read",
+  ],
 };
 
 export function isSuperAdmin(role: UserRole | undefined): boolean {

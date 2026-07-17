@@ -286,3 +286,59 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+ * Printing — receipts and kitchen tickets.
+ *
+ * A till prints to a thermal roll, not A4. The rule is: whatever carries
+ * `.print-area` is the page; everything else — app chrome, dialog frame,
+ * buttons, backdrop — is dropped. Without this, `window.print()` prints the
+ * whole POS UI, including the button you just clicked.
+ *
+ * `visibility` rather than `display` on the ancestors: a `.print-area` inside a
+ * dialog is nested many levels deep, and hiding an ancestor with `display:none`
+ * would take the receipt down with it. Hiding by visibility and re-showing the
+ * subtree keeps it in the layout so it can be repositioned to the page origin.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+    /* Thermal rolls are ~72mm of printable width; leave the browser to scale
+       to whatever the driver reports rather than forcing a pixel width. */
+    font-size: 12px;
+  }
+
+  .print-area * {
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  /* Never print a stub-tax warning as though it were part of the receipt —
+     it's an operator notice, not a customer document. */
+  [role="status"] {
+    display: none !important;
+  }
+
+  @page {
+    margin: 4mm;
+  }
+}

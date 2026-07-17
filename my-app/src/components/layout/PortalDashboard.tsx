@@ -27,6 +27,10 @@ const PLACEHOLDER_COPY: Record<UserRole, { title: string; description: string }>
     title: "Branch dashboard",
     description: "Today's sales, pending requests, and branch inventory at a glance.",
   },
+  BRANCH_STAFF: {
+    title: "Branch dashboard",
+    description: "Today's orders and stock on hand.",
+  },
 };
 
 export function PortalDashboard({ role }: { role: UserRole }) {

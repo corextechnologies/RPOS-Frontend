@@ -1,6 +1,8 @@
 // Admin (Phase 2) DTOs — mirrors the /v1/admin/* backend contract.
 // Kept separate from super-admin.ts. Do NOT modify Super Admin types.
 
+import type { BranchPosition } from "@/lib/types/super-admin";
+
 // ---- Locations ----
 export interface Branch {
   id: string;
@@ -134,6 +136,12 @@ export interface Employee {
   branch_id?: string | null;
   kitchen_id?: string | null;
   warehouse_id?: string | null;
+  /**
+   * BRANCH_STAFF only. The server resolves it into the capability list the POS
+   * gates on, so a staff member without one is 403'd on everything — see
+   * `POST /v1/branch/users`.
+   */
+  position?: BranchPosition | null;
   created_at?: string;
 }
 
@@ -145,16 +153,56 @@ export interface Paginated<T> {
 }
 
 // ---- Pricing ----
+/**
+ * What a product *is*, which decides what may be done to it.
+ *
+ * Before this existed, flour and a burger were the same kind of row — so every
+ * product offered a sell price, and the menu picker offered the warehouse's
+ * flour. The kind is the fix, and it encodes the actual flow:
+ *
+ * - `RAW_MATERIAL` — Warehouse creates it, the kitchen consumes it. Never sold.
+ * - `FINISHED_GOOD` — the Kitchen creates it and makes it from a recipe. Sold.
+ * - `RESALE` — bought and sold untouched (bottled cola). Nobody makes it, so it
+ *   has no recipe, but it is still sellable. It exists precisely because a
+ *   bottled drink is neither a raw material nor something the kitchen makes.
+ */
+export type ProductKind = "RAW_MATERIAL" | "FINISHED_GOOD" | "RESALE";
+
 export interface ProductPricing {
   id: string; // product_id
   name: string;
   sku?: string | null;
+  kind: ProductKind;
+  /**
+   * `FINISHED_GOOD` or `RESALE`. Derived from `kind` server-side — read this
+   * rather than re-deriving it, so there is one rule and not two.
+   *
+   * When false, the selling-price and availability fields must be **removed
+   * from the UI, not disabled**: they are meaningless for a sack of flour, and
+   * the server 409s `product_not_sellable` on any attempt anyway.
+   */
+  is_sellable: boolean;
+  /** Applies to everything — we buy raw materials, we just never sell them. */
   cost_price: string | null; // decimal string, like billing amounts
+  /**
+   * What the customer pays. Always null when `is_sellable` is false.
+   *
+   * Decimal string for the same reason as `cost_price`: parsing money to a
+   * float loses precision. The POS surface uses integer minor units instead —
+   * see `@/lib/money`.
+   */
+  selling_price: string | null;
+  category: string | null;
+  is_available: boolean;
 }
 
 export interface ProductPricingFilters {
   /** True narrows to products with no price yet — Admin's pricing queue. */
   unpriced?: boolean;
+  /** Splits the catalogue into what we buy vs what we sell. */
+  kind?: ProductKind;
+  /** `FINISHED_GOOD` + `RESALE` only. */
+  sellable_only?: boolean;
 }
 
 /**
@@ -192,8 +240,18 @@ export interface AdminInventoryFilters {
   location_id?: string;
 }
 
+/**
+ * A PATCH, and the distinction matters: **an omitted key leaves the field
+ * alone; an explicit `null` clears it.** So this must be built from the form's
+ * *dirty* fields, not from its values — react-hook-form hands you every
+ * registered field by default, and sending `category: null` on every save would
+ * quietly wipe the category off the whole catalogue.
+ */
 export interface UpdateProductPricingInput {
-  cost_price: number | string; // >= 0
+  cost_price?: number | string | null; // >= 0
+  selling_price?: number | string | null; // >= 0
+  category?: string | null;
+  is_available?: boolean;
 }
 
 // ---- Requests ----

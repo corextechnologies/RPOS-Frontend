@@ -12,6 +12,7 @@ import type {
   UpdateReorderLevelInput,
   UpdateWarehouseRequestStatusInput,
   WarehouseProduct,
+  WarehouseProductFilters,
   WarehouseRequest,
   WarehouseRequestFilters,
   WarehouseStaff,
@@ -126,9 +127,10 @@ export const warehouseApi = {
     return normalizeInventoryItem(data);
   },
 
-  async listWarehouseProducts(): Promise<WarehouseProduct[]> {
+  async listWarehouseProducts(filters?: WarehouseProductFilters): Promise<WarehouseProduct[]> {
     // Not paginated: no meta, and `data` is the whole catalog.
-    const data = await request<WarehouseProduct[]>("/warehouse/products");
+    const qs = filters?.kind ? `?kind=${filters.kind}` : "";
+    const data = await request<WarehouseProduct[]>(`/warehouse/products${qs}`);
     return (data ?? []).map(normalizeProduct);
   },
 
@@ -140,6 +142,9 @@ export const warehouseApi = {
       body: JSON.stringify({
         name: body.name.trim(),
         sku: optionalText(body.sku),
+        // Omitted means RAW_MATERIAL server-side; sent only when the user
+        // actually chose otherwise.
+        ...(body.kind ? { kind: body.kind } : {}),
       }),
     });
     return normalizeProduct(data);

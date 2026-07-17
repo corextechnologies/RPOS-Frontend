@@ -1,6 +1,7 @@
 import type {
   AdminInventoryFilters,
   AdminInventoryItem,
+  ProductKind,
   AdminProfile,
   AdminRequestType,
   Branch,
@@ -177,6 +178,29 @@ function requestListQuery(filters?: RequestFilters): string {
     qs.set("status", filters.status);
   }
   return qs.toString();
+}
+
+/**
+ * Money stays a decimal string end to end — parsing it to a float loses
+ * precision, and these values round-trip back to the server on the next PATCH.
+ *
+ * `is_available` defaults to true when the server omits it: a product with no
+ * opinion is sellable, which matches the column's server-side default.
+ */
+function normalizePricing(p: ProductPricing): ProductPricing {
+  const kind: ProductKind = p.kind ?? "RAW_MATERIAL";
+  return {
+    ...p,
+    id: String(p.id),
+    kind,
+    // Read the server's answer; fall back to deriving it only if an older
+    // payload omits the field. Two rules would be one too many.
+    is_sellable: p.is_sellable ?? kind !== "RAW_MATERIAL",
+    cost_price: p.cost_price == null ? null : String(p.cost_price),
+    selling_price: p.selling_price == null ? null : String(p.selling_price),
+    category: p.category ?? null,
+    is_available: p.is_available ?? true,
+  };
 }
 
 export const adminApi = {
@@ -363,15 +387,15 @@ export const adminApi = {
   ): Promise<ProductPricing[]> {
     // Only send the param when narrowing: an absent `unpriced` means "all
     // products", and `unpriced=false` is not the same request.
-    const qs = filters?.unpriced ? "?unpriced=true" : "";
-    const data = await request<ProductPricing[]>(`/admin/products/pricing${qs}`);
-    return data.map((p) => ({
-      ...p,
-      id: String(p.id),
-      // A decimal string on the wire. Kept as a string on purpose — parsing it
-      // to a float loses precision on money.
-      cost_price: p.cost_price == null ? null : String(p.cost_price),
-    }));
+    // Only send params when narrowing: an absent `unpriced` means "all
+    // products", and `unpriced=false` is not the same request.
+    const qs = new URLSearchParams();
+    if (filters?.unpriced) qs.set("unpriced", "true");
+    if (filters?.kind) qs.set("kind", filters.kind);
+    if (filters?.sellable_only) qs.set("sellable_only", "true");
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const data = await request<ProductPricing[]>(`/admin/products/pricing${suffix}`);
+    return data.map(normalizePricing);
   },
 
   async listAdminInventory(
@@ -410,6 +434,13 @@ export const adminApi = {
     return toPaginatedRequests(data, meta, page, page_size);
   },
 
+  /**
+   * Partial by contract: keys present in `body` are written, keys absent are
+   * left alone, and an explicit `null` clears. `JSON.stringify` drops
+   * `undefined` values for us, so "absent" is expressible — but only if the
+   * caller passes `undefined` rather than `null` for "don't touch this". See
+   * `UpdateProductPricingInput`.
+   */
   async updateProductPricing(
     productId: string,
     body: UpdateProductPricingInput,
@@ -418,11 +449,7 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     });
-    return {
-      ...data,
-      id: String(data.id),
-      cost_price: data.cost_price == null ? null : String(data.cost_price),
-    };
+    return normalizePricing(data);
   },
 
   async listProductRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {

@@ -2,18 +2,21 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
-import type { UpdateProductPricingInput } from "@/lib/types/admin";
+import type { ProductPricingFilters, UpdateProductPricingInput } from "@/lib/types/admin";
 import { toast } from "sonner";
 
 /**
- * `unpriced` narrows to Admin's pricing queue — products the warehouse created
- * that still have no cost price. Each variant is cached separately, since they
- * are different server queries rather than a client-side filter.
+ * Admin's catalogue, optionally narrowed.
+ *
+ * Each variant is cached separately, since they are different server queries
+ * rather than a client-side filter. `unpriced` is the pricing queue; `kind` and
+ * `sellable_only` split "what we buy" from "what we sell" — the distinction
+ * that exists because flour and a burger used to be the same kind of row.
  */
-export function useProductPricing(unpriced = false) {
+export function useProductPricing(filters?: ProductPricingFilters) {
   return useQuery({
-    queryKey: queryKeys.productPricing(unpriced),
-    queryFn: () => api.listProductPricing({ unpriced }),
+    queryKey: queryKeys.productPricing(filters),
+    queryFn: () => api.listProductPricing(filters),
   });
 }
 
