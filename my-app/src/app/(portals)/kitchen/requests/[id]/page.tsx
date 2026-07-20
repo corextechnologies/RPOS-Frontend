@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { KitchenRequestActionPanel } from "@/components/kitchen/requests/KitchenRequestActionPanel";
 import { KitchenRequestDetail } from "@/components/kitchen/requests/KitchenRequestDetail";
+import { KitchenDispatchDetail } from "@/components/kitchen/requests/KitchenDispatchDetail";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,11 +23,14 @@ export default function KitchenRequestDetailPage() {
   const request = useKitchenRequest(params.id);
   const updateStatus = useUpdateKitchenRequestStatus(params.id);
 
-  const isWarehouseRequest =
-    request.data?.request_type === "KITCHEN_TO_WAREHOUSE";
+  const requestType = request.data?.request_type;
+  const isWarehouseRequest = requestType === "KITCHEN_TO_WAREHOUSE";
+  const isDispatchRequest = requestType === "KITCHEN_TO_ADMIN";
   const backHref = isWarehouseRequest
     ? "/kitchen/requests/warehouse"
-    : "/kitchen/requests/branch";
+    : isDispatchRequest
+      ? "/kitchen/requests/dispatch"
+      : "/kitchen/requests/branch";
 
   const backLink = (
     <Button variant="ghost" size="icon" asChild>
@@ -76,29 +80,42 @@ export default function KitchenRequestDetailPage() {
         {backLink}
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-            {isWarehouseRequest ? "Warehouse request" : "Branch request"}
+            {isWarehouseRequest
+              ? "Warehouse request"
+              : isDispatchRequest
+                ? "Dispatch to branches"
+                : "Branch request"}
           </h1>
           <p className="text-sm text-muted">
             {isWarehouseRequest
               ? "Confirm receipt once the warehouse dispatches."
-              : "Produce the approved quantities, then allocate to the branch."}
+              : isDispatchRequest
+                ? "Send the allocated quantities out to each branch."
+                : "Produce the approved quantities, then allocate to the branch."}
           </p>
         </div>
       </div>
 
       <KitchenRequestDetail request={request.data} />
 
-      <KitchenRequestActionPanel
-        // Remount on any status change so a part-filled action cannot outlive
-        // the status it was started against.
-        key={`${request.data.id}-${request.data.status}`}
-        request={request.data}
-        canUpdate={can("kitchen-requests:update")}
-        isSubmitting={updateStatus.isPending}
-        onSubmit={async (body) => {
-          await updateStatus.mutateAsync(body);
-        }}
-      />
+      {isDispatchRequest ? (
+        <KitchenDispatchDetail
+          request={request.data}
+          canUpdate={can("kitchen-requests:update")}
+        />
+      ) : (
+        <KitchenRequestActionPanel
+          // Remount on any status change so a part-filled action cannot outlive
+          // the status it was started against.
+          key={`${request.data.id}-${request.data.status}`}
+          request={request.data}
+          canUpdate={can("kitchen-requests:update")}
+          isSubmitting={updateStatus.isPending}
+          onSubmit={async (body) => {
+            await updateStatus.mutateAsync(body);
+          }}
+        />
+      )}
     </div>
   );
 }

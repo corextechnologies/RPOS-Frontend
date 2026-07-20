@@ -73,6 +73,27 @@ export function useCreateDispatchNotification() {
   });
 }
 
+/** Head chef ships an allocated dispatch — this is where kitchen stock leaves. */
+export function useDispatchKitchenRequest(requestId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.dispatchKitchenRequest(requestId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.kitchenRequest(requestId) });
+      qc.invalidateQueries({ queryKey: ["kitchen-dispatch-requests"] });
+      // Stock left the kitchen.
+      qc.invalidateQueries({ queryKey: queryKeys.kitchenInventory });
+      qc.invalidateQueries({ queryKey: ["kitchen-near-expiry"] });
+      toast.success("Dispatched to branches");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to dispatch";
+      toast.error(message);
+    },
+  });
+}
+
 export function useKitchenRequest(id: string) {
   return useQuery({
     queryKey: queryKeys.kitchenRequest(id),

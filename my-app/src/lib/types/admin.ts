@@ -312,17 +312,26 @@ export interface RequestLineItem {
 }
 
 /**
+ * Where a single branch allocation is in the hand-off. The kitchen dispatches
+ * the whole request at once (all allocations → DISPATCHED); each branch then
+ * confirms its own → RECEIVED independently, so statuses can differ per branch.
+ */
+export type AllocationStatus = "ALLOCATED" | "DISPATCHED" | "RECEIVED";
+
+/**
  * One product's quantity earmarked for one branch, produced when Admin allocates
  * a KITCHEN_TO_ADMIN dispatch request. A single request line can fan out into
  * several of these (40 buns → 25 Downtown + 15 Gulberg).
  */
 export interface RequestBranchAllocation {
+  id: string;
   line_item_id: string;
   product_id?: string;
   product_name: string;
   branch_id: string;
   branch_name: string;
   quantity: number;
+  status: AllocationStatus;
 }
 
 export interface StockRequest {
@@ -331,6 +340,13 @@ export interface StockRequest {
   status: RequestStatus;
   notes?: string | null;
   from_label?: string; // branch/warehouse name for UI
+  /**
+   * Origin of the request. The backend fills `from_label` for branch/kitchen
+   * requests but leaves it empty on a WAREHOUSE_TO_ADMIN_PO, so the UI falls
+   * back to resolving the name from these against the warehouse list.
+   */
+  source_location_type?: AdminLocationType | null;
+  source_location_id?: string | null;
   line_items: RequestLineItem[];
   /** Present on KITCHEN_TO_ADMIN once Admin has allocated it across branches. */
   allocations?: RequestBranchAllocation[];

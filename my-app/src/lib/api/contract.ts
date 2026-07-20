@@ -88,6 +88,7 @@ import type {
   BranchInventoryItem,
   BranchOrder,
   BranchOrderFilters,
+  BranchDelivery,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
@@ -279,6 +280,9 @@ export interface ApiClient {
   listKitchenDispatchRequests(
     filters?: KitchenRequestFilters,
   ): Promise<Paginated<KitchenRequest>>;
+  // Head chef ships an allocated dispatch request (ALLOCATED → DISPATCHED),
+  // debiting kitchen finished-goods stock.
+  dispatchKitchenRequest(requestId: string): Promise<KitchenRequest>;
   // Finished goods, recipes & production. Recipes moved here from Admin when
   // products gained a `kind`: a recipe describes what the KITCHEN does with the
   // components the kitchen holds, and under Admin there was no catalogue to
@@ -315,8 +319,14 @@ export interface ApiClient {
   createBranchOrder(body: CreateBranchOrderInput): Promise<BranchOrder>;
   // Stock requests the branch raises to Admin (type BRANCH_TO_ADMIN). Read via
   // Admin's StockRequest projection, scoped to the caller's branch.
+  // Kitchens this branch can direct a stock request to (the picker source).
+  listBranchKitchens(): Promise<Kitchen[]>;
   listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
   createBranchRequest(body: CreateBranchRequestInput): Promise<StockRequest>;
+  // Finished goods the kitchen dispatched to this branch. Confirming receipt
+  // (DISPATCHED → RECEIVED) credits branch inventory.
+  listBranchDeliveries(): Promise<BranchDelivery[]>;
+  receiveBranchDelivery(deliveryId: string): Promise<BranchDelivery>;
   listBranchInventory(): Promise<BranchInventoryItem[]>;
   listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
   getProductionRun(id: string): Promise<ProductionRun>;

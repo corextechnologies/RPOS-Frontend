@@ -329,6 +329,14 @@ export const kitchenApi = {
     return fetchRequestList("/kitchen/dispatch-notifications", filters);
   },
 
+  async dispatchKitchenRequest(requestId: string): Promise<KitchenRequest> {
+    const data = await request<KitchenRequest>(
+      `/kitchen/dispatch-notifications/${requestId}/dispatch`,
+      { method: "POST" },
+    );
+    return normalizeKitchenRequest(data);
+  },
+
   async getKitchenRequest(requestId: string): Promise<KitchenRequest> {
     const data = await request<KitchenRequest>(`/kitchen/requests/${requestId}`);
     return normalizeKitchenRequest(data);

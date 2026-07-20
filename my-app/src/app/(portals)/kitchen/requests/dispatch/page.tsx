@@ -18,11 +18,13 @@ import {
 import type { KitchenRequestFilters, KitchenRequestStatus } from "@/lib/types/kitchen";
 import { isMissingKitchenAssignment } from "@/lib/types/kitchen";
 
-/** The only statuses a kitchen's own dispatch notification passes through. */
+/** The statuses a kitchen's own dispatch notification passes through. */
 const STATUS_OPTIONS: Array<KitchenRequestStatus | "all"> = [
   "all",
   "PENDING",
   "ALLOCATED",
+  "DISPATCHED",
+  "RECEIVED",
   "REJECTED",
 ];
 

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/state";
 import { useAuth } from "@/lib/auth";
+import { useWarehouses } from "@/lib/hooks/use-locations";
 import { useRequest, useUpdateRequestStatus } from "@/lib/hooks/use-requests";
 
 export default function AdminRequestDetailPage() {
@@ -18,6 +19,16 @@ export default function AdminRequestDetailPage() {
   const { can } = useAuth();
   const request = useRequest(id);
   const updateStatus = useUpdateRequestStatus(id);
+
+  // The backend omits `from_label` on a WAREHOUSE_TO_ADMIN_PO, so resolve the
+  // origin warehouse name from `source_location_id`. Only fetched when needed.
+  const needsWarehouseName =
+    request.data?.type === "WAREHOUSE_TO_ADMIN_PO" && !request.data.from_label;
+  const warehouses = useWarehouses();
+  const fromLabel =
+    needsWarehouseName && request.data?.source_location_id
+      ? warehouses.data?.find((w) => w.id === request.data?.source_location_id)?.name
+      : undefined;
 
   if (request.isLoading) {
     return (
@@ -62,7 +73,7 @@ export default function AdminRequestDetailPage() {
         </div>
       </div>
 
-      <RequestDetail request={request.data} />
+      <RequestDetail request={request.data} fromLabel={fromLabel} />
 
       {request.data.type === "KITCHEN_TO_ADMIN" ? (
         <DispatchAllocationPanel

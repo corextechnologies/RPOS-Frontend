@@ -5,9 +5,10 @@
  * deliberately unchanged by the POS work. See `@/lib/types/branch`.
  */
 
-import type { Paginated, RequestFilters, StockRequest } from "@/lib/types/admin";
+import type { Kitchen, Paginated, RequestFilters, StockRequest } from "@/lib/types/admin";
 import type {
   BranchCustomer,
+  BranchDelivery,
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
@@ -249,6 +250,16 @@ export const branchApi = {
 
   // ---- Stock requests (BRANCH_TO_ADMIN) ----
 
+  async listBranchKitchens(): Promise<Kitchen[]> {
+    const rows = await request<Kitchen[]>("/branch/kitchens");
+    return (rows ?? []).map((k) => ({
+      ...k,
+      id: String(k.id),
+      restaurant_id: String(k.restaurant_id),
+      location: k.location ?? null,
+    }));
+  },
+
   async listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {
     const page = filters?.page ?? 1;
     const pageSize = filters?.page_size ?? 20;
@@ -273,6 +284,7 @@ export const branchApi = {
       await request<StockRequest>("/branch/requests", {
         method: "POST",
         body: JSON.stringify({
+          kitchen_id: body.kitchen_id,
           notes: optionalText(body.notes),
           lines: body.lines.map((l) => ({
             product_id: l.product_id,
@@ -281,6 +293,26 @@ export const branchApi = {
         }),
       }),
     );
+  },
+
+  // ---- Incoming deliveries (from the kitchen) ----
+
+  async listBranchDeliveries(): Promise<BranchDelivery[]> {
+    const items = await request<BranchDelivery[]>("/branch/deliveries");
+    return (items ?? []).map((d) => ({
+      ...d,
+      id: String(d.id),
+      request_id: String(d.request_id),
+      product_id: String(d.product_id),
+      quantity: Number(d.quantity),
+    }));
+  },
+
+  async receiveBranchDelivery(deliveryId: string): Promise<BranchDelivery> {
+    const d = await request<BranchDelivery>(`/branch/deliveries/${deliveryId}/receive`, {
+      method: "POST",
+    });
+    return { ...d, id: String(d.id), request_id: String(d.request_id), quantity: Number(d.quantity) };
   },
 
   // ---- Inventory ----

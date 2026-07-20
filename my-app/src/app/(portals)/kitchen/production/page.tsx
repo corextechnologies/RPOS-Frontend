@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Factory, Plus, Send, Trash2, TriangleAlert } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -136,15 +135,26 @@ function NotifyAdminDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const inventory = useKitchenInventory();
+  // "What we make" — finished goods only. Dispatch is about sending produced
+  // items to branches, not the raw components (chicken, buns…) the kitchen holds
+  // to cook with, so those are excluded here.
+  const catalogue = useKitchenCatalogue();
   const notify = useCreateDispatchNotification();
   const [lines, setLines] = useState<NotifyLine[] | null>(null);
   const [notes, setNotes] = useState("");
 
-  // Seed the lines from stock the first time the dialog has data, then leave the
-  // chef's edits alone. Aggregate batches so it reads one row per product.
+  const finishedIds = useMemo(
+    () => new Set((catalogue.data ?? []).map((c) => c.id)),
+    [catalogue.data],
+  );
+
+  // Seed the lines from finished-goods stock the first time the dialog has data,
+  // then leave the chef's edits alone. Aggregate batches so it reads one row per
+  // product.
   const seeded = useMemo<NotifyLine[]>(() => {
     const byProduct = new Map<string, NotifyLine>();
     for (const item of inventory.data ?? []) {
+      if (!finishedIds.has(item.product_id)) continue;
       const existing = byProduct.get(item.product_id);
       if (existing) {
         existing.on_hand += item.quantity;
@@ -159,7 +169,7 @@ function NotifyAdminDialog({
       }
     }
     return [...byProduct.values()].filter((l) => l.on_hand > 0);
-  }, [inventory.data]);
+  }, [inventory.data, finishedIds]);
 
   const rows = lines ?? seeded;
 
@@ -192,11 +202,11 @@ function NotifyAdminDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {inventory.isLoading ? (
+        {inventory.isLoading || catalogue.isLoading ? (
           <p className="py-6 text-center text-sm text-muted">Loading stock…</p>
         ) : rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">
-            Nothing on hand to dispatch. Make something first.
+            No finished goods on hand to dispatch. Make something first.
           </p>
         ) : (
           <div className="space-y-3">

@@ -18,9 +18,15 @@ import { formatDate } from "@/lib/utils";
 
 interface RequestDetailProps {
   request: StockRequest;
+  /**
+   * Origin name resolved by the caller (e.g. a warehouse name looked up from
+   * `source_location_id`). Used when the backend leaves `from_label` empty,
+   * as it does on a WAREHOUSE_TO_ADMIN_PO.
+   */
+  fromLabel?: string;
 }
 
-export function RequestDetail({ request }: RequestDetailProps) {
+export function RequestDetail({ request, fromLabel }: RequestDetailProps) {
   return (
     <div className="space-y-6">
       <Card>
@@ -40,7 +46,7 @@ export function RequestDetail({ request }: RequestDetailProps) {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-faint">From</p>
-            <p className="mt-1 text-content">{request.from_label || "—"}</p>
+            <p className="mt-1 text-content">{request.from_label || fromLabel || "—"}</p>
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-faint">Created</p>

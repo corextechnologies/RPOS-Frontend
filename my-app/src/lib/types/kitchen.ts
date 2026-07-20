@@ -1,5 +1,6 @@
 import { ApiError } from "@/lib/types/super-admin";
 import type { WasteReason } from "@/lib/stock/waste-reason";
+import type { RequestBranchAllocation } from "@/lib/types/admin";
 
 // Kitchen (Phase 4) DTOs — mirrors the /v1/kitchen/* backend contract.
 //
@@ -255,6 +256,11 @@ export interface KitchenRequest {
   created_at: string;
   updated_at?: string;
   line_items: KitchenRequestLineItem[];
+  /**
+   * Present on a KITCHEN_TO_ADMIN dispatch request once Admin has allocated it —
+   * the per-branch split the kitchen dispatches against.
+   */
+  allocations?: RequestBranchAllocation[];
 }
 
 /**
