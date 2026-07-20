@@ -29,20 +29,6 @@ export function useKitchenInventory() {
   });
 }
 
-/**
- * What a warehouse holds, so the kitchen can judge availability before
- * requesting. Both kitchen roles may read it. Quantity only — no cost price.
- */
-export function useKitchenWarehouseInventory(warehouseId: string) {
-  return useQuery({
-    queryKey: queryKeys.kitchenWarehouseInventory(warehouseId),
-    queryFn: () => api.listKitchenWarehouseInventory(warehouseId),
-    enabled: !!warehouseId,
-    retry: (failureCount, error) =>
-      !isMissingKitchenAssignment(error) && failureCount < 3,
-  });
-}
-
 export function useKitchenNearExpiry(withinDays: number) {
   return useQuery({
     queryKey: queryKeys.kitchenNearExpiry(withinDays),
@@ -89,6 +75,49 @@ export function useKitchenProductOptions() {
   return {
     products,
     isLoading: inventory.isLoading,
+    isError: inventory.isError,
+    error: inventory.error,
+  };
+}
+
+/**
+ * Products selectable when requesting stock FROM a warehouse, derived from what
+ * that warehouse actually holds (`GET /kitchen/warehouses/{id}/inventory`).
+ *
+ * This is deliberately NOT `useKitchenProductOptions`. Requesting is the one
+ * flow where sourcing from the kitchen's own inventory is wrong: you can only
+ * request what the warehouse can send, and — crucially — a product the kitchen
+ * has never held must be requestable, or it can never make its first trip in.
+ * Sourcing from the warehouse's stock resolves that bootstrap dead-end, since
+ * the warehouse holds raw materials the kitchen has yet to receive.
+ *
+ * Pass an empty `warehouseId` before a warehouse is chosen; the query stays
+ * disabled and this returns an empty list without erroring.
+ */
+export function useKitchenWarehouseProductOptions(warehouseId: string) {
+  const inventory = useQuery({
+    // What the warehouse holds — quantity only, no cost price. Read-only, and
+    // gated server-side by the caller's token. Disabled until a warehouse is
+    // chosen so the request form can call this unconditionally.
+    queryKey: queryKeys.kitchenWarehouseInventory(warehouseId),
+    queryFn: () => api.listKitchenWarehouseInventory(warehouseId),
+    enabled: warehouseId !== "",
+    retry: (failureCount, error) =>
+      !isMissingKitchenAssignment(error) && failureCount < 3,
+  });
+
+  const products = useMemo(() => {
+    const byId = new Map<string, KitchenProduct>();
+    for (const item of inventory.data ?? []) {
+      if (!byId.has(item.product_id)) byId.set(item.product_id, item.product);
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [inventory.data]);
+
+  return {
+    products,
+    isLoading: inventory.isLoading,
+    isFetching: inventory.isFetching,
     isError: inventory.isError,
     error: inventory.error,
   };

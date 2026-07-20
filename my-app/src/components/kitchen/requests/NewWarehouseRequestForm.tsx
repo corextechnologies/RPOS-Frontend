@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,11 +28,11 @@ import {
   kitchenRequestLineDefaults,
   type CreateKitchenWarehouseRequestForm,
 } from "@/lib/schemas/kitchen-request";
-import type { KitchenProduct, KitchenWarehouse } from "@/lib/types/kitchen";
+import type { KitchenWarehouse } from "@/lib/types/kitchen";
+import { useKitchenWarehouseProductOptions } from "@/lib/hooks/use-kitchen-inventory";
 
 interface NewWarehouseRequestFormProps {
   warehouses: KitchenWarehouse[];
-  products: KitchenProduct[];
   isSubmitting: boolean;
   onSubmit: (values: CreateKitchenWarehouseRequestForm) => Promise<void>;
 }
@@ -45,7 +45,6 @@ interface NewWarehouseRequestFormProps {
  */
 export function NewWarehouseRequestForm({
   warehouses,
-  products,
   isSubmitting,
   onSubmit,
 }: NewWarehouseRequestFormProps) {
@@ -62,6 +61,19 @@ export function NewWarehouseRequestForm({
     control: form.control,
     name: "lines",
   });
+
+  // The product picker sources from what the SELECTED warehouse holds, not the
+  // kitchen's own inventory — see `useKitchenWarehouseProductOptions`. This is
+  // what lets a never-stocked raw material be requested for the first time.
+  const selectedWarehouseId = useWatch({ control: form.control, name: "warehouse_id" }) ?? "";
+  const {
+    products,
+    isLoading: productsLoading,
+    isError: productsError,
+  } = useKitchenWarehouseProductOptions(selectedWarehouseId);
+
+  const hasWarehouse = selectedWarehouseId !== "";
+  const productsEmpty = hasWarehouse && !productsLoading && !productsError && products.length === 0;
 
   return (
     <Form {...form}>
@@ -107,10 +119,21 @@ export function NewWarehouseRequestForm({
                     <Select
                       value={productField.value}
                       onValueChange={productField.onChange}
+                      disabled={!hasWarehouse || productsLoading || products.length === 0}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a product" />
+                          <SelectValue
+                            placeholder={
+                              !hasWarehouse
+                                ? "Choose a warehouse first"
+                                : productsLoading
+                                  ? "Loading products…"
+                                  : products.length === 0
+                                    ? "No stock at this warehouse"
+                                    : "Select a product"
+                            }
+                          />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -163,6 +186,18 @@ export function NewWarehouseRequestForm({
             </div>
           ))}
         </div>
+
+        {productsError && (
+          <p className="text-sm text-danger">
+            Couldn&apos;t load this warehouse&apos;s stock. Pick another warehouse or try again.
+          </p>
+        )}
+        {productsEmpty && (
+          <p className="text-sm text-muted">
+            This warehouse has no stock to send. Ask the warehouse to receive stock first, or
+            choose a different warehouse.
+          </p>
+        )}
 
         <Button
           type="button"

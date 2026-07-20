@@ -17,7 +17,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import { useAuth } from "@/lib/auth";
-import { useKitchenProductOptions } from "@/lib/hooks/use-kitchen-inventory";
 import {
   useCreateKitchenWarehouseRequest,
   useKitchenWarehouses,
@@ -31,12 +30,12 @@ export default function NewKitchenWarehouseRequestPage() {
   const allowed = can("kitchen-warehouse-requests:create");
 
   const warehouses = useKitchenWarehouses();
-  const products = useKitchenProductOptions();
   const createRequest = useCreateKitchenWarehouseRequest();
 
-  const unassigned =
-    isMissingKitchenAssignment(warehouses.error) ||
-    isMissingKitchenAssignment(products.error);
+  // Products are no longer loaded here: the form sources them from whichever
+  // warehouse the user picks (`useKitchenWarehouseProductOptions`), so an empty
+  // kitchen inventory no longer blocks the whole page.
+  const unassigned = isMissingKitchenAssignment(warehouses.error);
 
   const onSubmit = async (values: CreateKitchenWarehouseRequestForm) => {
     await createRequest.mutateAsync({
@@ -54,7 +53,7 @@ export default function NewKitchenWarehouseRequestPage() {
     if (!allowed) return <KitchenNoAccess />;
     if (unassigned) return <KitchenUnassigned />;
 
-    if (warehouses.isPending || products.isLoading) {
+    if (warehouses.isPending) {
       return (
         <Card>
           <CardContent className="space-y-3 p-4">
@@ -81,16 +80,6 @@ export default function NewKitchenWarehouseRequestPage() {
       );
     }
 
-    if (products.isError) {
-      return (
-        <Card>
-          <CardContent className="p-0">
-            <ErrorState description="Failed to load products." />
-          </CardContent>
-        </Card>
-      );
-    }
-
     // An empty list now means exactly one thing: Admin has not added a
     // warehouse. It is no longer ambiguous with a missing local config.
     if ((warehouses.data?.length ?? 0) === 0) {
@@ -100,19 +89,6 @@ export default function NewKitchenWarehouseRequestPage() {
             <EmptyState
               title="No warehouses yet"
               description="Your Admin has not added a warehouse to this restaurant. Once they do, it appears here."
-            />
-          </CardContent>
-        </Card>
-      );
-    }
-
-    if (products.products.length === 0) {
-      return (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
-              title="No products available"
-              description="Products can only be selected once they exist in your kitchen."
             />
           </CardContent>
         </Card>
@@ -131,7 +107,6 @@ export default function NewKitchenWarehouseRequestPage() {
         <CardContent>
           <NewWarehouseRequestForm
             warehouses={warehouses.data ?? []}
-            products={products.products}
             isSubmitting={createRequest.isPending}
             onSubmit={onSubmit}
           />

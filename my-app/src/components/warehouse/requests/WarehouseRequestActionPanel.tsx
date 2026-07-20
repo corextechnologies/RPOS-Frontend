@@ -131,22 +131,30 @@ export function WarehouseRequestActionPanel({
       setErrorMessage("Enter a whole quantity within the ordered amount for every line.");
       return;
     }
-    await onSubmit({
-      to_status: pending,
-      notes: notes || undefined,
-      // One entry per line: omitting a line loses its batch and expiry, which
-      // would hide that stock from near-expiry alerts and labels.
-      line_receipts: needsReceipts
-        ? drafts.map((d) => ({
-            line_item_id: d.line_item_id,
-            quantity_received: Number(d.quantity_received),
-            batch_code: d.batch_code || undefined,
-            expiry_date: d.expiry_date || undefined,
-            issue_note: d.issue_note || undefined,
-          }))
-        : undefined,
-    });
-    reset();
+    try {
+      await onSubmit({
+        to_status: pending,
+        notes: notes || undefined,
+        // One entry per line: omitting a line loses its batch and expiry, which
+        // would hide that stock from near-expiry alerts and labels.
+        line_receipts: needsReceipts
+          ? drafts.map((d) => ({
+              line_item_id: d.line_item_id,
+              quantity_received: Number(d.quantity_received),
+              batch_code: d.batch_code || undefined,
+              expiry_date: d.expiry_date || undefined,
+              issue_note: d.issue_note || undefined,
+            }))
+          : undefined,
+      });
+      // Only clear the panel on success. On failure (e.g. a 409
+      // `insufficient_stock`) the mutation's own `onError` has already surfaced
+      // a toast — we swallow the rejection here so it isn't an unhandled promise
+      // rejection, and keep the panel open so the action can be retried.
+      reset();
+    } catch {
+      // Handled by the mutation's onError; nothing to do but stop the throw.
+    }
   };
 
   return (

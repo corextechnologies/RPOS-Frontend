@@ -10,7 +10,6 @@ import {
   Truck,
   Users,
   Utensils,
-  Warehouse,
 } from "lucide-react";
 import type { NavSection } from "./types";
 
@@ -100,13 +99,6 @@ export const KITCHEN_NAV: NavSection[] = [
         icon: Truck,
         action: "kitchen-warehouse-requests:read",
         match: "prefix",
-      },
-      {
-        label: "Warehouse stock",
-        href: "/kitchen/warehouses",
-        icon: Warehouse,
-        action: "kitchen-warehouse-requests:read",
-        match: "exact",
       },
     ],
   },
