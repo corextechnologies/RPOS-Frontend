@@ -26,8 +26,10 @@ export const branchKeys = {
   customer: (id: string) => ["branch-customer", id] as const,
   orders: (filters?: BranchOrderFilters) =>
     filters ? (["branch-orders", filters] as const) : (["branch-orders"] as const),
+  kitchens: ["branch-kitchens"] as const,
   requests: (filters?: RequestFilters) =>
     filters ? (["branch-requests", filters] as const) : (["branch-requests"] as const),
+  deliveries: ["branch-deliveries"] as const,
   inventory: ["branch-inventory"] as const,
   production: (filters?: ProductionRunFilters) =>
     filters ? (["branch-production", filters] as const) : (["branch-production"] as const),
@@ -167,6 +169,14 @@ export function useCreateBranchOrder() {
 
 // ---- Stock requests (BRANCH_TO_ADMIN) ----
 
+/** Kitchens the branch can direct a request to — the fulfilment picker source. */
+export function useBranchKitchens() {
+  return useQuery({
+    queryKey: branchKeys.kitchens,
+    queryFn: () => api.listBranchKitchens(),
+  });
+}
+
 export function useBranchRequests(filters?: RequestFilters) {
   return useQuery({
     queryKey: branchKeys.requests(filters),
@@ -184,6 +194,29 @@ export function useCreateBranchRequest() {
       toast.success("Request sent to head office");
     },
     onError: (err) => toast.error(message(err, "Couldn't send request")),
+  });
+}
+
+// ---- Incoming deliveries (from the kitchen) ----
+
+export function useBranchDeliveries() {
+  return useQuery({
+    queryKey: branchKeys.deliveries,
+    queryFn: () => api.listBranchDeliveries(),
+  });
+}
+
+export function useReceiveBranchDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.receiveBranchDelivery(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: branchKeys.deliveries });
+      // Receiving credits branch stock.
+      qc.invalidateQueries({ queryKey: branchKeys.inventory });
+      toast.success("Received into branch stock");
+    },
+    onError: (err) => toast.error(message(err, "Couldn't receive delivery")),
   });
 }
 

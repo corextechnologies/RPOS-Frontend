@@ -85,6 +85,10 @@ function normalizeStockRequest(r: RawStockRequest): StockRequest {
     ...rest,
     id: String(r.id),
     type: r.type ?? (request_type as AdminRequestType),
+    // Stringified so it matches the normalized `Warehouse.id` when the detail
+    // screen resolves an origin label from `source_location_id`.
+    source_location_id:
+      r.source_location_id != null ? String(r.source_location_id) : r.source_location_id,
     line_items: (r.line_items ?? []).map((line) => ({
       ...line,
       id: String(line.id),

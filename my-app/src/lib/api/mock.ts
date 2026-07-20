@@ -80,6 +80,7 @@ import type {
 import type {
   BranchCustomer,
   BranchCustomerFilters,
+  BranchDelivery,
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
@@ -174,7 +175,7 @@ const SESSION_KEY = "ros-super-admin-session";
  * 17: branch portal — `customers`, `branch_orders`, `production_runs`, a second
  *     branch (br-002), and selling_price/category/is_available on products.
  */
-const SEED_VERSION = 18;
+const SEED_VERSION = 19;
 
 interface MockInvoiceRecord {
   id: number;
@@ -1158,6 +1159,20 @@ function seedDb(): MockDb {
       location_type: "KITCHEN",
       location_id: "kit-001",
     },
+    {
+      // A FINISHED_GOOD on hand at the kitchen. Without one, "ready to dispatch"
+      // and the Notify Admin picker (finished goods only) open empty — the
+      // seeded kitchen otherwise holds nothing but raw components.
+      id: "inv-106",
+      restaurant_id: "rest-001",
+      product_id: "prod-006",
+      product: { id: "prod-006", name: "Classic Burger", sku: "FG-BURG-01" },
+      quantity: 24,
+      batch_code: "B-BURG-01",
+      expiry_date: expiryInDays(2),
+      location_type: "KITCHEN",
+      location_id: "kit-001",
+    },
     // ---- Branch (Phase 5) ----
     // The Downtown branch's own stock. Without it the branch inventory,
     // sub-kitchen, and requests pickers all open empty on a fresh demo. One row
@@ -1747,6 +1762,9 @@ function toPublicKitchenRequest(req: MockStockRequest): KitchenRequest {
       quantity_requested: line.quantity_requested,
       quantity_approved: line.quantity_approved ?? null,
     })),
+    // Only a dispatch request carries these — the per-branch split the kitchen
+    // dispatches against.
+    allocations: req.allocations,
   };
 }
 
@@ -1869,6 +1887,43 @@ function applyAllocationToKitchenStock(
       remaining -= taken;
     }
   }
+}
+
+/**
+ * A branch confirming a kitchen delivery credits its own stock. Unbatched, like
+ * the sub-kitchen and branch-order credits — the branch tracks finished goods by
+ * product, not batch.
+ */
+function applyDeliveryToBranchStock(
+  db: MockDb,
+  branch: Branch,
+  productId: string,
+  productName: string,
+  quantity: number,
+) {
+  const existing = db.inventory.find(
+    (i) =>
+      i.location_type === "BRANCH" &&
+      i.location_id === branch.id &&
+      i.product_id === productId &&
+      i.batch_code === "",
+  );
+  if (existing) {
+    existing.quantity += quantity;
+    return;
+  }
+  const product = db.products.find((p) => p.id === productId);
+  db.inventory.push({
+    id: `inv-${Date.now()}-${productId}`,
+    restaurant_id: branch.restaurant_id,
+    product_id: productId,
+    product: { id: productId, name: product?.name ?? productName, sku: product?.sku },
+    quantity,
+    batch_code: "",
+    expiry_date: null,
+    location_type: "BRANCH",
+    location_id: branch.id,
+  });
 }
 
 /** RECEIVED credits the kitchen with what the warehouse dispatched. */
@@ -3349,12 +3404,14 @@ export const mockClient: ApiClient = {
       }
       perLine.set(a.line_item_id, (perLine.get(a.line_item_id) ?? 0) + a.quantity);
       resolved.push({
+        id: `alloc-${Date.now()}-${resolved.length + 1}`,
         line_item_id: line.id,
         product_id: line.product_id,
         product_name: line.product_name,
         branch_id: branch.id,
         branch_name: branch.name,
         quantity: a.quantity,
+        status: "ALLOCATED",
       });
     }
 
@@ -4513,6 +4570,38 @@ export const mockClient: ApiClient = {
     );
   },
 
+  async dispatchKitchenRequest(requestId: string) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const found = db.requests.find(
+      (r) =>
+        r.id === requestId &&
+        r.type === "KITCHEN_TO_ADMIN" &&
+        r.source_location_id === kitchen.id,
+    );
+    if (!found) throw new ApiError("Request not found", 404);
+    if (found.status !== "ALLOCATED") {
+      throw new ApiError(`Cannot dispatch a request in status ${found.status}`, 409);
+    }
+
+    // Debit the kitchen for every allocated line before moving the status — a
+    // shortfall must leave both stock and status untouched. quantity_approved on
+    // each line already equals the sum of that line's allocations.
+    applyAllocationToKitchenStock(db, kitchen, found);
+
+    found.status = "DISPATCHED";
+    found.allocations = (found.allocations ?? []).map((a) => ({
+      ...a,
+      status: "DISPATCHED" as const,
+    }));
+    found.updated_at = now();
+    saveDb(db);
+    return delay(toPublicKitchenRequest(found));
+  },
+
   async getKitchenRequest(requestId: string) {
     const me = requireAuth();
     const db = loadDb();
@@ -5097,6 +5186,14 @@ export const mockClient: ApiClient = {
   // `source_location_id`), so a request counts as this branch's when its source
   // matches the branch id OR, absent that, its label matches the branch name.
 
+  async listBranchKitchens(): Promise<Kitchen[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    // Every kitchen in the branch's restaurant is a valid fulfilment target.
+    return delay(db.kitchens.filter((k) => k.restaurant_id === branch.restaurant_id));
+  },
+
   async listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {
     const me = requireAuth();
     const db = loadDb();
@@ -5144,6 +5241,13 @@ export const mockClient: ApiClient = {
       }
     }
 
+    // The branch picks which kitchen should fulfil it. Admin still approves and
+    // forwards; this records the branch's chosen destination up front.
+    const kitchen = db.kitchens.find(
+      (k) => k.id === body.kitchen_id && k.restaurant_id === branch.restaurant_id,
+    );
+    if (!kitchen) throw new ApiError("Kitchen not found", 404);
+
     const id = `req-${Date.now()}`;
     const created: MockStockRequest = {
       id,
@@ -5158,9 +5262,9 @@ export const mockClient: ApiClient = {
       assignee_id: null,
       source_location_type: "BRANCH",
       source_location_id: branch.id,
-      // Head office is the target; it is not a stock location, so none is set.
-      target_location_type: null,
-      target_location_id: null,
+      // The branch's chosen kitchen. Admin can confirm or re-route on forward.
+      target_location_type: "KITCHEN",
+      target_location_id: kitchen.id,
       line_items: lines.map((line, index) => ({
         id: `${id}-l${index + 1}`,
         product_id: line.product_id,
@@ -5175,6 +5279,84 @@ export const mockClient: ApiClient = {
 
     saveDb(db);
     return delay(toPublicRequest(created));
+  },
+
+  async listBranchDeliveries(): Promise<BranchDelivery[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    // Flatten every dispatch request's allocations down to the ones aimed at this
+    // branch that have actually left the kitchen. Newest request first.
+    const deliveries: BranchDelivery[] = [];
+    const requests = db.requests
+      .filter((r) => r.type === "KITCHEN_TO_ADMIN" && r.restaurant_id === branch.restaurant_id)
+      .sort((a, b) => (b.updated_at ?? b.created_at).localeCompare(a.updated_at ?? a.created_at));
+
+    for (const req of requests) {
+      for (const a of req.allocations ?? []) {
+        if (a.branch_id !== branch.id) continue;
+        if (a.status !== "DISPATCHED" && a.status !== "RECEIVED") continue;
+        deliveries.push({
+          id: a.id,
+          request_id: req.id,
+          from_label: req.from_label ?? "Kitchen",
+          product_id: a.product_id ?? "",
+          product_name: a.product_name,
+          quantity: a.quantity,
+          status: a.status,
+          created_at: req.updated_at ?? req.created_at,
+        });
+      }
+    }
+    return delay(deliveries);
+  },
+
+  async receiveBranchDelivery(deliveryId: string): Promise<BranchDelivery> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    // Find the allocation this delivery id points at, scoped to this branch.
+    let owner: MockStockRequest | undefined;
+    let alloc: RequestBranchAllocation | undefined;
+    for (const req of db.requests) {
+      if (req.type !== "KITCHEN_TO_ADMIN") continue;
+      const match = (req.allocations ?? []).find(
+        (a) => a.id === deliveryId && a.branch_id === branch.id,
+      );
+      if (match) {
+        owner = req;
+        alloc = match;
+        break;
+      }
+    }
+    if (!owner || !alloc) throw new ApiError("Delivery not found", 404);
+    if (alloc.status !== "DISPATCHED") {
+      throw new ApiError(`This delivery is ${alloc.status.toLowerCase()}, not awaiting receipt.`, 409);
+    }
+
+    // Credit the branch, then mark this allocation received.
+    applyDeliveryToBranchStock(db, branch, alloc.product_id ?? "", alloc.product_name, alloc.quantity);
+    alloc.status = "RECEIVED";
+
+    // The request is fully received only once every branch has confirmed.
+    if ((owner.allocations ?? []).every((a) => a.status === "RECEIVED")) {
+      owner.status = "RECEIVED";
+    }
+    owner.updated_at = now();
+    saveDb(db);
+
+    return delay({
+      id: alloc.id,
+      request_id: owner.id,
+      from_label: owner.from_label ?? "Kitchen",
+      product_id: alloc.product_id ?? "",
+      product_name: alloc.product_name,
+      quantity: alloc.quantity,
+      status: "RECEIVED",
+      created_at: owner.updated_at ?? owner.created_at,
+    });
   },
 
   async listBranchInventory(): Promise<BranchInventoryItem[]> {

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import {
   useBranchInventory,
+  useBranchKitchens,
   useBranchRequests,
   useCreateBranchRequest,
 } from "@/lib/hooks/use-branch";
@@ -199,8 +200,10 @@ function NewRequestDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { data: inventory } = useBranchInventory();
+  const kitchens = useBranchKitchens();
   const create = useCreateBranchRequest();
   const [lines, setLines] = useState<DraftLine[]>([newLine()]);
+  const [kitchenId, setKitchenId] = useState("");
   const [notes, setNotes] = useState("");
 
   // The branch's own catalogue. Pricing is Admin-only and absent from this
@@ -210,8 +213,9 @@ function NewRequestDialog({
     new Map((inventory ?? []).map((i) => [i.product_id, i.product_name])).entries(),
   ).map(([id, name]) => ({ id, name }));
 
+  const kitchenOptions = kitchens.data ?? [];
   const usable = lines.filter((l) => l.product_id && l.quantity_requested > 0);
-  const valid = usable.length > 0;
+  const valid = usable.length > 0 && !!kitchenId;
 
   function update(uid: string, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((l) => (l.uid === uid ? { ...l, ...patch } : l)));
@@ -219,6 +223,7 @@ function NewRequestDialog({
 
   function reset() {
     setLines([newLine()]);
+    setKitchenId("");
     setNotes("");
   }
 
@@ -228,11 +233,31 @@ function NewRequestDialog({
         <DialogHeader>
           <DialogTitle>New stock request</DialogTitle>
           <DialogDescription>
-            What this branch needs from head office. Admin reviews and approves it.
+            What this branch needs, and which kitchen should fulfil it. Admin
+            reviews and approves it.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Fulfilling kitchen</Label>
+            <Select value={kitchenId} onValueChange={setKitchenId}>
+              <SelectTrigger className="h-10">
+                <SelectValue
+                  placeholder={kitchens.isLoading ? "Loading kitchens…" : "Choose a kitchen…"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {kitchenOptions.map((k) => (
+                  <SelectItem key={k.id} value={k.id}>
+                    {k.name}
+                    {k.location ? ` — ${k.location}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {lines.map((line) => (
             <div key={line.uid} className="flex items-end gap-2">
               <div className="min-w-0 flex-1 space-y-1">
@@ -302,7 +327,9 @@ function NewRequestDialog({
 
           {!valid && (
             <Badge variant="outline" className="text-warning">
-              Add at least one product with a quantity
+              {!kitchenId
+                ? "Pick a kitchen and add at least one product"
+                : "Add at least one product with a quantity"}
             </Badge>
           )}
         </div>
@@ -316,6 +343,7 @@ function NewRequestDialog({
             onClick={() =>
               create.mutate(
                 {
+                  kitchen_id: kitchenId,
                   notes: notes.trim() || undefined,
                   lines: usable.map(({ product_id, quantity_requested }) => ({
                     product_id,

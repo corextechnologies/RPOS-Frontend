@@ -147,8 +147,29 @@ export interface CreateBranchRequestLineInput {
 }
 
 export interface CreateBranchRequestInput {
+  /** The kitchen the branch wants to fulfil this — chosen from a picker. */
+  kitchen_id: string;
   notes?: string;
   lines: CreateBranchRequestLineInput[];
+}
+
+// ---- Incoming deliveries (from the kitchen) ----
+//
+// One branch's slice of a kitchen dispatch. The kitchen produced finished goods,
+// Admin allocated a quantity to this branch, and the kitchen dispatched it. The
+// branch confirms receipt, which credits its stock. `id` is the allocation id —
+// the unit the branch receives.
+
+export interface BranchDelivery {
+  id: string;
+  request_id: string;
+  /** The kitchen that dispatched it. */
+  from_label: string;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  status: "DISPATCHED" | "RECEIVED";
+  created_at: string;
 }
 
 // ---- Inventory ----

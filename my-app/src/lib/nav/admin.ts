@@ -110,13 +110,13 @@ export const ADMIN_NAV: NavSection[] = [
         action: "discounts:read",
         match: "exact",
       },
-      {
-        label: "Recipes",
-        href: "/admin/recipes",
-        icon: Utensils,
-        action: "recipes:read",
-        match: "exact",
-      },
+      // {
+      //   label: "Recipes",
+      //   href: "/admin/recipes",
+      //   icon: Utensils,
+      //   action: "recipes:read",
+      //   match: "exact",
+      // },
       {
         label: "Requests",
         href: "/admin/requests",
