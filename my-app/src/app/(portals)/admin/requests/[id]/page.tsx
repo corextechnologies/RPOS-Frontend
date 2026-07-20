@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/ui/state";
 import { useAuth } from "@/lib/auth";
 import { useWarehouses } from "@/lib/hooks/use-locations";
 import { useRequest, useUpdateRequestStatus } from "@/lib/hooks/use-requests";
+import { resolveRequestFromLabel } from "@/lib/requests";
 
 export default function AdminRequestDetailPage() {
   const params = useParams<{ id: string }>();
@@ -21,14 +22,11 @@ export default function AdminRequestDetailPage() {
   const updateStatus = useUpdateRequestStatus(id);
 
   // The backend omits `from_label` on a WAREHOUSE_TO_ADMIN_PO, so resolve the
-  // origin warehouse name from `source_location_id`. Only fetched when needed.
-  const needsWarehouseName =
-    request.data?.type === "WAREHOUSE_TO_ADMIN_PO" && !request.data.from_label;
+  // origin warehouse name from `source_location_id`.
   const warehouses = useWarehouses();
-  const fromLabel =
-    needsWarehouseName && request.data?.source_location_id
-      ? warehouses.data?.find((w) => w.id === request.data?.source_location_id)?.name
-      : undefined;
+  const fromLabel = request.data
+    ? resolveRequestFromLabel(request.data, warehouses.data)
+    : undefined;
 
   if (request.isLoading) {
     return (

@@ -100,6 +100,16 @@ function normalizeKitchenRequest(req: KitchenRequest): KitchenRequest {
       quantity_approved:
         line.quantity_approved == null ? null : Number(line.quantity_approved),
     })),
+    // Dispatch requests carry the per-branch split; normalize its integer ids to
+    // the app's string convention. Undefined for other request types.
+    allocations: req.allocations?.map((a) => ({
+      ...a,
+      id: String(a.id),
+      line_item_id: String(a.line_item_id),
+      product_id: a.product_id != null ? String(a.product_id) : a.product_id,
+      branch_id: String(a.branch_id),
+      quantity: Number(a.quantity),
+    })),
   };
 }
 

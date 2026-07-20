@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useWarehouses } from "@/lib/hooks/use-locations";
 import {
   useDispatchRequests,
   useDistributionRequests,
@@ -54,6 +55,8 @@ export default function AdminRequestsPage() {
   const products = useProductRequests(filters);
   const distribution = useDistributionRequests(filters);
   const dispatch = useDispatchRequests(filters);
+  // Distribution POs arrive without a `from_label`; resolve the warehouse name.
+  const warehouses = useWarehouses();
   const active =
     tab === "products" ? products : tab === "distribution" ? distribution : dispatch;
 
@@ -139,6 +142,7 @@ export default function AdminRequestsPage() {
         isLoading={active.isLoading}
         isError={active.isError}
         onRetry={() => active.refetch()}
+        warehouses={warehouses.data}
         emptyTitle={
           tab === "products"
             ? "No product requests"

@@ -23,6 +23,11 @@ interface KitchenRequestListProps {
   onRetry?: () => void;
   emptyTitle: string;
   emptyDescription: string;
+  /**
+   * Where a row links. Dispatch requests have no by-id endpoint, so they route
+   * to their own detail (which reads from the list) rather than the shared one.
+   */
+  basePath?: string;
 }
 
 function summarizeLines(request: KitchenRequest): string {
@@ -39,6 +44,7 @@ export function KitchenRequestList({
   onRetry,
   emptyTitle,
   emptyDescription,
+  basePath = "/kitchen/requests",
 }: KitchenRequestListProps) {
   const router = useRouter();
 
@@ -91,7 +97,7 @@ export function KitchenRequestList({
               <TableRow
                 key={request.id}
                 className="cursor-pointer"
-                onClick={() => router.push(`/kitchen/requests/${request.id}`)}
+                onClick={() => router.push(`${basePath}/${request.id}`)}
               >
                 <TableCell>
                   <p className="font-medium text-content">{summarizeLines(request)}</p>

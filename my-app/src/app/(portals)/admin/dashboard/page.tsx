@@ -37,7 +37,8 @@ import {
   useDistributionRequests,
   useProductRequests,
 } from "@/lib/hooks/use-requests";
-import type { StockRequest } from "@/lib/types/admin";
+import { resolveRequestFromLabel } from "@/lib/requests";
+import type { StockRequest, Warehouse as WarehouseType } from "@/lib/types/admin";
 import { formatDate } from "@/lib/utils";
 
 const PENDING_FILTERS = {
@@ -182,6 +183,7 @@ export default function AdminDashboardPage() {
             isError={recentError}
             onRetry={retryRecent}
             onRowClick={(id) => router.push(`/admin/requests/${id}`)}
+            warehouses={warehouses.data}
           />
         </CardContent>
       </Card>
@@ -195,12 +197,14 @@ function RecentPendingTable({
   isError,
   onRetry,
   onRowClick,
+  warehouses,
 }: {
   items: StockRequest[];
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
   onRowClick: (id: string) => void;
+  warehouses?: WarehouseType[];
 }) {
   if (isLoading) {
     return (
@@ -243,7 +247,9 @@ function RecentPendingTable({
             onClick={() => onRowClick(req.id)}
           >
             <TableCell>
-              <p className="font-medium text-content">{req.from_label || "—"}</p>
+              <p className="font-medium text-content">
+                {resolveRequestFromLabel(req, warehouses) || "—"}
+              </p>
               <p className="text-xs text-muted">{req.line_items.length} line item(s)</p>
             </TableCell>
             <TableCell className="text-muted">{formatRequestType(req.type)}</TableCell>

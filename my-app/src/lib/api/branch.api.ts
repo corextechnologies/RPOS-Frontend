@@ -30,6 +30,23 @@ import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
 
+/**
+ * `/branch/inventory` as it arrives from the live API: ids may be numbers, and
+ * the product name/sku come nested under `product` (the shared serializer),
+ * rather than the flat `product_name`/`sku` the mock and UI use.
+ */
+type RawBranchInventoryItem = {
+  id: string | number;
+  product_id?: string | number;
+  product_name?: string;
+  sku?: string | null;
+  product?: { id?: string | number; name?: string; sku?: string | null };
+  quantity: string | number;
+  batch_code?: string | null;
+  expiry_date?: string | null;
+  location_id: string | number;
+};
+
 function qs(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -298,7 +315,9 @@ export const branchApi = {
   // ---- Incoming deliveries (from the kitchen) ----
 
   async listBranchDeliveries(): Promise<BranchDelivery[]> {
-    const items = await request<BranchDelivery[]>("/branch/deliveries");
+    // The list isn't paged in the UI; ask for a generous page so the envelope's
+    // first page holds everything. `request` unwraps `{ data }` to the array.
+    const items = await request<BranchDelivery[]>("/branch/deliveries?page=1&page_size=100");
     return (items ?? []).map((d) => ({
       ...d,
       id: String(d.id),
@@ -318,13 +337,18 @@ export const branchApi = {
   // ---- Inventory ----
 
   async listBranchInventory(): Promise<BranchInventoryItem[]> {
-    const items = await request<BranchInventoryItem[]>("/branch/inventory");
+    const items = await request<RawBranchInventoryItem[]>("/branch/inventory");
+    // The live API nests product name/sku under `product` — the same serializer
+    // the warehouse and kitchen portals consume — so lift them into the flat
+    // fields the UI reads. Tolerates a flat payload too (as the mock returns).
     return items.map((i) => ({
-      ...i,
       id: String(i.id),
-      product_id: String(i.product_id),
+      product_id: String(i.product_id ?? i.product?.id ?? ""),
+      product_name: i.product_name ?? i.product?.name ?? "",
+      sku: i.sku ?? i.product?.sku ?? null,
       quantity: Number(i.quantity),
       batch_code: i.batch_code ?? "",
+      expiry_date: i.expiry_date ?? null,
       location_id: String(i.location_id),
     }));
   },

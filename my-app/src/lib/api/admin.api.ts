@@ -5,6 +5,7 @@ import type {
   AdminProfile,
   AdminRequestType,
   AllocateDispatchInput,
+  RequestBranchAllocation,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -94,6 +95,26 @@ function normalizeStockRequest(r: RawStockRequest): StockRequest {
       id: String(line.id),
       product_id: line.product_id != null ? String(line.product_id) : line.product_id,
     })),
+    // The live API sends integer ids as numbers; normalize the dispatch
+    // allocations to the app's string-id convention (empty for other types).
+    allocations: (r.allocations ?? []).map(normalizeAllocation),
+  };
+}
+
+/** A string id becomes a number when it is purely digits; anything else (the
+ * mock's `br-001`-style ids, never seen by the live API) is left as-is. */
+function numericId(id: string): string | number {
+  return /^\d+$/.test(id) ? Number(id) : id;
+}
+
+function normalizeAllocation(a: RequestBranchAllocation): RequestBranchAllocation {
+  return {
+    ...a,
+    id: String(a.id),
+    line_item_id: String(a.line_item_id),
+    product_id: a.product_id != null ? String(a.product_id) : a.product_id,
+    branch_id: String(a.branch_id),
+    quantity: Number(a.quantity),
   };
 }
 
@@ -504,9 +525,20 @@ export const adminApi = {
     requestId: string,
     body: AllocateDispatchInput,
   ): Promise<StockRequest> {
+    // The live API types line_item_id/branch_id as integers. Ids arrive here as
+    // strings (the app's convention); send numeric ones back as numbers so a
+    // strict validator accepts them. Non-numeric ids (never on the live API)
+    // pass through unchanged.
     const data = await request<StockRequest>(`/admin/requests/${requestId}/allocate`, {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        notes: body.notes ?? null,
+        allocations: body.allocations.map((a) => ({
+          line_item_id: numericId(a.line_item_id),
+          branch_id: numericId(a.branch_id),
+          quantity: a.quantity,
+        })),
+      }),
     });
     return normalizeStockRequest(data);
   },

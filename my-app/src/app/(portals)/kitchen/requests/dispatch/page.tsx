@@ -90,6 +90,7 @@ export default function KitchenDispatchRequestsPage() {
             isLoading={requests.isLoading}
             isError={requests.isError}
             onRetry={() => requests.refetch()}
+            basePath="/kitchen/requests/dispatch"
             emptyTitle="No dispatch notifications"
             emptyDescription="Raise one from Production with “Notify Admin” once you have goods ready to send out."
           />
