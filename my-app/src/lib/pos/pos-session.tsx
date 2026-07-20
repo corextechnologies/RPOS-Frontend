@@ -13,7 +13,7 @@ import { tokens } from "@/lib/api/tokens";
 import { onPosSessionExpired } from "@/lib/api/pos-client";
 import { posSession } from "@/lib/pos/session";
 import { has } from "@/lib/pos/capabilities";
-import { isDeviceFault } from "@/lib/api/errors";
+import { isApiCode, isDeviceFault, needsRepairing, POS_ERROR } from "@/lib/api/errors";
 import type { Capability, PosBootstrap } from "@/lib/types/pos";
 
 interface PosSessionValue {
@@ -44,15 +44,21 @@ export function PosSessionProvider({ children }: { children: React.ReactNode }) 
       setBootstrap(b);
       setError(null);
     } catch (err) {
-      if (isDeviceFault(err)) {
-        posSession.clearSession();
-        setBootstrap(null);
-        setError(err instanceof Error ? err.message : "This terminal isn't recognised.");
+      // A revoked or rebound terminal must go back to activation, not sign-in:
+      // dropping the paired flag makes the shell route to `/activate`.
+      if (needsRepairing(err)) {
+        posSession.unpair();
       } else {
         posSession.clearSession();
-        setBootstrap(null);
-        setError(err instanceof Error ? err.message : "Couldn't start this terminal.");
       }
+      setBootstrap(null);
+      setError(
+        isDeviceFault(err) && err instanceof Error
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Couldn't start this terminal.",
+      );
     } finally {
       setLoading(false);
     }
@@ -73,9 +79,17 @@ export function PosSessionProvider({ children }: { children: React.ReactNode }) 
 
   const pinUnlock = useCallback(
     async (email: string, pin: string) => {
-      const deviceUid = posSession.deviceUid;
-      if (!deviceUid) throw new Error("This terminal hasn't been set up yet.");
-      const res = await posApi.pinUnlock({ email, pin, device_uid: deviceUid });
+      // Cookie-first, mirroring login: the httpOnly cookie carries the device.
+      // Fall back to the localStorage uid only if the server can't find one.
+      let res;
+      try {
+        res = await posApi.pinUnlock({ email, pin });
+      } catch (err) {
+        if (!isApiCode(err, POS_ERROR.DEVICE_UID_MISSING)) throw err;
+        const deviceUid = posSession.deviceUid;
+        if (!deviceUid) throw new Error("This terminal hasn't been set up yet.");
+        res = await posApi.pinUnlock({ email, pin, device_uid: deviceUid });
+      }
       posSession.setSession(res.access_token, { device_id: res.device_id, branch_id: res.branch_id }, email);
       await load();
     },

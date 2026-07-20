@@ -55,3 +55,34 @@ describe("posSession device uid", () => {
     expect(store.getItem("rpos-pos-device-uid")).toBeNull();
   });
 });
+
+describe("posSession pairing", () => {
+  let store: MemoryStorage;
+
+  beforeEach(() => {
+    store = new MemoryStorage();
+    vi.stubGlobal("window", { localStorage: store });
+  });
+
+  it("tracks the paired flag as a boolean hint", () => {
+    expect(posSession.paired).toBe(false);
+    posSession.setPaired(true);
+    expect(posSession.paired).toBe(true);
+    posSession.setPaired(false);
+    expect(posSession.paired).toBe(false);
+  });
+
+  it("unpair drops the paired flag and session but keeps the device_uid", () => {
+    store.setItem("rpos-device-uid", "till-uid");
+    posSession.setPaired(true);
+    posSession.setSession("tok", { device_id: 1, branch_id: 2 });
+
+    posSession.unpair();
+
+    // Re-pairing after a reissue reuses the same physical identity.
+    expect(store.getItem("rpos-device-uid")).toBe("till-uid");
+    expect(posSession.paired).toBe(false);
+    expect(posSession.token).toBeNull();
+    expect(posSession.context).toBeNull();
+  });
+});

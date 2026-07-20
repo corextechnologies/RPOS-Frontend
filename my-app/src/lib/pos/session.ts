@@ -18,6 +18,7 @@
 
 const DEVICE_UID_KEY = "rpos-device-uid";
 const LEGACY_DEVICE_UID_KEY = "rpos-pos-device-uid";
+const PAIRED_KEY = "rpos-pos-paired";
 const TOKEN_KEY = "rpos-pos-access-token";
 const CONTEXT_KEY = "rpos-pos-context";
 const LAST_EMAIL_KEY = "rpos-pos-last-email";
@@ -29,6 +30,12 @@ const REGION_KEY = "rpos-pos-region";
  * the Branch Manager registers (or what the backend seed creates).
  */
 export const DEV_TERMINAL_UID = "DEV-TERMINAL-01";
+
+/** POS-specific routes outside the authenticated shell. */
+export const POS_ROUTES = {
+  /** Public device pairing screen — generate a uid, claim an activation code. */
+  activate: "/activate",
+} as const;
 
 /**
  * The regions offered on the sign-in screen.
@@ -77,15 +84,19 @@ export const posSession = {
   },
 
   /**
-   * First launch: mint a durable `device_uid` and persist it. Later launches
-   * reuse the stored value. Development builds hardcode `DEV-TERMINAL-01` so
-   * registration isn't part of every local login loop.
+   * First launch: mint a durable `device_uid` and persist it **before** the
+   * device calls activate. Later launches reuse the stored value. The uid is a
+   * uuid4 hex (dashes stripped) to match the backend's expected shape;
+   * development builds hardcode `DEV-TERMINAL-01` so pairing isn't part of every
+   * local login loop.
    */
   ensureDeviceUid(): string {
     const existing = this.deviceUid;
     if (existing) return existing;
     const uid =
-      process.env.NODE_ENV === "development" ? DEV_TERMINAL_UID : crypto.randomUUID();
+      process.env.NODE_ENV === "development"
+        ? DEV_TERMINAL_UID
+        : crypto.randomUUID().replace(/-/g, "");
     this.setDeviceUid(uid);
     return uid;
   },
@@ -94,6 +105,36 @@ export const posSession = {
     const store = ls();
     store?.removeItem(DEVICE_UID_KEY);
     store?.removeItem(LEGACY_DEVICE_UID_KEY);
+  },
+
+  /**
+   * Whether this device has completed activation. The httpOnly cookie is the
+   * real credential (JS can't read it), so this flag is only a client-side hint
+   * for the launch state machine: paired → show login; not paired → show the
+   * activation screen.
+   */
+  get paired(): boolean {
+    return ls()?.getItem(PAIRED_KEY) === "1";
+  },
+
+  setPaired(value: boolean) {
+    const store = ls();
+    if (!store) return;
+    if (value) store.setItem(PAIRED_KEY, "1");
+    else store.removeItem(PAIRED_KEY);
+  },
+
+  /**
+   * Drop the paired flag and end the user session, but keep the `device_uid` so
+   * re-pairing (after the manager reissues a code) can reuse the same identity.
+   * Called when a login/session call reports the terminal was revoked or rebound.
+   */
+  unpair() {
+    const store = ls();
+    if (!store) return;
+    store.removeItem(PAIRED_KEY);
+    store.removeItem(TOKEN_KEY);
+    store.removeItem(CONTEXT_KEY);
   },
 
   get token(): string | null {
@@ -156,6 +197,7 @@ export const posSession = {
     store.removeItem(LAST_EMAIL_KEY);
     store.removeItem(DEVICE_UID_KEY);
     store.removeItem(LEGACY_DEVICE_UID_KEY);
+    store.removeItem(PAIRED_KEY);
     store.removeItem(REGION_KEY);
   },
 };

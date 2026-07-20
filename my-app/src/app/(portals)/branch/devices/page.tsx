@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { MonitorSmartphone, Plus, Car, Store } from "lucide-react";
+import {
+  MonitorSmartphone,
+  Plus,
+  Car,
+  Store,
+  MoreHorizontal,
+  RefreshCw,
+  Ban,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +24,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Table,
   TableBody,
   TableCell,
@@ -24,21 +38,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PageState } from "@/components/ui/page-state";
-import { useBranchDevices, useRegisterBranchDevice } from "@/lib/hooks/use-branch";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ActivationCodeDialog } from "@/components/branch/ActivationCodeDialog";
+import {
+  useBranchDevices,
+  useRegisterBranchDevice,
+  useReissueBranchDevice,
+  useRevokeBranchDevice,
+} from "@/lib/hooks/use-branch";
 import { cn } from "@/lib/utils";
-import type { DeviceProfile } from "@/lib/types/pos";
+import type { DeviceProfile, DeviceStatus, PosDevice, PosDeviceActivation } from "@/lib/types/pos";
 
 /**
- * The terminal registry (`POST/GET /v1/branch/devices`).
+ * The terminal registry (`/v1/branch/devices`).
  *
- * Until a terminal is registered here, signing in on it answers
- * `unknown_device`. Registration uses the **branch manager's ordinary portal
- * token** — Admin always gets 403. Lives next to staff provisioning because
- * the same manager who creates cashiers commissions the tills they sign in on.
+ * A manager registers a terminal from their own device — they never type the
+ * till's id. Registration mints a one-time **activation code** the physical
+ * till claims to pair itself, the way a card reader or smart-TV app activates.
+ * Uses the **branch manager's ordinary portal token** — Admin always gets 403.
  */
 export default function BranchDevicesPage() {
   const { data, isLoading, error } = useBranchDevices();
-  const [open, setOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  // The activation code returned by register/reissue — shown once, then dropped.
+  const [activation, setActivation] = useState<PosDeviceActivation | null>(null);
 
   return (
     <div className="space-y-6">
@@ -48,12 +72,12 @@ export default function BranchDevicesPage() {
             Terminals
           </h1>
           <p className="mt-1 text-sm text-muted">
-            A till can only sign in once it&apos;s registered here.
+            Register a till here, then pair the device with the activation code it shows.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
+        <Button onClick={() => setAddOpen(true)}>
           <Plus className="mr-1.5 size-4" aria-hidden />
-          Register terminal
+          Add terminal
         </Button>
       </div>
 
@@ -65,7 +89,7 @@ export default function BranchDevicesPage() {
         errorTitle="Couldn't load terminals"
         errorDescription={error instanceof Error ? error.message : undefined}
         emptyTitle="No terminals yet"
-        emptyDescription="Register one using the Terminal ID shown on the till's setup screen."
+        emptyDescription="Add one, then enter its activation code on the till to pair it."
       >
         {(rows) => (
           <Card>
@@ -74,35 +98,16 @@ export default function BranchDevicesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Terminal ID</TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Profile</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Last seen</TableHead>
+                    <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((device) => (
-                    <TableRow key={device.id}>
-                      <TableCell className="text-content">
-                        {device.name || <span className="text-faint">—</span>}
-                      </TableCell>
-                      <TableCell>
-                        {/* Matched exactly at POS login — monospaced so O/0 and I/l are clear. */}
-                        <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-content">
-                          {device.device_uid}
-                        </code>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs text-muted">{device.code}</TableCell>
-                      <TableCell>
-                        <Badge variant={device.profile === "CURBSIDE" ? "outline" : "secondary"}>
-                          {device.profile === "CURBSIDE" ? (
-                            <Car className="mr-1 size-3" aria-hidden />
-                          ) : (
-                            <Store className="mr-1 size-3" aria-hidden />
-                          )}
-                          {device.profile.toLowerCase()}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
+                    <DeviceRow key={device.id} device={device} onReissued={setActivation} />
                   ))}
                 </TableBody>
               </Table>
@@ -111,10 +116,145 @@ export default function BranchDevicesPage() {
         )}
       </PageState>
 
-      <RegisterDialog open={open} onOpenChange={setOpen} />
+      <AddTerminalDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onRegistered={setActivation}
+      />
+
+      <ActivationCodeDialog
+        device={activation}
+        open={!!activation}
+        onOpenChange={(open) => !open && setActivation(null)}
+      />
     </div>
   );
 }
+
+// ---- Status ----
+
+const STATUS_META: Record<
+  DeviceStatus,
+  { label: string; variant: "success" | "warning" | "secondary" }
+> = {
+  ACTIVE: { label: "Active", variant: "success" },
+  PENDING: { label: "Pending", variant: "warning" },
+  REVOKED: { label: "Revoked", variant: "secondary" },
+};
+
+function StatusBadge({ device }: { device: PosDevice }) {
+  const meta = STATUS_META[device.status] ?? STATUS_META.PENDING;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <Badge variant={meta.variant} className="w-fit">
+        {meta.label}
+      </Badge>
+      {device.status === "PENDING" && device.has_outstanding_code && (
+        <span className="text-xs text-faint">code issued — not yet paired</span>
+      )}
+    </div>
+  );
+}
+
+// ---- Row ----
+
+function DeviceRow({
+  device,
+  onReissued,
+}: {
+  device: PosDevice;
+  onReissued: (activation: PosDeviceActivation) => void;
+}) {
+  const reissue = useReissueBranchDevice();
+  const revoke = useRevokeBranchDevice();
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+
+  const isRevoked = device.status === "REVOKED";
+
+  return (
+    <TableRow>
+      <TableCell className="text-content">
+        {device.name || <span className="text-faint">—</span>}
+      </TableCell>
+      <TableCell>
+        {/* Printed on every ticket via order_no — monospaced so O/0 read clearly. */}
+        <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-content">
+          {device.code}
+        </code>
+      </TableCell>
+      <TableCell>
+        <Badge variant={device.profile === "CURBSIDE" ? "outline" : "secondary"}>
+          {device.profile === "CURBSIDE" ? (
+            <Car className="mr-1 size-3" aria-hidden />
+          ) : (
+            <Store className="mr-1 size-3" aria-hidden />
+          )}
+          {device.profile.toLowerCase()}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <StatusBadge device={device} />
+      </TableCell>
+      <TableCell className="text-sm text-muted">{formatLastSeen(device.last_seen_at)}</TableCell>
+      <TableCell>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label={`Actions for ${device.code}`}
+              disabled={reissue.isPending || revoke.isPending}
+            >
+              <MoreHorizontal className="size-4" aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              disabled={isRevoked || reissue.isPending}
+              onClick={() =>
+                reissue.mutate(device.id, { onSuccess: (activation) => onReissued(activation) })
+              }
+            >
+              <RefreshCw className="mr-2 size-4" aria-hidden />
+              Reissue code
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isRevoked}
+              onClick={() => setConfirmRevoke(true)}
+              className="text-danger focus:text-danger"
+            >
+              <Ban className="mr-2 size-4" aria-hidden />
+              Revoke
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <ConfirmDialog
+          open={confirmRevoke}
+          onOpenChange={setConfirmRevoke}
+          title={`Revoke ${device.code}?`}
+          description="The till stops working immediately — its current session dies on the next action, not at sign-out. Pairing a replacement needs a fresh activation code."
+          confirmLabel="Revoke terminal"
+          destructive
+          loading={revoke.isPending}
+          onConfirm={() =>
+            revoke.mutate(device.id, { onSuccess: () => setConfirmRevoke(false) })
+          }
+        />
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function formatLastSeen(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "—";
+  return at.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+// ---- Add terminal ----
 
 const PROFILES: Array<{ value: DeviceProfile; label: string; hint: string; icon: typeof Store }> = [
   {
@@ -126,25 +266,32 @@ const PROFILES: Array<{ value: DeviceProfile; label: string; hint: string; icon:
   {
     value: "CURBSIDE",
     label: "Curbside",
-    hint: "No drawer. Cash is refused (device_cannot_take_cash).",
+    hint: "Tablet, no drawer. Cash is refused.",
     icon: Car,
   },
 ];
 
-function RegisterDialog({
+function AddTerminalDialog({
   open,
   onOpenChange,
+  onRegistered,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onRegistered: (activation: PosDeviceActivation) => void;
 }) {
   const register = useRegisterBranchDevice();
-  const [deviceUid, setDeviceUid] = useState("");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [profile, setProfile] = useState<DeviceProfile>("COUNTER");
 
-  const valid = deviceUid.trim().length >= 8 && code.trim().length > 0;
+  const valid = code.trim().length > 0;
+
+  const reset = () => {
+    setCode("");
+    setName("");
+    setProfile("COUNTER");
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,35 +299,20 @@ function RegisterDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MonitorSmartphone className="size-4 text-brand" aria-hidden />
-            Register a terminal
+            Add a terminal
           </DialogTitle>
           <DialogDescription>
-            Paste the Terminal ID from the till&apos;s setup screen. Same value at register and
-            login.
+            Register the till here. You&apos;ll get a one-time activation code to enter on the
+            device itself.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="device_uid">Terminal ID</Label>
-            <Input
-              id="device_uid"
-              autoFocus
-              className="font-mono"
-              placeholder="DEV-TERMINAL-01"
-              value={deviceUid}
-              onChange={(e) => setDeviceUid(e.target.value.trim())}
-            />
-            <p className="text-xs text-faint">
-              The till generates this on first launch and reuses it forever. At least 8 characters;
-              matched exactly at sign-in.
-            </p>
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="code">Receipt code</Label>
             <Input
               id="code"
+              autoFocus
               className="font-mono"
               placeholder="T1"
               value={code}
@@ -240,25 +372,18 @@ function RegisterDialog({
             disabled={!valid || register.isPending}
             onClick={() =>
               register.mutate(
+                { code: code.trim(), profile, name: name.trim() || undefined },
                 {
-                  device_uid: deviceUid.trim(),
-                  code: code.trim(),
-                  profile,
-                  name: name.trim() || undefined,
-                },
-                {
-                  onSuccess: () => {
+                  onSuccess: (activation) => {
                     onOpenChange(false);
-                    setDeviceUid("");
-                    setCode("");
-                    setName("");
-                    setProfile("COUNTER");
+                    reset();
+                    onRegistered(activation);
                   },
                 },
               )
             }
           >
-            Register
+            {register.isPending ? "Adding…" : "Add terminal"}
           </Button>
         </DialogFooter>
       </DialogContent>

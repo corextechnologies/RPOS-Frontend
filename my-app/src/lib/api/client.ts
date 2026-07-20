@@ -32,6 +32,7 @@ async function refreshTokens(): Promise<boolean> {
       method: "POST",
       headers: buildHeaders(),
       body: JSON.stringify({ refresh_token: refresh }),
+      credentials: "include",
     });
     if (!res.ok) return false;
     const json = await res.json();
@@ -63,6 +64,9 @@ export async function request<T>(
   const res = await fetch(`${apiConfig.baseUrl}${path}`, {
     ...init,
     headers,
+    // Carry the POS device cookie on any /v1 call; harmless for bearer-auth
+    // portal routes, and required cross-origin once the server allows credentials.
+    credentials: "include",
   });
 
   if (res.status === 401 && !retried && tokens.refresh) {
@@ -97,6 +101,9 @@ export async function requestEnvelope<T>(
   const res = await fetch(`${apiConfig.baseUrl}${path}`, {
     ...init,
     headers,
+    // Carry the POS device cookie on any /v1 call; harmless for bearer-auth
+    // portal routes, and required cross-origin once the server allows credentials.
+    credentials: "include",
   });
 
   if (res.status === 401 && !retried && tokens.refresh) {
@@ -132,6 +139,9 @@ export async function requestText(
   const res = await fetch(`${apiConfig.baseUrl}${path}`, {
     ...init,
     headers,
+    // Carry the POS device cookie on any /v1 call; harmless for bearer-auth
+    // portal routes, and required cross-origin once the server allows credentials.
+    credentials: "include",
   });
 
   if (res.status === 401 && !retried && tokens.refresh) {

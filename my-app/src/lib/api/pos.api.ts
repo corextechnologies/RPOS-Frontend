@@ -25,6 +25,8 @@ import type {
   OpenShiftInput,
   PaymentInput,
   PaymentResult,
+  PosActivateInput,
+  PosActivateResult,
   PosBootstrap,
   PosCustomer,
   PosLoginInput,
@@ -45,6 +47,20 @@ import { numberFromMeta } from "./normalize";
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
 
+/**
+ * Drop `device_uid` from a login/pin-unlock body when it's absent, so the
+ * cookie path sends `{ email, password }` clean rather than `device_uid: null`
+ * — the server resolves the uid from cookie/header when the body omits it.
+ */
+function loginBody<T extends { device_uid?: string }>(input: T): Omit<T, "device_uid"> & {
+  device_uid?: string;
+} {
+  if (input.device_uid) return input;
+  const { device_uid: _omit, ...rest } = input;
+  void _omit;
+  return rest;
+}
+
 function qs(params: Record<string, string | number | boolean | undefined | null>): string {
   const search = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -57,12 +73,30 @@ function qs(params: Record<string, string | number | boolean | undefined | null>
 export const posApi = {
   // ---- Session ----
 
-  /** Anonymous: there is no session yet, and the token this returns is the one. */
+  /**
+   * Pair this device to a terminal by claiming a one-time activation code.
+   * Anonymous — there is no user token yet. On success the server sets the
+   * httpOnly `device_uid` cookie (hence `credentials: "include"` in the client),
+   * and a cashier logs in afterward.
+   */
+  activate(input: PosActivateInput): Promise<PosActivateResult> {
+    return posRequest<PosActivateResult>("/pos/session/activate", {
+      method: "POST",
+      anonymous: true,
+      ...json(input),
+    });
+  },
+
+  /**
+   * Anonymous: there is no session yet, and the token this returns is the one.
+   * `device_uid` is normally omitted — it rides the httpOnly cookie. It is sent
+   * in the body only as a fallback (cookie lost, localStorage survived).
+   */
   login(input: PosLoginInput): Promise<PosLoginResult> {
     return posRequest<PosLoginResult>("/pos/session/login", {
       method: "POST",
       anonymous: true,
-      ...json(input),
+      ...json(loginBody(input)),
     });
   },
 
@@ -70,7 +104,7 @@ export const posApi = {
     return posRequest<PosLoginResult>("/pos/session/pin-unlock", {
       method: "POST",
       anonymous: true,
-      ...json(input),
+      ...json(loginBody(input)),
     });
   },
 

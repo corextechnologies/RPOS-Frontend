@@ -15,7 +15,7 @@ import type {
   ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
-import type { DeviceRegisterInput } from "@/lib/types/pos";
+import type { DeviceCreateInput } from "@/lib/types/pos";
 
 export const branchKeys = {
   devices: ["branch-devices"] as const,
@@ -46,10 +46,30 @@ export function useBranchDevices() {
 export function useRegisterBranchDevice() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: DeviceRegisterInput) => branchApi.registerDevice(input),
+    mutationFn: (input: DeviceCreateInput) => branchApi.registerDevice(input),
+    // The caller shows the returned one-time activation code + QR; no toast here
+    // (a toast would compete with the code panel for attention).
+    onSuccess: () => qc.invalidateQueries({ queryKey: branchKeys.devices }),
+    onError: (err) => toast.error(posErrorMessage(err)),
+  });
+}
+
+export function useReissueBranchDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => branchApi.reissueDevice(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: branchKeys.devices }),
+    onError: (err) => toast.error(posErrorMessage(err)),
+  });
+}
+
+export function useRevokeBranchDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => branchApi.revokeDevice(id),
     onSuccess: (device) => {
       qc.invalidateQueries({ queryKey: branchKeys.devices });
-      toast.success(`Terminal ${device.code ?? ""} registered — it can sign in now.`);
+      toast.success(`Terminal ${device.code ?? ""} revoked — it stops working immediately.`);
     },
     onError: (err) => toast.error(posErrorMessage(err)),
   });

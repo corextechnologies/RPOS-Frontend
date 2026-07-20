@@ -8,6 +8,7 @@ import type {
   WarehouseRequestFilters,
 } from "@/lib/types/warehouse";
 import {
+  insufficientStockDetails,
   isMissingWarehouseAssignment,
   STALE_STATUS,
 } from "@/lib/types/warehouse";
@@ -82,6 +83,24 @@ export function useUpdateWarehouseRequestStatus(requestId: string) {
       if (err instanceof ApiError && err.code === STALE_STATUS) {
         toast.error("This request changed while you were viewing it. Refreshing.");
         qc.invalidateQueries({ queryKey: queryKeys.warehouseRequest(requestId) });
+        return;
+      }
+      // The dispatch/allocation path itemises an insufficient move: show what it
+      // actually found (non-expired, dispatchable) against what was asked. Only
+      // this path carries `details` today — other insufficient_stock sources
+      // (sale, production, waste) send the bare message — so treat the payload
+      // as present-if-available and require the numbers before using the rich
+      // copy; otherwise fall through to the message.
+      const stock = insufficientStockDetails(err);
+      if (
+        stock &&
+        typeof stock.available === "number" &&
+        typeof stock.requested === "number"
+      ) {
+        const name = stock.product_name ?? "this product";
+        toast.error(
+          `Not enough ${name} to dispatch — ${stock.available} in date, ${stock.requested} requested. Expired stock isn't dispatchable.`,
+        );
         return;
       }
       const message = err instanceof Error ? err.message : "Failed to update request";

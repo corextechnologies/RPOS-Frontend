@@ -3,6 +3,7 @@ import {
   isApiCode,
   isDeviceFault,
   needsManagerApproval,
+  needsRepairing,
   posErrorMessage,
   readDueMinor,
   readLimitBp,
@@ -136,8 +137,20 @@ describe("approval and device faults", () => {
     expect(isDeviceFault(new ApiError("", 403, "device_not_bound"))).toBe(true);
     expect(isDeviceFault(new ApiError("", 403, "unknown_device"))).toBe(true);
     expect(isDeviceFault(new ApiError("", 403, "device_branch_mismatch"))).toBe(true);
+    // A revoked terminal's session dies mid-service — its token is unusable too.
+    expect(isDeviceFault(new ApiError("", 403, "device_revoked"))).toBe(true);
     // Not a device fault — the device is fine, it just has no drawer.
     expect(isDeviceFault(new ApiError("", 403, "device_cannot_take_cash"))).toBe(false);
+  });
+
+  it("routes re-pairable faults to the activation screen", () => {
+    expect(needsRepairing(new ApiError("", 403, "unknown_device"))).toBe(true);
+    expect(needsRepairing(new ApiError("", 403, "device_revoked"))).toBe(true);
+    expect(needsRepairing(new ApiError("", 401, "device_uid_missing"))).toBe(true);
+    // Wrong account on a fine terminal — re-pairing wouldn't fix it.
+    expect(needsRepairing(new ApiError("", 403, "device_branch_mismatch"))).toBe(false);
+    // A missing drawer isn't a pairing problem.
+    expect(needsRepairing(new ApiError("", 403, "device_cannot_take_cash"))).toBe(false);
   });
 });
 

@@ -26,6 +26,11 @@ export const POS_ERROR = {
   DEVICE_BRANCH_MISMATCH: "device_branch_mismatch",
   DEVICE_NOT_BOUND: "device_not_bound",
   DEVICE_CANNOT_TAKE_CASH: "device_cannot_take_cash",
+  DEVICE_REVOKED: "device_revoked",
+  // Pairing / activation
+  DEVICE_UID_MISSING: "device_uid_missing",
+  DEVICE_UID_IN_USE: "device_uid_in_use",
+  INVALID_ACTIVATION_CODE: "invalid_activation_code",
   // Orders
   ITEM_UNAVAILABLE: "item_unavailable",
   INVALID_MODIFIER: "invalid_modifier",
@@ -53,7 +58,6 @@ export const POS_ERROR = {
   NO_ACTIVE_RECIPE: "no_active_recipe",
   NOT_A_FINISHED_GOOD: "not_a_finished_good",
   // Device registry
-  DEVICE_EXISTS: "device_exists",
   DEVICE_CODE_EXISTS: "device_code_exists",
 } as const;
 
@@ -174,7 +178,9 @@ export function needsManagerApproval(err: unknown): err is ApiError {
 
 /**
  * Device/session faults. Every one of these means the token is unusable, so the
- * only sensible response is to bounce to sign-in — retrying cannot help.
+ * only sensible response is to bounce out of the till — retrying cannot help.
+ * `device_revoked` is here too: a revoked terminal's *current* session dies on
+ * its next call, mid-service, not at token expiry.
  */
 export function isDeviceFault(err: unknown): err is ApiError {
   return isApiCode(
@@ -182,6 +188,25 @@ export function isDeviceFault(err: unknown): err is ApiError {
     POS_ERROR.UNKNOWN_DEVICE,
     POS_ERROR.DEVICE_BRANCH_MISMATCH,
     POS_ERROR.DEVICE_NOT_BOUND,
+    POS_ERROR.DEVICE_REVOKED,
+  );
+}
+
+/**
+ * Faults whose recovery is **re-pairing**: the terminal was revoked or rebound
+ * elsewhere (`unknown_device`, `device_revoked`), or login found no uid anywhere
+ * (`device_uid_missing`). The manager reissues a code and the device re-runs
+ * activation — so the UI routes to the activation screen, not an error toast.
+ *
+ * `device_branch_mismatch` is deliberately excluded: that's the wrong *account*
+ * on a fine terminal, and re-pairing wouldn't fix it.
+ */
+export function needsRepairing(err: unknown): err is ApiError {
+  return isApiCode(
+    err,
+    POS_ERROR.UNKNOWN_DEVICE,
+    POS_ERROR.DEVICE_REVOKED,
+    POS_ERROR.DEVICE_UID_MISSING,
   );
 }
 
@@ -212,7 +237,15 @@ export function posErrorMessage(err: unknown): string {
     case POS_ERROR.DEVICE_NOT_BOUND:
       return "This session isn't bound to a terminal. Sign in again on the till.";
     case POS_ERROR.UNKNOWN_DEVICE:
-      return "This terminal isn't registered. Ask your branch manager to add it.";
+      return "This terminal is no longer paired. Set it up again with a fresh activation code.";
+    case POS_ERROR.DEVICE_REVOKED:
+      return "This terminal was turned off by your branch manager. Set it up again to continue.";
+    case POS_ERROR.DEVICE_UID_MISSING:
+      return "This device isn't set up as a till yet. Enter an activation code to pair it.";
+    case POS_ERROR.DEVICE_UID_IN_USE:
+      return "This device is already paired to a different terminal. Revoke that one, or use a fresh device.";
+    case POS_ERROR.INVALID_ACTIVATION_CODE:
+      return "That code is wrong or expired — ask your manager to reissue it.";
     case POS_ERROR.DEVICE_BRANCH_MISMATCH:
       return "This terminal belongs to a different branch.";
     case POS_ERROR.IDEMPOTENCY_KEY_REUSE:
@@ -238,9 +271,8 @@ export function posErrorMessage(err: unknown): string {
       return "This item has no recipe yet, so the kitchen can't make it.";
     case POS_ERROR.NOT_A_FINISHED_GOOD:
       return "Only kitchen-made items can be produced.";
-    case POS_ERROR.DEVICE_EXISTS:
     case POS_ERROR.DEVICE_CODE_EXISTS:
-      return "That terminal is already registered — just sign in on it.";
+      return "That terminal name is already taken at this branch — pick another.";
     default:
       return err.message;
   }

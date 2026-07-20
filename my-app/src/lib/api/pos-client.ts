@@ -71,6 +71,10 @@ function buildHeaders(opts?: PosRequestOptions): Record<string, string> {
 async function send(path: string, opts?: PosRequestOptions): Promise<Response> {
   return fetch(`${apiConfig.baseUrl}${path}`, {
     ...opts,
+    // The device identity rides an httpOnly cookie the server sets at activation
+    // and every login. Without this the cookie neither travels nor sticks, and
+    // login falls back to the (clearable) localStorage uid on every call.
+    credentials: "include",
     headers: buildHeaders(opts),
   });
 }
@@ -81,8 +85,12 @@ function networkError(cause: unknown): Error {
   return err;
 }
 
-async function handle<T>(res: Response, wantHeaders: boolean): Promise<T> {
-  if (res.status === 401) {
+async function handle<T>(res: Response, wantHeaders: boolean, anonymous: boolean): Promise<T> {
+  // A 401 on an authenticated call means the token died — bounce to PIN unlock.
+  // On an *anonymous* call (login / pin-unlock / activate) there is no session
+  // to expire: a 401 there is a real code like `device_uid_missing` that the
+  // caller's state machine must see, so surface it verbatim instead.
+  if (res.status === 401 && !anonymous) {
     notifyExpired();
     throw new ApiError("Your session has expired. Enter your PIN.", 401, "session_expired");
   }
@@ -109,7 +117,7 @@ export async function posRequest<T>(path: string, opts?: PosRequestOptions): Pro
   } catch (cause) {
     throw networkError(cause);
   }
-  return handle<T>(res, opts?.wantHeaders ?? false);
+  return handle<T>(res, opts?.wantHeaders ?? false, opts?.anonymous ?? false);
 }
 
 /**
@@ -158,6 +166,7 @@ export async function posRequestWithEtag<T>(
   let res: Response;
   try {
     res = await send(path, {
+      // `send` sets credentials: "include" for us.
       headers: etag ? { "If-None-Match": etag } : undefined,
     });
   } catch (cause) {

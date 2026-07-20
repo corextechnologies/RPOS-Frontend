@@ -334,6 +334,37 @@ export const INVALID_QUANTITY = "invalid_quantity";
 /** 409 raised when a movement would drop on-hand below zero. */
 export const INSUFFICIENT_STOCK = "insufficient_stock";
 
+/**
+ * `error.details` on a `409 insufficient_stock`. The dispatch check sums a
+ * product across all its batches at the source warehouse and consumes them
+ * FEFO, so a shortfall now reports what it actually found.
+ *
+ * `available` counts only **non-expired** batches usable today — dispatch skips
+ * expired stock, so this can legitimately be below the raw on-hand total shown
+ * in an inventory dump. A request can fail here even when the shelf looks full,
+ * if the only stock on hand is past its expiry.
+ */
+export interface InsufficientStockDetails {
+  product_id?: number;
+  product_name?: string;
+  location_type?: string;
+  location_id?: number;
+  requested?: number;
+  available?: number;
+}
+
+/** Narrows an unknown error to the insufficient-stock breakdown, or null. */
+export function insufficientStockDetails(
+  error: unknown,
+): InsufficientStockDetails | null {
+  if (!(error instanceof ApiError) || error.code !== INSUFFICIENT_STOCK) {
+    return null;
+  }
+  const details = error.details;
+  if (!details || typeof details !== "object") return null;
+  return details as InsufficientStockDetails;
+}
+
 /** 409 raised when a waste movement_type is neither WASTE nor EXPIRY. */
 export const INVALID_MOVEMENT_TYPE = "invalid_movement_type";
 

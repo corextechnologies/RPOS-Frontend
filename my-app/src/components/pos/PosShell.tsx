@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Globe, Loader2, LogOut, Receipt, Settings, Wallet, Utensils } from "lucide-react";
 import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
-import { POS_REGIONS, posSession } from "@/lib/pos/session";
+import { POS_REGIONS, POS_ROUTES, posSession } from "@/lib/pos/session";
 import { packCountryCode } from "@/lib/pos/capabilities";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,10 @@ export function PosShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !bootstrap) router.replace(AUTH_ROUTES.login);
+    if (loading || bootstrap) return;
+    // No session: an unpaired device goes to activation; a paired one that just
+    // needs a cashier goes to sign-in.
+    router.replace(posSession.paired ? AUTH_ROUTES.login : POS_ROUTES.activate);
   }, [bootstrap, loading, router]);
 
   if (loading) {

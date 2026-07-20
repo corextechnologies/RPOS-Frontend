@@ -22,7 +22,7 @@ import type {
   ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
-import type { DeviceRegisterInput, PosDevice } from "@/lib/types/pos";
+import type { DeviceCreateInput, PosDevice, PosDeviceActivation } from "@/lib/types/pos";
 import { request, requestEnvelope } from "./client";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
@@ -78,21 +78,37 @@ function normalizeProductionRun(r: ProductionRun): ProductionRun {
 export const branchApi = {
   // ---- Terminals ----
   //
-  // Moved off `/v1/pos/devices` (gone — 404). Branch Manager portal token only;
-  // Admin always gets 403. Same ownership as staff provisioning: the manager
-  // who runs the floor registers tills, then creates cashiers.
+  // Branch Manager portal token only; Admin always gets 403. The manager
+  // *registers* a terminal (declaring it exists), producing a one-time
+  // activation code the physical till later *claims* — the manager never types
+  // the device's id. Same ownership as staff provisioning: the manager who runs
+  // the floor commissions tills, then creates the cashiers who sign in on them.
 
   listDevices(): Promise<PosDevice[]> {
     return request<PosDevice[]>("/branch/devices");
   },
 
   /**
-   * `device_uid` is the till's durable identity (UUID from first launch, or a
-   * seeded dev value). `code` is the short receipt label (`T1`). Both required;
-   * both permanent in practice.
+   * Register a terminal. Returns the device **plus a one-time activation code**
+   * (and its expiry) — surfaced once and never again by the list, so the caller
+   * must show it (text + QR) immediately.
    */
-  registerDevice(input: DeviceRegisterInput): Promise<PosDevice> {
-    return request<PosDevice>("/branch/devices", { method: "POST", ...json(input) });
+  registerDevice(input: DeviceCreateInput): Promise<PosDeviceActivation> {
+    return request<PosDeviceActivation>("/branch/devices", { method: "POST", ...json(input) });
+  },
+
+  /**
+   * Mint a fresh activation code for an existing terminal — to recover a lost
+   * code or to rebind a replacement device. The old device's next call then
+   * fails `unknown_device` and self-routes to activation.
+   */
+  reissueDevice(id: number): Promise<PosDeviceActivation> {
+    return request<PosDeviceActivation>(`/branch/devices/${id}/reissue`, { method: "POST" });
+  },
+
+  /** Turn a terminal off. Its current session dies on its next call, not at expiry. */
+  revokeDevice(id: number): Promise<PosDevice> {
+    return request<PosDevice>(`/branch/devices/${id}/revoke`, { method: "POST" });
   },
 
   // ---- Staff ----

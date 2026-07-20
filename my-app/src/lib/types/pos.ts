@@ -16,10 +16,23 @@ import type { StockUnit } from "@/lib/types/kitchen";
 
 export type DeviceProfile = "COUNTER" | "CURBSIDE";
 
+/**
+ * Terminal lifecycle. A device is **registered** by the manager (`PENDING`,
+ * holding an outstanding activation code), **paired** by the physical till
+ * (`ACTIVE`), or turned off (`REVOKED` — its current session dies on the next
+ * call, not at token expiry).
+ */
+export type DeviceStatus = "PENDING" | "ACTIVE" | "REVOKED";
+
 export interface PosLoginInput {
   email: string;
   password: string;
-  device_uid: string;
+  /**
+   * Usually omitted — the httpOnly `device_uid` cookie set at activation rides
+   * along automatically. Sent in the body only as a fallback when the cookie
+   * was lost but the localStorage copy survived (`device_uid_missing`).
+   */
+  device_uid?: string;
 }
 
 export interface PosLoginResult {
@@ -31,7 +44,8 @@ export interface PosLoginResult {
 export interface PosPinUnlockInput {
   email: string;
   pin: string;
-  device_uid: string;
+  /** Same cookie-first rule as {@link PosLoginInput.device_uid}. */
+  device_uid?: string;
 }
 
 export interface PosBootstrapBranch {
@@ -54,17 +68,13 @@ export interface PosBootstrapDevice {
 /**
  * Registering a terminal via `POST /v1/branch/devices`.
  *
- * Branch Manager portal token only — Admin gets 403. The old
- * `POST /v1/pos/devices` is gone (404). Must use a portal token: you cannot
- * hold a device-bound token before the device exists.
+ * The manager declares *"terminal T1 exists at my branch"* from their own
+ * device — they never type the till's id. Registration returns a one-time
+ * **activation code** the physical till later claims (see {@link PosActivateInput}).
+ *
+ * Branch Manager portal token only — Admin gets 403.
  */
-export interface DeviceRegisterInput {
-  /**
-   * The till's durable identity — UUID minted on first launch (or a seeded
-   * dev value). Same string at register and at `POST /v1/pos/session/login`.
-   * ≥8 chars.
-   */
-  device_uid: string;
+export interface DeviceCreateInput {
   /** Short receipt label (`T1`) — unique per restaurant; treat as permanent. */
   code: string;
   /** `COUNTER` = cash drawer; `CURBSIDE` = no cash (`device_cannot_take_cash`). */
@@ -74,13 +84,48 @@ export interface DeviceRegisterInput {
 
 export interface PosDevice {
   id: number;
-  device_uid: string;
   code: string;
   profile: DeviceProfile;
+  status: DeviceStatus;
   name?: string | null;
+  /** A registration/reissue produced a code that hasn't been claimed yet. */
+  has_outstanding_code?: boolean;
+  /** Last time the paired till called home. Null until first contact. */
+  last_seen_at?: string | null;
   branch_id?: number;
-  is_active?: boolean;
   created_at?: string;
+}
+
+/**
+ * The response to create and reissue — a device plus its **one-time activation
+ * code**. The code is returned only here and **never again**: `GET /devices`
+ * omits it, so it must be surfaced (text + QR) the moment it arrives. Lost it?
+ * Reissue.
+ */
+export interface PosDeviceActivation extends PosDevice {
+  activation_code: string;
+  activation_expires_at: string;
+}
+
+// ---- Device pairing (public) ----
+
+/**
+ * The physical till claiming its identity via `POST /v1/pos/session/activate`
+ * — public, no auth token. On success the server sets the httpOnly
+ * `device_uid` cookie; a cashier logs in afterward.
+ */
+export interface PosActivateInput {
+  /** Grouped code from the manager (`AB3D-9KMN`) — server ignores dashes/case. */
+  activation_code: string;
+  /** uuid4 hex the till generated and **persisted before calling**. */
+  device_uid: string;
+}
+
+export interface PosActivateResult {
+  device_id: number;
+  code: string;
+  branch_id: number;
+  profile: DeviceProfile;
 }
 
 export interface PosBootstrapUser {
