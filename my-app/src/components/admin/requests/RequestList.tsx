@@ -13,7 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RequestStatusBadge } from "@/components/admin/requests/RequestStatusBadge";
-import type { StockRequest } from "@/lib/types/admin";
+import { resolveRequestFromLabel } from "@/lib/requests";
+import type { StockRequest, Warehouse } from "@/lib/types/admin";
 import { formatDate } from "@/lib/utils";
 
 interface RequestListProps {
@@ -23,6 +24,8 @@ interface RequestListProps {
   onRetry?: () => void;
   emptyTitle: string;
   emptyDescription: string;
+  /** Used to resolve the origin name when a PO has no `from_label`. */
+  warehouses?: Warehouse[];
 }
 
 export function RequestList({
@@ -32,6 +35,7 @@ export function RequestList({
   onRetry,
   emptyTitle,
   emptyDescription,
+  warehouses,
 }: RequestListProps) {
   const router = useRouter();
 
@@ -87,7 +91,9 @@ export function RequestList({
                 onClick={() => router.push(`/admin/requests/${req.id}`)}
               >
                 <TableCell>
-                  <p className="font-medium text-content">{req.from_label || "—"}</p>
+                  <p className="font-medium text-content">
+                    {resolveRequestFromLabel(req, warehouses) || "—"}
+                  </p>
                   <p className="text-xs text-muted">{req.line_items.length} line item(s)</p>
                 </TableCell>
                 <TableCell>
