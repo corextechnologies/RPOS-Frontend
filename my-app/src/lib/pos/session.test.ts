@@ -45,6 +45,18 @@ describe("posSession device uid", () => {
     expect(store.getItem("rpos-pos-device-uid")).toBeNull();
   });
 
+  it("ignores a stored uid shorter than the server's 16-char floor", () => {
+    // An older build persisted a 15-char dev uid; the server now 422s it.
+    store.setItem("rpos-device-uid", "DEV-TERMINAL-01");
+    expect(posSession.deviceUid).toBeNull();
+
+    // ensureDeviceUid mints a fresh, long uid and overwrites the stale one.
+    const minted = posSession.ensureDeviceUid();
+    expect(minted.length).toBeGreaterThanOrEqual(16);
+    expect(store.getItem("rpos-device-uid")).toBe(minted);
+    expect(posSession.deviceUid).toBe(minted);
+  });
+
   it("clears both current and legacy device keys", () => {
     store.setItem("rpos-device-uid", "current-terminal");
     store.setItem("rpos-pos-device-uid", "legacy-terminal");

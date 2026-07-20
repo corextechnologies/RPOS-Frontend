@@ -197,7 +197,13 @@ export interface KitchenWarehouse {
   created_at?: string;
 }
 
-export type KitchenRequestType = "KITCHEN_TO_WAREHOUSE" | "BRANCH_TO_ADMIN";
+export type KitchenRequestType =
+  | "KITCHEN_TO_WAREHOUSE"
+  | "BRANCH_TO_ADMIN"
+  // This kitchen's own dispatch notification to Admin (produced goods ready to
+  // send out). Lives PENDING → ALLOCATED (Admin split it across branches) or
+  // REJECTED — all statuses already in KitchenBranchRequestStatus.
+  | "KITCHEN_TO_ADMIN";
 
 /** Stock the kitchen asks a warehouse for. No partial approval on this type. */
 export type KitchenWarehouseRequestStatus =
@@ -267,6 +273,21 @@ export interface KitchenRequestFilters {
   status?: KitchenRequestStatus | "all";
   page?: number;
   page_size?: number;
+}
+
+/**
+ * Body for `POST /kitchen/dispatch-notifications` — the kitchen telling Admin
+ * which produced goods are ready. `quantity` is what the kitchen is offering to
+ * dispatch, defaulted from stock on hand but editable before it is sent.
+ */
+export interface CreateDispatchNotificationLineInput {
+  product_id: string;
+  quantity: number;
+}
+
+export interface CreateDispatchNotificationInput {
+  notes?: string;
+  lines: CreateDispatchNotificationLineInput[];
 }
 
 /** Body for `PATCH /kitchen/requests/{id}/status`. */

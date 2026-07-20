@@ -5,7 +5,7 @@
  * deliberately unchanged by the POS work. See `@/lib/types/branch`.
  */
 
-import type { Paginated } from "@/lib/types/admin";
+import type { Paginated, RequestFilters, StockRequest } from "@/lib/types/admin";
 import type {
   BranchCustomer,
   BranchStaff,
@@ -17,6 +17,7 @@ import type {
   BranchOrderFilters,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
+  CreateBranchRequestInput,
   CreateProductionRunInput,
   ProductionRun,
   ProductionRunFilters,
@@ -56,6 +57,19 @@ function normalizeOrder(o: BranchOrder): BranchOrder {
       id: String(l.id),
       product_id: String(l.product_id),
       quantity: Number(l.quantity),
+    })),
+  };
+}
+
+function normalizeRequest(r: StockRequest): StockRequest {
+  return {
+    ...r,
+    id: String(r.id),
+    line_items: (r.line_items ?? []).map((l) => ({
+      ...l,
+      id: String(l.id),
+      product_id: l.product_id == null ? undefined : String(l.product_id),
+      quantity_requested: Number(l.quantity_requested),
     })),
   };
 }
@@ -227,6 +241,42 @@ export const branchApi = {
             product_id: l.product_id,
             quantity: l.quantity,
             ...(l.unit_price ? { unit_price: l.unit_price } : {}),
+          })),
+        }),
+      }),
+    );
+  },
+
+  // ---- Stock requests (BRANCH_TO_ADMIN) ----
+
+  async listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {
+    const page = filters?.page ?? 1;
+    const pageSize = filters?.page_size ?? 20;
+    const { data, meta } = await requestEnvelope<StockRequest[]>(
+      `/branch/requests${qs({
+        status: filters?.status && filters.status !== "all" ? filters.status : undefined,
+        page,
+        page_size: pageSize,
+      })}`,
+    );
+    return {
+      items: data.map(normalizeRequest),
+      page: numberFromMeta(meta, "page", page),
+      page_size: numberFromMeta(meta, "page_size", pageSize),
+      total: numberFromMeta(meta, "total", data.length),
+    };
+  },
+
+  /** No `branch_id` in the body — the server takes it from the token. */
+  async createBranchRequest(body: CreateBranchRequestInput): Promise<StockRequest> {
+    return normalizeRequest(
+      await request<StockRequest>("/branch/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          notes: optionalText(body.notes),
+          lines: body.lines.map((l) => ({
+            product_id: l.product_id,
+            quantity_requested: l.quantity_requested,
           })),
         }),
       }),

@@ -46,5 +46,6 @@ export function formatRequestType(type: string | null | undefined): string {
   if (type === "BRANCH_TO_ADMIN") return "Product request";
   if (type === "WAREHOUSE_TO_ADMIN_PO") return "Distribution / PO";
   if (type === "KITCHEN_TO_WAREHOUSE") return "Kitchen request";
+  if (type === "KITCHEN_TO_ADMIN") return "Dispatch request";
   return formatStatus(type);
 }

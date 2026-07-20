@@ -5,7 +5,7 @@
  * session. These are two different lifecycles that happen to share an origin:
  *
  * - **The device identity** (`device_uid`) outlives every user. Minted once on
- *   first launch (UUID, or `DEV-TERMINAL-01` in development), persisted in
+ *   first launch (UUID, or `DEV-TERMINAL-001` in development), persisted in
  *   localStorage, and reused forever — the same value the Branch Manager
  *   registers via `POST /v1/branch/devices` and this till sends at login.
  * - **The user session** (`access_token`) is short and swaps constantly — one
@@ -29,7 +29,15 @@ const REGION_KEY = "rpos-pos-region";
  * local login doesn't need a fresh registration every wipe. Must match what
  * the Branch Manager registers (or what the backend seed creates).
  */
-export const DEV_TERMINAL_UID = "DEV-TERMINAL-01";
+// 16 chars — the server rejects device_uids shorter than 16.
+export const DEV_TERMINAL_UID = "DEV-TERMINAL-001";
+
+/**
+ * The server rejects `device_uid` shorter than 16 chars (422
+ * `string_too_short`). Anything below this — including uids minted by an older
+ * build — is treated as absent so it gets re-minted rather than sent and bounced.
+ */
+export const MIN_DEVICE_UID_LENGTH = 16;
 
 /** POS-specific routes outside the authenticated shell. */
 export const POS_ROUTES = {
@@ -62,6 +70,11 @@ function ls(): Storage | null {
   return typeof window === "undefined" ? null : window.localStorage;
 }
 
+/** A stored uid is usable only if it clears the server's length floor. */
+function isUsableUid(uid: string): boolean {
+  return uid.trim().length >= MIN_DEVICE_UID_LENGTH;
+}
+
 export const posSession = {
   /**
    * The terminal's identity. Persisted across sign-out on purpose — a till is
@@ -71,12 +84,12 @@ export const posSession = {
     const store = ls();
     if (!store) return null;
     const current = store.getItem(DEVICE_UID_KEY);
-    if (current) return current;
+    if (current) return isUsableUid(current) ? current : null;
     const legacy = store.getItem(LEGACY_DEVICE_UID_KEY);
     if (!legacy) return null;
     store.setItem(DEVICE_UID_KEY, legacy);
     store.removeItem(LEGACY_DEVICE_UID_KEY);
-    return legacy;
+    return isUsableUid(legacy) ? legacy : null;
   },
 
   setDeviceUid(uid: string) {
@@ -87,7 +100,7 @@ export const posSession = {
    * First launch: mint a durable `device_uid` and persist it **before** the
    * device calls activate. Later launches reuse the stored value. The uid is a
    * uuid4 hex (dashes stripped) to match the backend's expected shape;
-   * development builds hardcode `DEV-TERMINAL-01` so pairing isn't part of every
+   * development builds hardcode `DEV-TERMINAL-001` so pairing isn't part of every
    * local login loop.
    */
   ensureDeviceUid(): string {

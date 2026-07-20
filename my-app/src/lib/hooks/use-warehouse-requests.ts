@@ -85,12 +85,13 @@ export function useUpdateWarehouseRequestStatus(requestId: string) {
         qc.invalidateQueries({ queryKey: queryKeys.warehouseRequest(requestId) });
         return;
       }
-      // The dispatch/allocation path itemises an insufficient move: show what it
-      // actually found (non-expired, dispatchable) against what was asked. Only
-      // this path carries `details` today — other insufficient_stock sources
-      // (sale, production, waste) send the bare message — so treat the payload
-      // as present-if-available and require the numbers before using the rich
-      // copy; otherwise fall through to the message.
+      // Dispatch/allocation keeps its own bespoke copy — it names the
+      // *in-date* total and warns that expired stock isn't dispatchable, which
+      // the generic `insufficientStockMessage` can't say. Dispatch never
+      // carries a `batch_code` (it sums across batches), so there's no batch
+      // wording to add here. Other surfaces (sale, production, waste) use the
+      // shared `stockAwareMessage`. Still require the numbers before the rich
+      // copy — the defensive fallback the backend asked us to keep.
       const stock = insufficientStockDetails(err);
       if (
         stock &&

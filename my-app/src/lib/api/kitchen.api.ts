@@ -1,5 +1,6 @@
 import type { Paginated } from "@/lib/types/admin";
 import type {
+  CreateDispatchNotificationInput,
   CreateKitchenCountInput,
   CreateKitchenStaffInput,
   CreateKitchenStaffResult,
@@ -304,6 +305,28 @@ export const kitchenApi = {
     filters?: KitchenRequestFilters,
   ): Promise<Paginated<KitchenRequest>> {
     return fetchRequestList("/kitchen/requests/branch", filters);
+  },
+
+  async createDispatchNotification(
+    body: CreateDispatchNotificationInput,
+  ): Promise<KitchenRequest> {
+    const data = await request<KitchenRequest>("/kitchen/dispatch-notifications", {
+      method: "POST",
+      body: JSON.stringify({
+        notes: optionalText(body.notes),
+        lines: body.lines.map((line) => ({
+          product_id: line.product_id,
+          quantity: line.quantity,
+        })),
+      }),
+    });
+    return normalizeKitchenRequest(data);
+  },
+
+  async listKitchenDispatchRequests(
+    filters?: KitchenRequestFilters,
+  ): Promise<Paginated<KitchenRequest>> {
+    return fetchRequestList("/kitchen/dispatch-notifications", filters);
   },
 
   async getKitchenRequest(requestId: string): Promise<KitchenRequest> {

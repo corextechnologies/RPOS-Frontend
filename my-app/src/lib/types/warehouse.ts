@@ -351,6 +351,12 @@ export interface InsufficientStockDetails {
   location_id?: number;
   requested?: number;
   available?: number;
+  /**
+   * Present only on batch-scoped shortfalls (production input, waste, adjust).
+   * When set, `available` is that batch's on-hand, not the product total.
+   * Dispatch never sends it — it sums across in-date batches.
+   */
+  batch_code?: string;
 }
 
 /** Narrows an unknown error to the insufficient-stock breakdown, or null. */

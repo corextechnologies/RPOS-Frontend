@@ -4,6 +4,7 @@ import type {
   ProductKind,
   AdminProfile,
   AdminRequestType,
+  AllocateDispatchInput,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -470,6 +471,15 @@ export const adminApi = {
     return toPaginatedRequests(data, meta, page, page_size);
   },
 
+  async listDispatchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+    const { data, meta } = await adminGetEnvelope<StockRequest[] | Paginated<StockRequest>>(
+      `/admin/requests/dispatch?${requestListQuery(filters)}`,
+    );
+    return toPaginatedRequests(data, meta, page, page_size);
+  },
+
   async getRequest(requestId: string): Promise<StockRequest> {
     const data = await request<StockRequest>(`/admin/requests/${requestId}`);
     return normalizeStockRequest(data);
@@ -481,6 +491,17 @@ export const adminApi = {
   ): Promise<StockRequest> {
     const data = await request<StockRequest>(`/admin/requests/${requestId}/status`, {
       method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return normalizeStockRequest(data);
+  },
+
+  async allocateDispatchRequest(
+    requestId: string,
+    body: AllocateDispatchInput,
+  ): Promise<StockRequest> {
+    const data = await request<StockRequest>(`/admin/requests/${requestId}/allocate`, {
+      method: "POST",
       body: JSON.stringify(body),
     });
     return normalizeStockRequest(data);

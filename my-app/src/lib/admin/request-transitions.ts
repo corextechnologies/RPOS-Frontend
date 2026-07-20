@@ -38,6 +38,16 @@ export const ADMIN_REQUEST_TRANSITIONS: Record<
    * undone by forgetting to hide a button.
    */
   KITCHEN_TO_WAREHOUSE: {},
+  /**
+   * ALLOCATED is the "approve" here, but it carries per-branch quantities the
+   * single-target `UpdateRequestStatusInput` can't express — so it runs through
+   * the dedicated `allocateDispatchRequest` endpoint, not the generic status
+   * PATCH. REJECTED still goes through the generic path. This entry exists so
+   * the reject transition validates and the labels resolve.
+   */
+  KITCHEN_TO_ADMIN: {
+    PENDING: ["ALLOCATED", "REJECTED"],
+  },
 };
 
 export function allowedTransitions(
@@ -68,6 +78,8 @@ export function actionLabel(
       return "Partial approve";
     case "FORWARDED_TO_KITCHEN":
       return "Forward to kitchen";
+    case "ALLOCATED":
+      return "Allocate to branches";
     case "DISPATCHED":
       return "Dispatch to warehouse";
     case "RESOLVED":

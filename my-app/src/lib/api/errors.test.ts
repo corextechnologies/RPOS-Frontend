@@ -5,6 +5,9 @@ import {
   needsManagerApproval,
   needsRepairing,
   posErrorMessage,
+  readInsufficientStock,
+  insufficientStockMessage,
+  stockAwareMessage,
   readDueMinor,
   readLimitBp,
   readPriceMismatch,
@@ -172,5 +175,97 @@ describe("posErrorMessage", () => {
   it("handles non-ApiErrors without exploding", () => {
     expect(posErrorMessage(new Error("boom"))).toBe("boom");
     expect(posErrorMessage("not an error")).toBe("Something went wrong");
+  });
+});
+
+describe("insufficient_stock — the batch rule", () => {
+  const withBatch = new ApiError("Insufficient stock.", 409, "insufficient_stock", {
+    product_id: 42,
+    product_name: "Cheese",
+    location_type: "KITCHEN",
+    location_id: 3,
+    requested: 5,
+    available: 2,
+    batch_code: "B-CH-26",
+  });
+  const noBatch = new ApiError("Insufficient stock.", 409, "insufficient_stock", {
+    product_id: 42,
+    product_name: "Cheese",
+    location_type: "WAREHOUSE",
+    location_id: 3,
+    requested: 5,
+    available: 2,
+  });
+
+  it("reads every field", () => {
+    const d = readInsufficientStock(withBatch);
+    expect(d).toEqual({
+      productId: 42,
+      productName: "Cheese",
+      locationType: "KITCHEN",
+      locationId: 3,
+      requested: 5,
+      available: 2,
+      batchCode: "B-CH-26",
+    });
+  });
+
+  it("batch ABSENT → product-wide copy", () => {
+    expect(insufficientStockMessage(noBatch)).toBe(
+      "Not enough Cheese — 2 available, 5 requested.",
+    );
+  });
+
+  it("batch PRESENT → batch-scoped copy, and 'available' means the batch", () => {
+    expect(insufficientStockMessage(withBatch)).toBe(
+      "Only 2 of batch B-CH-26 on hand, 5 requested.",
+    );
+  });
+
+  /**
+   * The defensive fallback the backend explicitly asked us to keep: every known
+   * raise site is enriched now, but a future one might not be.
+   */
+  it("falls back to the server message when details is absent", () => {
+    const bare = new ApiError("Insufficient stock for this operation.", 409, "insufficient_stock");
+    expect(insufficientStockMessage(bare)).toBe("Insufficient stock for this operation.");
+  });
+
+  it("falls back when the numbers are missing, even if a name is present", () => {
+    const partial = new ApiError("Insufficient stock.", 409, "insufficient_stock", {
+      product_name: "Cheese",
+    });
+    expect(insufficientStockMessage(partial)).toBe("Insufficient stock.");
+  });
+
+  it("degrades on a junk payload rather than throwing inside an error handler", () => {
+    for (const details of [undefined, null, "nope", 7, []]) {
+      const err = new ApiError("fallback msg", 409, "insufficient_stock", details);
+      expect(() => insufficientStockMessage(err)).not.toThrow();
+      expect(insufficientStockMessage(err)).toBe("fallback msg");
+    }
+  });
+
+  describe("stockAwareMessage", () => {
+    it("upgrades an insufficient_stock error", () => {
+      expect(stockAwareMessage(noBatch, "Failed to write off stock")).toBe(
+        "Not enough Cheese — 2 available, 5 requested.",
+      );
+    });
+
+    it("keeps the server message for other ApiErrors", () => {
+      const other = new ApiError("Batch not found", 404, "no_such_stock");
+      expect(stockAwareMessage(other, "Failed to write off stock")).toBe("Batch not found");
+    });
+
+    it("uses the caller's fallback for non-errors", () => {
+      expect(stockAwareMessage("weird", "Failed to write off stock")).toBe(
+        "Failed to write off stock",
+      );
+    });
+
+    it("routes through posErrorMessage too — every POS surface gets it free", () => {
+      expect(posErrorMessage(withBatch)).toBe("Only 2 of batch B-CH-26 on hand, 5 requested.");
+    });
   });
 });

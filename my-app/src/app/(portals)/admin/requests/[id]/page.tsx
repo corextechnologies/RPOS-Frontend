@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { DispatchAllocationPanel } from "@/components/admin/requests/DispatchAllocationPanel";
 import { RequestActionPanel } from "@/components/admin/requests/RequestActionPanel";
 import { RequestDetail } from "@/components/admin/requests/RequestDetail";
 import { Button } from "@/components/ui/button";
@@ -63,14 +64,21 @@ export default function AdminRequestDetailPage() {
 
       <RequestDetail request={request.data} />
 
-      <RequestActionPanel
-        request={request.data}
-        canUpdate={can("requests:update")}
-        isSubmitting={updateStatus.isPending}
-        onSubmit={async (body) => {
-          await updateStatus.mutateAsync(body);
-        }}
-      />
+      {request.data.type === "KITCHEN_TO_ADMIN" ? (
+        <DispatchAllocationPanel
+          request={request.data}
+          canUpdate={can("requests:update")}
+        />
+      ) : (
+        <RequestActionPanel
+          request={request.data}
+          canUpdate={can("requests:update")}
+          isSubmitting={updateStatus.isPending}
+          onSubmit={async (body) => {
+            await updateStatus.mutateAsync(body);
+          }}
+        />
+      )}
     </div>
   );
 }

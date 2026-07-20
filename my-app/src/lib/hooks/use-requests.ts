@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
 import type {
   AdminInventoryFilters,
+  AllocateDispatchInput,
   RequestFilters,
   UpdateRequestStatusInput,
 } from "@/lib/types/admin";
@@ -36,6 +37,14 @@ export function useAdminKitchenRequests(filters?: RequestFilters) {
   });
 }
 
+/** Kitchen → Admin dispatch notifications awaiting allocation across branches. */
+export function useDispatchRequests(filters?: RequestFilters) {
+  return useQuery({
+    queryKey: queryKeys.dispatchRequests(filters),
+    queryFn: () => api.listDispatchRequests(filters),
+  });
+}
+
 export function useAdminInventory(filters?: AdminInventoryFilters) {
   return useQuery({
     queryKey: queryKeys.adminInventory(filters),
@@ -61,10 +70,33 @@ export function useUpdateRequestStatus(requestId: string) {
       qc.invalidateQueries({ queryKey: queryKeys.request(requestId) });
       qc.invalidateQueries({ queryKey: ["admin-requests-products"] });
       qc.invalidateQueries({ queryKey: ["admin-requests-distribution"] });
+      qc.invalidateQueries({ queryKey: ["admin-requests-dispatch"] });
       toast.success("Request updated");
     },
     onError: (err) => {
       const message = err instanceof Error ? err.message : "Failed to update request";
+      toast.error(message);
+    },
+  });
+}
+
+/**
+ * Admin approving a dispatch request by splitting each line across branches.
+ * Separate from the status PATCH because it carries per-branch quantities.
+ */
+export function useAllocateDispatchRequest(requestId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: AllocateDispatchInput) =>
+      api.allocateDispatchRequest(requestId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.request(requestId) });
+      qc.invalidateQueries({ queryKey: ["admin-requests-dispatch"] });
+      toast.success("Allocated to branches");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to allocate request";
       toast.error(message);
     },
   });

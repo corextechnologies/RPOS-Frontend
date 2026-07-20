@@ -11,6 +11,7 @@ import type {
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 import { useWarehouseProducts } from "./use-warehouse-products";
 import { toast } from "sonner";
+import { stockAwareMessage } from "@/lib/api/errors";
 
 /** Default matches the API's own `within_days` default. */
 export const NEAR_EXPIRY_DEFAULT_DAYS = 7;
@@ -104,10 +105,9 @@ export function useReceiveWarehouseStock() {
       invalidate();
       toast.success("Stock received");
     },
-    onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to receive stock";
-      toast.error(message);
-    },
+    // Adjust/receive can shortfall against a specific batch; the message names
+    // the batch when it does. See `stockAwareMessage`.
+    onError: (err) => toast.error(stockAwareMessage(err, "Failed to receive stock")),
   });
 }
 
@@ -120,10 +120,7 @@ export function useAdjustWarehouseStock() {
       invalidate();
       toast.success("Stock adjusted");
     },
-    onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to adjust stock";
-      toast.error(message);
-    },
+    onError: (err) => toast.error(stockAwareMessage(err, "Failed to adjust stock")),
   });
 }
 
@@ -136,9 +133,6 @@ export function useWasteWarehouseStock() {
       invalidate();
       toast.success("Stock written off");
     },
-    onError: (err) => {
-      const message = err instanceof Error ? err.message : "Failed to write off stock";
-      toast.error(message);
-    },
+    onError: (err) => toast.error(stockAwareMessage(err, "Failed to write off stock")),
   });
 }

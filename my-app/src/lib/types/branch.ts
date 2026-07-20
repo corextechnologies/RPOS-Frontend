@@ -134,6 +134,23 @@ export interface BranchOrderFilters {
   page_size?: number;
 }
 
+// ---- Stock requests (BRANCH_TO_ADMIN) ----
+//
+// The branch's outgoing ask to head office for stock. The read shape is Admin's
+// `StockRequest` (branch and Admin read the same projection); only the create
+// input lives here. There is no `branch_id` in the body — the server takes it
+// from the token, exactly as customers and orders do.
+
+export interface CreateBranchRequestLineInput {
+  product_id: string;
+  quantity_requested: number;
+}
+
+export interface CreateBranchRequestInput {
+  notes?: string;
+  lines: CreateBranchRequestLineInput[];
+}
+
 // ---- Inventory ----
 
 /**

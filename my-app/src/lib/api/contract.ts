@@ -1,5 +1,6 @@
 import type {
   AdminProfile,
+  AllocateDispatchInput,
   Branch,
   CreateAdminUserInput,
   CreateAdminUserResult,
@@ -60,6 +61,7 @@ import type {
   CreateKitchenStaffInput,
   CreateKitchenStaffResult,
   CreateKitchenWarehouseRequestInput,
+  CreateDispatchNotificationInput,
   KitchenCountFilters,
   KitchenInventoryItem,
   KitchenLabel,
@@ -88,6 +90,7 @@ import type {
   BranchOrderFilters,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
+  CreateBranchRequestInput,
   CreateProductionRunInput,
   ProductionRun,
   ProductionRunFilters,
@@ -185,6 +188,15 @@ export interface ApiClient {
     requestId: string,
     body: UpdateRequestStatusInput,
   ): Promise<StockRequest>;
+  // Kitchen dispatch notifications (KITCHEN_TO_ADMIN): Admin reads the queue and
+  // approves by allocating each line across branches. Reject reuses
+  // updateRequestStatus; allocate carries per-branch quantities, so it has its
+  // own endpoint.
+  listDispatchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
+  allocateDispatchRequest(
+    requestId: string,
+    body: AllocateDispatchInput,
+  ): Promise<StockRequest>;
   // Notifications — shared by every portal. Polled; there is no push.
   listNotifications(
     filters?: NotificationFilters,
@@ -260,6 +272,13 @@ export interface ApiClient {
   listKitchenBranchRequests(
     filters?: KitchenRequestFilters,
   ): Promise<Paginated<KitchenRequest>>;
+  // Dispatch notifications this kitchen raised to Admin (KITCHEN_TO_ADMIN).
+  createDispatchNotification(
+    body: CreateDispatchNotificationInput,
+  ): Promise<KitchenRequest>;
+  listKitchenDispatchRequests(
+    filters?: KitchenRequestFilters,
+  ): Promise<Paginated<KitchenRequest>>;
   // Finished goods, recipes & production. Recipes moved here from Admin when
   // products gained a `kind`: a recipe describes what the KITCHEN does with the
   // components the kitchen holds, and under Admin there was no catalogue to
@@ -294,6 +313,10 @@ export interface ApiClient {
   deleteBranchCustomer(id: string): Promise<void>;
   listBranchOrders(filters?: BranchOrderFilters): Promise<Paginated<BranchOrder>>;
   createBranchOrder(body: CreateBranchOrderInput): Promise<BranchOrder>;
+  // Stock requests the branch raises to Admin (type BRANCH_TO_ADMIN). Read via
+  // Admin's StockRequest projection, scoped to the caller's branch.
+  listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
+  createBranchRequest(body: CreateBranchRequestInput): Promise<StockRequest>;
   listBranchInventory(): Promise<BranchInventoryItem[]>;
   listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
   getProductionRun(id: string): Promise<ProductionRun>;

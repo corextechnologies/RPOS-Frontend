@@ -10,6 +10,8 @@ import type {
   CreateLocationInput,
   Employee,
   RequestStatus,
+  AllocateDispatchInput,
+  RequestBranchAllocation,
   Kitchen,
   Paginated,
   ProductPricing,
@@ -32,12 +34,17 @@ import type {
   UpdateRequestStatusInput,
   Warehouse,
 } from "@/lib/types/admin";
-import { INVALID_KITCHEN_TARGET, MISSING_KITCHEN_TARGET } from "@/lib/types/admin";
+import {
+  ALLOCATION_EXCEEDS_READY,
+  INVALID_KITCHEN_TARGET,
+  MISSING_KITCHEN_TARGET,
+} from "@/lib/types/admin";
 import type {
   AppNotification,
   NotificationFilters,
 } from "@/lib/types/notification";
 import type {
+  CreateDispatchNotificationInput,
   CreateKitchenCountInput,
   CreateKitchenStaffInput,
   CreateKitchenStaffResult,
@@ -81,6 +88,7 @@ import type {
   BranchOrderFilters,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
+  CreateBranchRequestInput,
   CreateProductionRunInput,
   ProductionRun,
   ProductionRunFilters,
@@ -166,7 +174,7 @@ const SESSION_KEY = "ros-super-admin-session";
  * 17: branch portal — `customers`, `branch_orders`, `production_runs`, a second
  *     branch (br-002), and selling_price/category/is_available on products.
  */
-const SEED_VERSION = 17;
+const SEED_VERSION = 18;
 
 interface MockInvoiceRecord {
   id: number;
@@ -1150,6 +1158,44 @@ function seedDb(): MockDb {
       location_type: "KITCHEN",
       location_id: "kit-001",
     },
+    // ---- Branch (Phase 5) ----
+    // The Downtown branch's own stock. Without it the branch inventory,
+    // sub-kitchen, and requests pickers all open empty on a fresh demo. One row
+    // sits low (napkins) so a restock request has an obvious candidate.
+    {
+      id: "inv-201",
+      restaurant_id: "rest-001",
+      product_id: "prod-001",
+      product: { id: "prod-001", name: "House Blend Coffee Beans", sku: "BN-COF-001" },
+      quantity: 22,
+      batch_code: "B-COF-07",
+      expiry_date: expiryInDays(28),
+      location_type: "BRANCH",
+      location_id: "br-001",
+    },
+    {
+      id: "inv-202",
+      restaurant_id: "rest-001",
+      product_id: "prod-003",
+      product: { id: "prod-003", name: "Mozzarella Block", sku: "DAI-MOZ-10" },
+      quantity: 9,
+      batch_code: "B-MOZ-11",
+      expiry_date: expiryInDays(4),
+      location_type: "BRANCH",
+      location_id: "br-001",
+    },
+    {
+      // Running low — the branch would raise a request to top this up.
+      id: "inv-203",
+      restaurant_id: "rest-001",
+      product_id: "prod-004",
+      product: { id: "prod-004", name: "Paper Napkins (Pack)", sku: "SUP-NAP-50" },
+      quantity: 12,
+      batch_code: "",
+      expiry_date: null,
+      location_type: "BRANCH",
+      location_id: "br-001",
+    },
   ];
 
   return {
@@ -1615,6 +1661,8 @@ function toPublicRequest(req: MockStockRequest): StockRequest {
     notes: req.notes,
     from_label: req.from_label,
     line_items: req.line_items,
+    // Only KITCHEN_TO_ADMIN ever carries these; undefined elsewhere.
+    allocations: req.allocations,
     created_at: req.created_at,
     updated_at: req.updated_at,
   };
@@ -1753,8 +1801,10 @@ function findKitchenVisibleRequest(
     found.type === "BRANCH_TO_ADMIN" &&
     found.target_location_type === "KITCHEN" &&
     found.target_location_id === kitchen.id;
+  const isMyDispatch =
+    found.type === "KITCHEN_TO_ADMIN" && found.source_location_id === kitchen.id;
 
-  if (!isMyWarehouseRequest && !isForwardedToMe) {
+  if (!isMyWarehouseRequest && !isForwardedToMe && !isMyDispatch) {
     throw new ApiError("Request not found", 404);
   }
   return found;
@@ -3105,6 +3155,13 @@ export const mockClient: ApiClient = {
     return delay(paginateRequests(db, r.id, "KITCHEN_TO_WAREHOUSE", filters));
   },
 
+  async listDispatchRequests(filters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    return delay(paginateRequests(db, r.id, "KITCHEN_TO_ADMIN", filters));
+  },
+
   async listAdminInventory(filters?: AdminInventoryFilters) {
     const me = requireAuth();
     const db = loadDb();
@@ -3164,6 +3221,14 @@ export const mockClient: ApiClient = {
         "Admin cannot action kitchen requests.",
         403,
         "forbidden",
+      );
+    }
+    // Allocating a dispatch request carries per-branch quantities the status
+    // PATCH can't express — it has its own endpoint. Reject still runs here.
+    if (found.type === "KITCHEN_TO_ADMIN" && body.to_status === "ALLOCATED") {
+      throw new ApiError(
+        "Use the allocation endpoint to allocate a dispatch request.",
+        409,
       );
     }
 
@@ -3241,6 +3306,78 @@ export const mockClient: ApiClient = {
     if (body.notes !== undefined) {
       found.notes = body.notes;
     }
+    found.updated_at = now();
+    saveDb(db);
+    return delay(toPublicRequest(found));
+  },
+
+  async allocateDispatchRequest(requestId: string, body: AllocateDispatchInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.requests.find(
+      (req) => req.id === requestId && req.restaurant_id === r.id,
+    );
+    if (!found) throw new ApiError("Request not found", 404);
+    if (found.type !== "KITCHEN_TO_ADMIN") {
+      throw new ApiError("Only dispatch requests can be allocated.", 409);
+    }
+    if (found.status !== "PENDING") {
+      throw new ApiError(`Cannot allocate a request in status ${found.status}`, 409);
+    }
+
+    const allocations = body.allocations ?? [];
+    if (allocations.length === 0) {
+      throw new ApiError("At least one branch allocation is required", 422);
+    }
+
+    // Validate everything before mutating: a bad branch or an over-allocated line
+    // rejects the whole call, so a half-recorded split can never happen. No stock
+    // moves here — dispatch (the kitchen's move) is what debits/credits stock.
+    const perLine = new Map<string, number>();
+    const resolved: RequestBranchAllocation[] = [];
+    for (const a of allocations) {
+      const line = found.line_items.find((l) => l.id === a.line_item_id);
+      if (!line) throw new ApiError(`Line item ${a.line_item_id} not found`, 400);
+      const branch = db.branches.find(
+        (b) => b.id === a.branch_id && b.restaurant_id === r.id,
+      );
+      // A branch from another restaurant is a 404, not a 403 — scope leaks nothing.
+      if (!branch) throw new ApiError("Branch not found", 404);
+      if (!Number.isInteger(a.quantity) || a.quantity <= 0) {
+        throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+      }
+      perLine.set(a.line_item_id, (perLine.get(a.line_item_id) ?? 0) + a.quantity);
+      resolved.push({
+        line_item_id: line.id,
+        product_id: line.product_id,
+        product_name: line.product_name,
+        branch_id: branch.id,
+        branch_name: branch.name,
+        quantity: a.quantity,
+      });
+    }
+
+    // No line may be allocated beyond what the kitchen said was ready.
+    for (const line of found.line_items) {
+      const allocated = perLine.get(line.id) ?? 0;
+      if (allocated > line.quantity_requested) {
+        throw new ApiError(
+          `Allocated ${allocated} of ${line.product_name}, but only ${line.quantity_requested} are ready.`,
+          409,
+          ALLOCATION_EXCEEDS_READY,
+        );
+      }
+    }
+
+    // quantity_approved becomes the total each line's branches will receive.
+    found.line_items = found.line_items.map((line) => ({
+      ...line,
+      quantity_approved: perLine.get(line.id) ?? 0,
+    }));
+    found.allocations = resolved;
+    found.status = "ALLOCATED";
+    if (body.notes !== undefined) found.notes = body.notes;
     found.updated_at = now();
     saveDb(db);
     return delay(toPublicRequest(found));
@@ -4289,6 +4426,93 @@ export const mockClient: ApiClient = {
     );
   },
 
+  async createDispatchNotification(body: CreateDispatchNotificationInput) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const lines = body.lines ?? [];
+    if (lines.length === 0) {
+      throw new ApiError("At least one line is required", 422);
+    }
+
+    // On-hand per product at this kitchen: the notification can't offer to
+    // dispatch more than the kitchen actually holds.
+    const onHand = (productId: string) =>
+      db.inventory
+        .filter(
+          (i) =>
+            i.location_type === "KITCHEN" &&
+            i.location_id === kitchen.id &&
+            i.product_id === productId,
+        )
+        .reduce((sum, i) => sum + i.quantity, 0);
+
+    for (const line of lines) {
+      if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+        throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+      }
+      const available = onHand(line.product_id);
+      if (line.quantity > available) {
+        const name =
+          db.products.find((p) => p.id === line.product_id)?.name ?? "product";
+        throw new ApiError(
+          `Only ${available} of ${name} on hand — can't notify ${line.quantity}.`,
+          409,
+          INVALID_QUANTITY,
+        );
+      }
+    }
+
+    const id = `req-${Date.now()}`;
+    const created: MockStockRequest = {
+      id,
+      restaurant_id: kitchen.restaurant_id,
+      type: "KITCHEN_TO_ADMIN",
+      status: "PENDING",
+      notes: body.notes ?? null,
+      from_label: kitchen.name,
+      created_at: now(),
+      updated_at: now(),
+      requester_id: typeof me.id === "number" ? me.id : null,
+      assignee_id: null,
+      source_location_type: "KITCHEN",
+      source_location_id: kitchen.id,
+      // Admin (head office) is the audience; it is not a stock location.
+      target_location_type: null,
+      target_location_id: null,
+      line_items: lines.map((line, index) => ({
+        id: `${id}-l${index + 1}`,
+        product_id: line.product_id,
+        product_name:
+          db.products.find((p) => p.id === line.product_id)?.name ?? "Unknown product",
+        quantity_requested: line.quantity,
+        // Set to the allocated total once Admin splits it across branches.
+        quantity_approved: null,
+      })),
+    };
+    db.requests.push(created);
+
+    saveDb(db);
+    return delay(toPublicKitchenRequest(created));
+  },
+
+  async listKitchenDispatchRequests(filters?: KitchenRequestFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    return delay(
+      paginateKitchenRequests(
+        db.requests.filter(
+          (r) =>
+            r.type === "KITCHEN_TO_ADMIN" && r.source_location_id === kitchen.id,
+        ),
+        filters,
+      ),
+    );
+  },
+
   async getKitchenRequest(requestId: string) {
     const me = requireAuth();
     const db = loadDb();
@@ -4864,6 +5088,93 @@ export const mockClient: ApiClient = {
     db.branch_orders.push(order);
     saveDb(db);
     return delay(order);
+  },
+
+  // ---- Stock requests (BRANCH_TO_ADMIN) ----
+  //
+  // The branch's outgoing ask to head office. Both roles may read; only the
+  // manager may raise one. Seeded rows carry only `from_label` (no
+  // `source_location_id`), so a request counts as this branch's when its source
+  // matches the branch id OR, absent that, its label matches the branch name.
+
+  async listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    let rows = db.requests
+      .filter(
+        (r) =>
+          r.type === "BRANCH_TO_ADMIN" &&
+          r.restaurant_id === branch.restaurant_id &&
+          (r.source_location_id === branch.id ||
+            (r.source_location_id == null && r.from_label === branch.name)),
+      )
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    if (filters?.status && filters.status !== "all") {
+      rows = rows.filter((r) => r.status === filters.status);
+    }
+
+    const page = filters?.page ?? 1;
+    const pageSize = filters?.page_size ?? 20;
+    const start = (page - 1) * pageSize;
+
+    return delay({
+      items: rows.slice(start, start + pageSize).map(toPublicRequest),
+      page,
+      page_size: pageSize,
+      total: rows.length,
+    });
+  },
+
+  async createBranchRequest(body: CreateBranchRequestInput): Promise<StockRequest> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const lines = body.lines ?? [];
+    if (lines.length === 0) {
+      throw new ApiError("At least one line is required", 422);
+    }
+    for (const line of lines) {
+      if (!Number.isInteger(line.quantity_requested) || line.quantity_requested <= 0) {
+        throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+      }
+    }
+
+    const id = `req-${Date.now()}`;
+    const created: MockStockRequest = {
+      id,
+      restaurant_id: branch.restaurant_id,
+      type: "BRANCH_TO_ADMIN",
+      status: "PENDING",
+      notes: body.notes ?? null,
+      from_label: branch.name,
+      created_at: now(),
+      updated_at: now(),
+      requester_id: typeof me.id === "number" ? me.id : null,
+      assignee_id: null,
+      source_location_type: "BRANCH",
+      source_location_id: branch.id,
+      // Head office is the target; it is not a stock location, so none is set.
+      target_location_type: null,
+      target_location_id: null,
+      line_items: lines.map((line, index) => ({
+        id: `${id}-l${index + 1}`,
+        product_id: line.product_id,
+        product_name:
+          db.products.find((p) => p.id === line.product_id)?.name ?? "Unknown product",
+        quantity_requested: line.quantity_requested,
+        // Admin sets this when it approves; PENDING carries none.
+        quantity_approved: null,
+      })),
+    };
+    db.requests.push(created);
+
+    saveDb(db);
+    return delay(toPublicRequest(created));
   },
 
   async listBranchInventory(): Promise<BranchInventoryItem[]> {

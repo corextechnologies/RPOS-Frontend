@@ -268,7 +268,10 @@ export interface UpdateProductPricingInput {
 export type AdminRequestType =
   | "BRANCH_TO_ADMIN"
   | "WAREHOUSE_TO_ADMIN_PO"
-  | "KITCHEN_TO_WAREHOUSE";
+  | "KITCHEN_TO_WAREHOUSE"
+  // A kitchen telling Admin which produced goods are ready to dispatch. Admin
+  // approves by allocating each product's quantity across one or more branches.
+  | "KITCHEN_TO_ADMIN";
 
 /**
  * The full request vocabulary Admin can read.
@@ -308,6 +311,20 @@ export interface RequestLineItem {
   issue_note?: string | null;
 }
 
+/**
+ * One product's quantity earmarked for one branch, produced when Admin allocates
+ * a KITCHEN_TO_ADMIN dispatch request. A single request line can fan out into
+ * several of these (40 buns → 25 Downtown + 15 Gulberg).
+ */
+export interface RequestBranchAllocation {
+  line_item_id: string;
+  product_id?: string;
+  product_name: string;
+  branch_id: string;
+  branch_name: string;
+  quantity: number;
+}
+
 export interface StockRequest {
   id: string;
   type: AdminRequestType;
@@ -315,6 +332,8 @@ export interface StockRequest {
   notes?: string | null;
   from_label?: string; // branch/warehouse name for UI
   line_items: RequestLineItem[];
+  /** Present on KITCHEN_TO_ADMIN once Admin has allocated it across branches. */
+  allocations?: RequestBranchAllocation[];
   created_at: string;
   updated_at?: string;
 }
@@ -362,6 +381,25 @@ export interface UpdateRequestStatusInput {
   target_location_type?: ForwardTarget["target_location_type"];
   target_location_id?: string;
 }
+
+/**
+ * Body for `POST /admin/requests/{id}/allocate` — Admin approving a
+ * KITCHEN_TO_ADMIN dispatch request by splitting each line across branches.
+ * `quantity` is per (line, branch); several entries may share a line_item_id.
+ */
+export interface DispatchAllocationInput {
+  line_item_id: string;
+  branch_id: string;
+  quantity: number;
+}
+
+export interface AllocateDispatchInput {
+  allocations: DispatchAllocationInput[];
+  notes?: string;
+}
+
+/** 409 raised when an allocation's per-line total exceeds the ready quantity. */
+export const ALLOCATION_EXCEEDS_READY = "allocation_exceeds_ready";
 
 /** 409 raised when a forward carries no target kitchen. */
 export const MISSING_KITCHEN_TARGET = "missing_kitchen_target";

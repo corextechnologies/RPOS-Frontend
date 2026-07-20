@@ -28,6 +28,12 @@ export const KITCHEN_REQUEST_TRANSITIONS: Record<
     IN_PRODUCTION: ["PRODUCED"],
     PRODUCED: ["ALLOCATED"],
   },
+  /**
+   * Empty by construction: the kitchen raises a dispatch notification but never
+   * transitions it — Admin allocates it, and the dispatch/stock-move step (a
+   * follow-up) will add the kitchen's own moves. Read-only until then.
+   */
+  KITCHEN_TO_ADMIN: {},
 };
 
 export function kitchenAllowedTransitions(

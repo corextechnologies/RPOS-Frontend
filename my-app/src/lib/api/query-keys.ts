@@ -49,6 +49,10 @@ export const queryKeys = {
     filters
       ? (["admin-requests-distribution", filters] as const)
       : (["admin-requests-distribution"] as const),
+  dispatchRequests: (filters?: RequestFilters) =>
+    filters
+      ? (["admin-requests-dispatch", filters] as const)
+      : (["admin-requests-dispatch"] as const),
   request: (id: string) => ["admin-request", id] as const,
   adminSettings: ["admin-settings"] as const,
   salesRecords: (filters?: SalesRecordFilters) =>
@@ -91,6 +95,10 @@ export const queryKeys = {
     filters
       ? (["kitchen-branch-requests", filters] as const)
       : (["kitchen-branch-requests"] as const),
+  kitchenDispatchRequests: (filters?: KitchenRequestFilters) =>
+    filters
+      ? (["kitchen-dispatch-requests", filters] as const)
+      : (["kitchen-dispatch-requests"] as const),
   kitchenRequest: (id: string) => ["kitchen-request", id] as const,
 };
 

@@ -14,6 +14,7 @@ import {
   isNoSuchStock,
 } from "@/lib/types/kitchen";
 import { toast } from "sonner";
+import { stockAwareMessage } from "@/lib/api/errors";
 
 /** Default matches the API's own `within_days` default. */
 export const KITCHEN_NEAR_EXPIRY_DEFAULT_DAYS = 7;
@@ -155,14 +156,13 @@ export function useWasteKitchenStock() {
         return;
       }
       if (isInsufficientStock(err)) {
-        toast.error(
-          err instanceof Error ? err.message : "Not enough stock in that batch.",
-        );
+        // Waste targets a specific batch, so the payload now carries
+        // `batch_code` and `available` means that batch — "Only 2 of batch
+        // B-CH-26 on hand, 5 requested".
+        toast.error(stockAwareMessage(err, "Not enough stock in that batch."));
         return;
       }
-      const message =
-        err instanceof Error ? err.message : "Failed to write off stock";
-      toast.error(message);
+      toast.error(stockAwareMessage(err, "Failed to write off stock"));
     },
   });
 }

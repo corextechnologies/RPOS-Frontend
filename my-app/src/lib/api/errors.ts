@@ -167,6 +167,85 @@ export function readLimitBp(err: ApiError): number | null {
   return d ? (int(d.limit_bp) ?? int(d.max_pct_bp)) : null;
 }
 
+// ---- insufficient_stock ----
+
+/**
+ * The rich `insufficient_stock` payload, now returned on every shortfall path:
+ * dispatch, allocation, POS/branch sale, kitchen production, and waste/adjust.
+ *
+ * The one field that changes the meaning is `batchCode`:
+ * - **absent** → `available` is the product-wide total at that location (a sale
+ *   sees the branch's on-hand; a dispatch sees the sum across in-date batches).
+ * - **present** → the shortfall is scoped to that one batch, and `available` is
+ *   that batch's on-hand, not the product total. This is how production-input
+ *   and waste/adjust shortfalls arrive, because those operations target a batch.
+ *
+ * Every field is read defensively — a shortfall dialog that throws because a
+ * key was missing is worse than one that falls back to the server's message,
+ * and it throws inside an error handler, the worst place to throw.
+ */
+export interface InsufficientStockDetails {
+  productId: number | null;
+  productName: string | null;
+  locationType: string | null;
+  locationId: number | null;
+  requested: number | null;
+  available: number | null;
+  /** Present only on batch-scoped shortfalls; `available` then means this batch. */
+  batchCode: string | null;
+}
+
+export function readInsufficientStock(err: ApiError): InsufficientStockDetails {
+  const d = record(err.details) ?? {};
+  return {
+    productId: int(d.product_id),
+    productName: str(d.product_name),
+    locationType: str(d.location_type),
+    locationId: int(d.location_id),
+    requested: int(d.requested),
+    available: int(d.available),
+    batchCode: str(d.batch_code),
+  };
+}
+
+/**
+ * A cashier-ready sentence for a stock shortfall.
+ *
+ * The batch rule drives the copy, exactly as the backend spelled it out:
+ * batch present → "Only 2 of batch B-CH-26 on hand, 5 requested"; batch absent
+ * → "Not enough Cheese — 2 available, 5 requested". Falls back to the plain
+ * message whenever the payload is missing or unrecognised — the defensive path
+ * the backend asked us to keep even though every known raise site is enriched.
+ */
+export function insufficientStockMessage(err: ApiError): string {
+  const d = readInsufficientStock(err);
+  const name = d.productName ?? "this item";
+
+  // Need at least the two numbers to say anything specific.
+  if (d.available == null || d.requested == null) {
+    return err.message || "Not enough stock for this.";
+  }
+
+  if (d.batchCode) {
+    return `Only ${d.available} of batch ${d.batchCode} on hand, ${d.requested} requested.`;
+  }
+  return `Not enough ${name} — ${d.available} available, ${d.requested} requested.`;
+}
+
+/**
+ * Any error's message, upgraded to the rich shortfall copy when it's an
+ * `insufficient_stock`. For the surfaces that toast with a bespoke fallback
+ * ("Failed to write off stock") rather than through `posErrorMessage` — waste,
+ * adjust, receive, and the like. Everything else keeps the caller's fallback.
+ */
+export function stockAwareMessage(err: unknown, fallback: string): string {
+  if (isApiCode(err, POS_ERROR.INSUFFICIENT_STOCK)) {
+    return insufficientStockMessage(err);
+  }
+  if (err instanceof ApiError || err instanceof Error) return err.message;
+  return fallback;
+}
+
 /**
  * Errors that mean "a manager must stand here and authorise this", as opposed
  * to "you did something wrong". These drive the PIN-escalation prompt rather
@@ -223,7 +302,10 @@ export function posErrorMessage(err: unknown): string {
     case POS_ERROR.ITEM_UNAVAILABLE:
       return "That item just went out of stock. Remove it to continue.";
     case POS_ERROR.INSUFFICIENT_STOCK:
-      return "Not enough stock to send this order.";
+      // Rich now on every path — names the product, the shortfall, and the
+      // batch when the operation targeted one. Falls back internally when the
+      // payload is absent, so this never regresses to worse than before.
+      return insufficientStockMessage(err);
     case POS_ERROR.MODIFIER_MIN_NOT_MET:
       return "This item needs more options chosen.";
     case POS_ERROR.MODIFIER_MAX_EXCEEDED:

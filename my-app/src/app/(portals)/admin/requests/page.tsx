@@ -11,11 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useDistributionRequests, useProductRequests } from "@/lib/hooks/use-requests";
+import {
+  useDispatchRequests,
+  useDistributionRequests,
+  useProductRequests,
+} from "@/lib/hooks/use-requests";
 import type { RequestFilters, RequestStatus } from "@/lib/types/admin";
 import { cn } from "@/lib/utils";
 
-type InboxTab = "products" | "distribution";
+type InboxTab = "products" | "distribution" | "dispatch";
 
 const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
   "all",
@@ -49,7 +53,9 @@ export default function AdminRequestsPage() {
 
   const products = useProductRequests(filters);
   const distribution = useDistributionRequests(filters);
-  const active = tab === "products" ? products : distribution;
+  const dispatch = useDispatchRequests(filters);
+  const active =
+    tab === "products" ? products : tab === "distribution" ? distribution : dispatch;
 
   const total = active.data?.total ?? 0;
   const pageSize = active.data?.page_size ?? 20;
@@ -90,6 +96,17 @@ export default function AdminRequestsPage() {
           >
             Distribution
           </Button>
+          <Button
+            type="button"
+            variant={tab === "dispatch" ? "default" : "outline"}
+            className={cn(tab === "dispatch" && "pointer-events-none")}
+            onClick={() => {
+              setTab("dispatch");
+              setPage(1);
+            }}
+          >
+            Dispatch
+          </Button>
           {/* A route rather than a tab: kitchen → warehouse requests are oversight
               only, so they do not belong on a screen about pending Admin action. */}
           <Button asChild variant="ghost">
@@ -123,12 +140,18 @@ export default function AdminRequestsPage() {
         isError={active.isError}
         onRetry={() => active.refetch()}
         emptyTitle={
-          tab === "products" ? "No product requests" : "No distribution requests"
+          tab === "products"
+            ? "No product requests"
+            : tab === "distribution"
+              ? "No distribution requests"
+              : "No dispatch requests"
         }
         emptyDescription={
           tab === "products"
             ? "Branch product requests will appear here."
-            : "Warehouse PO / distribution requests will appear here."
+            : tab === "distribution"
+              ? "Warehouse PO / distribution requests will appear here."
+              : "Kitchen dispatch notifications will appear here, ready to allocate across branches."
         }
       />
 

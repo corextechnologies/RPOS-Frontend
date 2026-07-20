@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
 import type {
+  CreateDispatchNotificationInput,
   CreateKitchenWarehouseRequestInput,
   KitchenRequestFilters,
   UpdateKitchenRequestStatusInput,
@@ -43,6 +44,32 @@ export function useKitchenBranchRequests(filters?: KitchenRequestFilters) {
     queryFn: () => api.listKitchenBranchRequests(filters),
     retry: (failureCount, error) =>
       !isMissingKitchenAssignment(error) && failureCount < 3,
+  });
+}
+
+export function useKitchenDispatchRequests(filters?: KitchenRequestFilters) {
+  return useQuery({
+    queryKey: queryKeys.kitchenDispatchRequests(filters),
+    queryFn: () => api.listKitchenDispatchRequests(filters),
+    retry: (failureCount, error) =>
+      !isMissingKitchenAssignment(error) && failureCount < 3,
+  });
+}
+
+export function useCreateDispatchNotification() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: CreateDispatchNotificationInput) =>
+      api.createDispatchNotification(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kitchen-dispatch-requests"] });
+      toast.success("Admin notified — waiting on allocation");
+    },
+    onError: (err) => {
+      const message = err instanceof Error ? err.message : "Failed to notify Admin";
+      toast.error(message);
+    },
   });
 }
 

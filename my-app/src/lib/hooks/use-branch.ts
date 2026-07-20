@@ -4,17 +4,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { branchApi } from "@/lib/api/branch.api";
-import { posErrorMessage } from "@/lib/api/errors";
+import { posErrorMessage, stockAwareMessage } from "@/lib/api/errors";
 import { ApiError } from "@/lib/types/super-admin";
 import type {
   BranchCustomerFilters,
   BranchOrderFilters,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
+  CreateBranchRequestInput,
   CreateProductionRunInput,
   ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
+import type { RequestFilters } from "@/lib/types/admin";
 import type { DeviceCreateInput } from "@/lib/types/pos";
 
 export const branchKeys = {
@@ -24,6 +26,8 @@ export const branchKeys = {
   customer: (id: string) => ["branch-customer", id] as const,
   orders: (filters?: BranchOrderFilters) =>
     filters ? (["branch-orders", filters] as const) : (["branch-orders"] as const),
+  requests: (filters?: RequestFilters) =>
+    filters ? (["branch-requests", filters] as const) : (["branch-requests"] as const),
   inventory: ["branch-inventory"] as const,
   production: (filters?: ProductionRunFilters) =>
     filters ? (["branch-production", filters] as const) : (["branch-production"] as const),
@@ -76,7 +80,9 @@ export function useRevokeBranchDevice() {
 }
 
 function message(err: unknown, fallback: string): string {
-  return err instanceof ApiError || err instanceof Error ? err.message : fallback;
+  // Sale/production shortfalls now carry the rich payload — surface the product
+  // and numbers rather than the bare server sentence.
+  return stockAwareMessage(err, fallback);
 }
 
 // ---- Customers ----
@@ -156,6 +162,28 @@ export function useCreateBranchOrder() {
       qc.invalidateQueries({ queryKey: ["branch-orders"] });
       qc.invalidateQueries({ queryKey: branchKeys.inventory });
     },
+  });
+}
+
+// ---- Stock requests (BRANCH_TO_ADMIN) ----
+
+export function useBranchRequests(filters?: RequestFilters) {
+  return useQuery({
+    queryKey: branchKeys.requests(filters),
+    queryFn: () => api.listBranchRequests(filters),
+  });
+}
+
+export function useCreateBranchRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: CreateBranchRequestInput) => api.createBranchRequest(body),
+    onSuccess: () => {
+      // Prefix invalidation covers every filtered variant of the list.
+      qc.invalidateQueries({ queryKey: ["branch-requests"] });
+      toast.success("Request sent to head office");
+    },
+    onError: (err) => toast.error(message(err, "Couldn't send request")),
   });
 }
 
