@@ -31,17 +31,17 @@ export function PlanDetailsCard({
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-faint">Amount</p>
           <p className="mt-1 font-medium text-content">
-            {amount != null ? `$${formatPlanAmount(amount)} / month` : "—"}
+            {amount != null ? `$${formatPlanAmount(amount)} / month` : "-"}
           </p>
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-faint">Branch limit</p>
-          <p className="mt-1 font-medium text-content">{branches ?? "—"}</p>
+          <p className="mt-1 font-medium text-content">{branches ?? "-"}</p>
         </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-faint">Next billing date</p>
           <p className="mt-1 font-medium text-content">
-            {nextBillingDate ? formatDate(nextBillingDate) : "—"}
+            {nextBillingDate ? formatDate(nextBillingDate) : "-"}
           </p>
           <p className="mt-0.5 text-xs text-muted">Set automatically on save (today + 1 month)</p>
         </div>

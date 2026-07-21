@@ -112,9 +112,9 @@ export function LocationList({
                 <TableCell>
                   <p className="font-medium text-content">{item.name}</p>
                 </TableCell>
-                <TableCell className="text-muted">{item.location || "—"}</TableCell>
+                <TableCell className="text-muted">{item.location || "-"}</TableCell>
                 <TableCell className="text-muted">
-                  {item.created_at ? formatDate(item.created_at) : "—"}
+                  {item.created_at ? formatDate(item.created_at) : "-"}
                 </TableCell>
                 {showActions && (
                   <TableCell className="text-right">

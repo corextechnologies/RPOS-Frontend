@@ -43,6 +43,7 @@ import type {
   UpdateWarehouseRequestStatusInput,
   WarehouseRequest,
   WarehouseRequestFilters,
+  UpdateWarehouseStaffInput,
   WarehouseStaff,
   WasteStockInput,
   WarehouseProduct,
@@ -61,6 +62,7 @@ import type {
   CreateKitchenStaffInput,
   CreateKitchenStaffResult,
   CreateKitchenWarehouseRequestInput,
+  UpdateKitchenStaffInput,
   CreateDispatchNotificationInput,
   KitchenCountFilters,
   KitchenInventoryItem,
@@ -85,6 +87,7 @@ import type {
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
+  UpdateBranchStaffInput,
   BranchInventoryItem,
   BranchOrder,
   BranchOrderFilters,
@@ -229,6 +232,10 @@ export interface ApiClient {
   createWarehouseUser(
     body: CreateWarehouseStaffInput,
   ): Promise<CreateWarehouseStaffResult>;
+  revokeWarehouseUser(id: string): Promise<WarehouseStaff>;
+  restoreWarehouseUser(id: string): Promise<WarehouseStaff>;
+  deleteWarehouseUser(id: string): Promise<void>;
+  updateWarehouseUser(id: string, body: UpdateWarehouseStaffInput): Promise<WarehouseStaff>;
   createWarehousePo(body: CreatePurchaseOrderInput): Promise<WarehouseRequest>;
   listWarehousePos(
     filters?: WarehouseRequestFilters,
@@ -263,6 +270,10 @@ export interface ApiClient {
   createKitchenUser(
     body: CreateKitchenStaffInput,
   ): Promise<CreateKitchenStaffResult>;
+  revokeKitchenUser(id: string): Promise<KitchenStaff>;
+  restoreKitchenUser(id: string): Promise<KitchenStaff>;
+  deleteKitchenUser(id: string): Promise<void>;
+  updateKitchenUser(id: string, body: UpdateKitchenStaffInput): Promise<KitchenStaff>;
   listKitchenWarehouses(): Promise<KitchenWarehouse[]>;
   createKitchenWarehouseRequest(
     body: CreateKitchenWarehouseRequestInput,
@@ -310,6 +321,10 @@ export interface ApiClient {
   // `pos.api.ts` and talks to the live backend only.
   listBranchStaff(): Promise<BranchStaff[]>;
   createBranchStaff(body: CreateBranchStaffInput): Promise<CreateBranchStaffResult>;
+  revokeBranchStaff(id: string): Promise<BranchStaff>;
+  restoreBranchStaff(id: string): Promise<BranchStaff>;
+  deleteBranchStaff(id: string): Promise<void>;
+  updateBranchStaff(id: string, body: UpdateBranchStaffInput): Promise<BranchStaff>;
   listBranchCustomers(filters?: BranchCustomerFilters): Promise<Paginated<BranchCustomer>>;
   getBranchCustomer(id: string): Promise<BranchCustomer>;
   createBranchCustomer(body: CreateBranchCustomerInput): Promise<BranchCustomer>;

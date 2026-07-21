@@ -27,13 +27,13 @@ export function PortalSettings({ role }: { role: UserRole }) {
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p>
-            <span className="text-muted">Name:</span> {user ? displayName(user) : "—"}
+            <span className="text-muted">Name:</span> {user ? displayName(user) : "-"}
           </p>
           <p>
             <span className="text-muted">Email:</span> {user?.email}
           </p>
           <p>
-            <span className="text-muted">Role:</span> {user?.role ?? "—"}
+            <span className="text-muted">Role:</span> {user?.role ?? "-"}
           </p>
         </CardContent>
       </Card>

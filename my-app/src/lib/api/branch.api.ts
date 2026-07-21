@@ -12,6 +12,7 @@ import type {
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
+  UpdateBranchStaffInput,
   BranchCustomerFilters,
   BranchInventoryItem,
   BranchOrder,
@@ -172,6 +173,28 @@ export const branchApi = {
       }),
     });
     return { ...res, user_id: String(res.user_id) };
+  },
+
+  async revokeBranchStaff(id: string): Promise<BranchStaff> {
+    const data = await request<BranchStaff>(`/branch/users/${id}/revoke`, { method: "POST" });
+    return { ...data, id: String(data.id), full_name: data.full_name ?? null, position: data.position ?? null };
+  },
+
+  async restoreBranchStaff(id: string): Promise<BranchStaff> {
+    const data = await request<BranchStaff>(`/branch/users/${id}/restore`, { method: "POST" });
+    return { ...data, id: String(data.id), full_name: data.full_name ?? null, position: data.position ?? null };
+  },
+
+  async deleteBranchStaff(id: string): Promise<void> {
+    await request<{ detail: string }>(`/branch/users/${id}`, { method: "DELETE" });
+  },
+
+  async updateBranchStaff(id: string, body: UpdateBranchStaffInput): Promise<BranchStaff> {
+    const data = await request<BranchStaff>(`/branch/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return { ...data, id: String(data.id), full_name: data.full_name ?? null, position: data.position ?? null };
   },
 
   // ---- Customers ----

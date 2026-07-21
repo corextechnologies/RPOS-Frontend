@@ -85,7 +85,7 @@ export function SalesTable({
                 <TableCell className="text-right font-medium text-content">
                   {formatPlanAmount(sale.amount)}
                 </TableCell>
-                <TableCell className="text-muted">{sale.note || "—"}</TableCell>
+                <TableCell className="text-muted">{sale.note || "-"}</TableCell>
               </TableRow>
             ))}
           </TableBody>

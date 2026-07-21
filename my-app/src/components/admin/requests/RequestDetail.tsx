@@ -46,7 +46,7 @@ export function RequestDetail({ request, fromLabel }: RequestDetailProps) {
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-faint">From</p>
-            <p className="mt-1 text-content">{request.from_label || fromLabel || "—"}</p>
+            <p className="mt-1 text-content">{request.from_label || fromLabel || "-"}</p>
           </div>
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-faint">Created</p>
@@ -60,7 +60,7 @@ export function RequestDetail({ request, fromLabel }: RequestDetailProps) {
           )}
           <div className="sm:col-span-2">
             <p className="text-xs font-medium uppercase tracking-wider text-faint">Notes</p>
-            <p className="mt-1 text-content">{request.notes || "—"}</p>
+            <p className="mt-1 text-content">{request.notes || "-"}</p>
           </div>
         </CardContent>
       </Card>
@@ -86,7 +86,7 @@ export function RequestDetail({ request, fromLabel }: RequestDetailProps) {
                   </TableCell>
                   <TableCell className="text-muted">{line.quantity_requested}</TableCell>
                   <TableCell className="text-muted">
-                    {line.quantity_approved == null ? "—" : line.quantity_approved}
+                    {line.quantity_approved == null ? "-" : line.quantity_approved}
                   </TableCell>
                 </TableRow>
               ))}

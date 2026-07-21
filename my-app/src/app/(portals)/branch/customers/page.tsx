@@ -123,7 +123,7 @@ export default function BranchCustomersPage() {
                 {rows.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium text-content">{c.name}</TableCell>
-                    <TableCell className="tabular-nums text-muted">{c.phone ?? "—"}</TableCell>
+                    <TableCell className="tabular-nums text-muted">{c.phone ?? "-"}</TableCell>
                     <TableCell className="text-muted">{formatDate(c.created_at)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">

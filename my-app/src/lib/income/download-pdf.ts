@@ -126,7 +126,7 @@ export function downloadIncomePdfReport(model: IncomeReportModel): void {
       model.invoices.length > 0
         ? model.invoices.map((r) => [
             r.restaurant_name,
-            r.owner_email || "—",
+            r.owner_email || "-",
             r.plan,
             r.issued_on,
             moneyDisplay(r.amount),
@@ -175,7 +175,7 @@ export function downloadIncomePdfReport(model: IncomeReportModel): void {
       model.onboardings.length > 0
         ? model.onboardings.map((r) => [
             r.restaurant_name,
-            r.owner_email || "—",
+            r.owner_email || "-",
             r.plan,
             r.date_joined,
             r.restaurant_status,

@@ -76,7 +76,7 @@ export default function BranchInventoryPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {item.expiry_date ? formatDate(item.expiry_date) : "—"}
+                      {item.expiry_date ? formatDate(item.expiry_date) : "-"}
                     </TableCell>
                   </TableRow>
                 ))}

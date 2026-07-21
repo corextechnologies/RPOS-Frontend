@@ -248,7 +248,7 @@ function RecentPendingTable({
           >
             <TableCell>
               <p className="font-medium text-content">
-                {resolveRequestFromLabel(req, warehouses) || "—"}
+                {resolveRequestFromLabel(req, warehouses) || "-"}
               </p>
               <p className="text-xs text-muted">{req.line_items.length} line item(s)</p>
             </TableCell>

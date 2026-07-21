@@ -48,7 +48,7 @@ export default function AdminSalesPage() {
   const branchLabel = useMemo(() => {
     const names = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
     return (sale: SalesRecord) => {
-      if (!sale.branch_id) return "—";
+      if (!sale.branch_id) return "-";
       return names.get(sale.branch_id) ?? `Branch ${sale.branch_id}`;
     };
   }, [branches.data]);

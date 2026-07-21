@@ -157,7 +157,7 @@ async function resolveExportTables(
       .map((r) => ({
         restaurant_name: r.restaurant_name,
         owner_email: r.owner_contact_email ?? "",
-        plan: r.plan_tier ? titleCase(r.plan_tier) : "—",
+        plan: r.plan_tier ? titleCase(r.plan_tier) : "-",
         date_joined: r.onboarded_on ?? "",
         restaurant_status: r.status === "ACTIVE" ? "Active" : "Halted",
       })),

@@ -70,6 +70,12 @@ export interface CreateWarehouseStaffInput {
  * endpoint only emails the credentials. Never surface a credentials dialog for
  * this flow; there is nothing to show.
  */
+/** Body for `PATCH /warehouse/users/{id}`. */
+export interface UpdateWarehouseStaffInput {
+  email?: string;
+  full_name?: string;
+}
+
 export interface CreateWarehouseStaffResult {
   user_id: string;
   email: string;

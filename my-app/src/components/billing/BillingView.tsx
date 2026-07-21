@@ -59,7 +59,7 @@ export function BillingView({
           </CardHeader>
           <CardContent>
             <p className="font-display text-2xl font-semibold">
-              {billing.next_billing_date ? formatDate(billing.next_billing_date) : "—"}
+              {billing.next_billing_date ? formatDate(billing.next_billing_date) : "-"}
             </p>
           </CardContent>
         </Card>
@@ -133,10 +133,10 @@ export function BillingView({
                     {invoices.map((inv) => (
                       <TableRow key={inv.id}>
                         <TableCell className="font-medium">
-                          {inv.restaurant_name || billing.restaurant_name || "—"}
+                          {inv.restaurant_name || billing.restaurant_name || "-"}
                         </TableCell>
                         <TableCell className="text-muted">
-                          {inv.owner_contact_email || billing.owner_contact_email || "—"}
+                          {inv.owner_contact_email || billing.owner_contact_email || "-"}
                         </TableCell>
                         <TableCell>{formatDate(inv.issued_on)}</TableCell>
                         <TableCell>${formatPlanAmount(inv.amount)}</TableCell>
@@ -180,10 +180,10 @@ export function BillingView({
                     <CardContent className="space-y-3 p-4">
                       <div>
                         <p className="font-medium">
-                          {inv.restaurant_name || billing.restaurant_name || "—"}
+                          {inv.restaurant_name || billing.restaurant_name || "-"}
                         </p>
                         <p className="text-xs text-muted">
-                          {inv.owner_contact_email || billing.owner_contact_email || "—"}
+                          {inv.owner_contact_email || billing.owner_contact_email || "-"}
                         </p>
                       </div>
                       <div className="flex items-center justify-between gap-3">

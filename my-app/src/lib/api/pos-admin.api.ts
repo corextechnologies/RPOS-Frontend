@@ -44,6 +44,7 @@ import type {
   WasteHistoryRow,
 } from "@/lib/types/pos";
 import { request, requestUpload } from "./client";
+import { apiConfig } from "./config";
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
 
@@ -168,7 +169,12 @@ export const posAdminApi = {
     const form = new FormData();
     form.append("file", file);
     const data = await requestUpload<{ url: string }>("/admin/upload/menu-image", form);
-    return data.url;
+    const url = data.url;
+    if (url.startsWith("/")) {
+      const origin = apiConfig.baseUrl.replace(/\/v1$/, "");
+      return `${origin}${url}`;
+    }
+    return url;
   },
 
   // ---- Phase 7 feed ----

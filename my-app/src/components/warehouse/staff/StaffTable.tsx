@@ -1,7 +1,16 @@
 "use client";
 
+import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import {
@@ -20,9 +29,15 @@ interface StaffTableProps {
   isLoading: boolean;
   isError: boolean;
   onRetry?: () => void;
+  onEdit?: (staff: WarehouseStaff) => void;
+  onRevoke?: (staff: WarehouseStaff) => void;
+  onRestore?: (staff: WarehouseStaff) => void;
+  onDelete?: (staff: WarehouseStaff) => void;
 }
 
-export function StaffTable({ items, isLoading, isError, onRetry }: StaffTableProps) {
+export function StaffTable({ items, isLoading, isError, onRetry, onEdit, onRevoke, onRestore, onDelete }: StaffTableProps) {
+  const showActions = Boolean(onEdit || onRevoke || onRestore || onDelete);
+
   if (isLoading) {
     return (
       <Card>
@@ -68,13 +83,14 @@ export function StaffTable({ items, isLoading, isError, onRetry }: StaffTablePro
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Added</TableHead>
+              {showActions && <TableHead className="w-[72px]" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((staff) => (
               <TableRow key={staff.id}>
                 <TableCell>
-                  <p className="font-medium text-content">{staff.full_name || "—"}</p>
+                  <p className="font-medium text-content">{staff.full_name || "-"}</p>
                 </TableCell>
                 <TableCell className="text-muted">{staff.email}</TableCell>
                 <TableCell>
@@ -83,8 +99,48 @@ export function StaffTable({ items, isLoading, isError, onRetry }: StaffTablePro
                   </Badge>
                 </TableCell>
                 <TableCell className="text-muted">
-                  {staff.created_at ? formatDate(staff.created_at) : "—"}
+                  {staff.created_at ? formatDate(staff.created_at) : "-"}
                 </TableCell>
+                {showActions && (
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" aria-label="Actions">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {onEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(staff)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                        )}
+                        {onEdit && (onRevoke || onRestore) && <DropdownMenuSeparator />}
+                        {onRevoke && staff.is_active && (
+                          <DropdownMenuItem onClick={() => onRevoke(staff)}>
+                            <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
+                          </DropdownMenuItem>
+                        )}
+                        {onRestore && !staff.is_active && (
+                          <DropdownMenuItem onClick={() => onRestore(staff)}>
+                            <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
+                          </DropdownMenuItem>
+                        )}
+                        {onDelete && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-danger"
+                              onClick={() => onDelete(staff)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>

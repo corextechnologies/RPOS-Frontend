@@ -34,7 +34,7 @@ export function RequestStatusBadge({ status }: { status: RequestStatus }) {
  * should not take down the whole table with it.
  */
 export function formatStatus(status: string | null | undefined): string {
-  if (!status) return "—";
+  if (!status) return "-";
   return status
     .split("_")
     .map((part) => titleCase(part.toLowerCase()))
@@ -42,7 +42,7 @@ export function formatStatus(status: string | null | undefined): string {
 }
 
 export function formatRequestType(type: string | null | undefined): string {
-  if (!type) return "—";
+  if (!type) return "-";
   if (type === "BRANCH_TO_ADMIN") return "Product request";
   if (type === "WAREHOUSE_TO_ADMIN_PO") return "Distribution / PO";
   if (type === "KITCHEN_TO_WAREHOUSE") return "Kitchen request";

@@ -50,6 +50,12 @@ export interface BranchStaff {
 }
 
 /** Server-generated on create — the only time it is ever shown. */
+export interface UpdateBranchStaffInput {
+  email?: string;
+  full_name?: string;
+  position?: BranchPosition;
+}
+
 export interface CreateBranchStaffResult {
   user_id: string;
   email: string;

@@ -49,6 +49,7 @@ import type {
   CreateKitchenStaffInput,
   CreateKitchenStaffResult,
   CreateKitchenWarehouseRequestInput,
+  UpdateKitchenStaffInput,
   KitchenCountFilters,
   KitchenCountLine,
   KitchenInventoryItem,
@@ -84,6 +85,7 @@ import type {
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
+  UpdateBranchStaffInput,
   BranchInventoryItem,
   BranchOrder,
   BranchOrderFilters,
@@ -123,6 +125,7 @@ import type {
   CreatePurchaseOrderInput,
   CreateWarehouseStaffInput,
   CreateWarehouseStaffResult,
+  UpdateWarehouseStaffInput,
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
@@ -3838,6 +3841,96 @@ export const mockClient: ApiClient = {
     return delay(result, 400);
   },
 
+  async revokeWarehouseUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    staff.me.is_active = false;
+    const emp = db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id);
+    if (emp) emp.is_active = false;
+    saveDb(db);
+    const result: WarehouseStaff = {
+      id: String(staff.me.id),
+      email: staff.email,
+      full_name: staff.me.full_name,
+      role: staff.me.role,
+      is_active: false,
+      warehouse_id: warehouse.id,
+    };
+    return delay(result, 300);
+  },
+
+  async restoreWarehouseUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    staff.me.is_active = true;
+    const emp = db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id);
+    if (emp) emp.is_active = true;
+    saveDb(db);
+    const result: WarehouseStaff = {
+      id: String(staff.me.id),
+      email: staff.email,
+      full_name: staff.me.full_name,
+      role: staff.me.role,
+      is_active: true,
+      warehouse_id: warehouse.id,
+    };
+    return delay(result, 300);
+  },
+
+  async deleteWarehouseUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    db.users = db.users.filter((u) => u !== staff);
+    db.employees = db.employees.filter((e) => e.email !== staff.email);
+    saveDb(db);
+    return delay(undefined as never, 300);
+  },
+
+  async updateWarehouseUser(id: string, body: UpdateWarehouseStaffInput): Promise<WarehouseStaff> {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    const emp = db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id);
+    if (body.email !== undefined) {
+      const newEmail = body.email.trim().toLowerCase();
+      if (emp) emp.email = newEmail;
+      staff.email = newEmail;
+      staff.me.email = newEmail;
+    }
+    if (body.full_name !== undefined) {
+      staff.me.full_name = body.full_name;
+      if (emp) emp.full_name = body.full_name;
+    }
+    saveDb(db);
+    const result: WarehouseStaff = {
+      id: String(staff.me.id),
+      email: staff.email,
+      full_name: staff.me.full_name,
+      role: staff.me.role,
+      is_active: staff.me.is_active,
+      warehouse_id: warehouse.id,
+    };
+    return delay(result, 300);
+  },
+
   async createWarehousePo(body: CreatePurchaseOrderInput) {
     const me = requireAuth();
     const db = loadDb();
@@ -4372,6 +4465,96 @@ export const mockClient: ApiClient = {
       credential_email_sent: true,
     };
     return delay(result, 400);
+  },
+
+  async revokeKitchenUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    staff.me.is_active = false;
+    const emp = db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id);
+    if (emp) emp.is_active = false;
+    saveDb(db);
+    const result: KitchenStaff = {
+      id: String(staff.me.id),
+      email: staff.email,
+      full_name: staff.me.full_name,
+      role: staff.me.role,
+      is_active: false,
+      kitchen_id: kitchen.id,
+    };
+    return delay(result, 300);
+  },
+
+  async restoreKitchenUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    staff.me.is_active = true;
+    const emp = db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id);
+    if (emp) emp.is_active = true;
+    saveDb(db);
+    const result: KitchenStaff = {
+      id: String(staff.me.id),
+      email: staff.email,
+      full_name: staff.me.full_name,
+      role: staff.me.role,
+      is_active: true,
+      kitchen_id: kitchen.id,
+    };
+    return delay(result, 300);
+  },
+
+  async deleteKitchenUser(id: string) {
+    const me = requireAuth();
+    const db = loadDb();
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    db.users = db.users.filter((u) => u !== staff);
+    db.employees = db.employees.filter((e) => e.email !== staff.email);
+    saveDb(db);
+    return delay(undefined as never, 300);
+  },
+
+  async updateKitchenUser(id: string, body: UpdateKitchenStaffInput): Promise<KitchenStaff> {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const staff = db.users.find(
+      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
+    );
+    if (!staff) throw new ApiError("Staff not found", 404);
+    const emp = db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id);
+    if (body.email !== undefined) {
+      const newEmail = body.email.trim().toLowerCase();
+      if (emp) emp.email = newEmail;
+      staff.email = newEmail;
+      staff.me.email = newEmail;
+    }
+    if (body.full_name !== undefined) {
+      staff.me.full_name = body.full_name;
+      if (emp) emp.full_name = body.full_name;
+    }
+    saveDb(db);
+    const result: KitchenStaff = {
+      id: String(staff.me.id),
+      email: staff.email,
+      full_name: staff.me.full_name,
+      role: staff.me.role,
+      is_active: staff.me.is_active,
+      kitchen_id: kitchen.id,
+    };
+    return delay(result, 300);
   },
 
   async listKitchenWarehouses() {
@@ -4999,6 +5182,90 @@ export const mockClient: ApiClient = {
       position: body.position,
       temporary_password: password,
       credential_email_sent: false,
+    });
+  },
+
+  async revokeBranchStaff(id: string): Promise<BranchStaff> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const emp = db.employees.find((e) => e.id === id && e.branch_id === branch.id);
+    if (!emp) throw new ApiError("Staff not found", 404);
+    emp.is_active = false;
+    const user = db.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
+    if (user) user.me.is_active = false;
+    saveDb(db);
+    return delay({
+      id: emp.id,
+      email: emp.email,
+      full_name: emp.full_name || null,
+      position: (emp as any).position ?? null,
+      is_active: false,
+      branch_id: branch.id,
+    });
+  },
+
+  async restoreBranchStaff(id: string): Promise<BranchStaff> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const emp = db.employees.find((e) => e.id === id && e.branch_id === branch.id);
+    if (!emp) throw new ApiError("Staff not found", 404);
+    emp.is_active = true;
+    const user = db.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
+    if (user) user.me.is_active = true;
+    saveDb(db);
+    return delay({
+      id: emp.id,
+      email: emp.email,
+      full_name: emp.full_name || null,
+      position: (emp as any).position ?? null,
+      is_active: true,
+      branch_id: branch.id,
+    });
+  },
+
+  async deleteBranchStaff(id: string): Promise<void> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const emp = db.employees.find((e) => e.id === id && e.branch_id === branch.id);
+    if (!emp) throw new ApiError("Staff not found", 404);
+    db.employees = db.employees.filter((e) => e !== emp);
+    db.users = db.users.filter((u) => u.email.toLowerCase() !== emp.email.toLowerCase());
+    saveDb(db);
+    return delay(undefined as never, 300);
+  },
+
+  async updateBranchStaff(id: string, body: UpdateBranchStaffInput): Promise<BranchStaff> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const emp = db.employees.find((e) => e.id === id && e.branch_id === branch.id);
+    if (!emp) throw new ApiError("Staff not found", 404);
+    const user = db.users.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
+    if (body.email !== undefined) {
+      const newEmail = body.email.trim().toLowerCase();
+      emp.email = newEmail;
+      if (user) { user.email = newEmail; user.me.email = newEmail; }
+    }
+    if (body.full_name !== undefined) {
+      emp.full_name = body.full_name;
+      if (user) user.me.full_name = body.full_name;
+    }
+    if (body.position !== undefined) (emp as any).position = body.position;
+    saveDb(db);
+    return delay({
+      id: emp.id,
+      email: emp.email,
+      full_name: emp.full_name || null,
+      position: (emp as any).position ?? null,
+      is_active: emp.is_active,
+      branch_id: branch.id,
     });
   },
 

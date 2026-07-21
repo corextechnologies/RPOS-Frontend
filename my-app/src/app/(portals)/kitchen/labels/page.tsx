@@ -170,7 +170,7 @@ export default function KitchenLabelsPage() {
                           {label.product_name}
                         </TableCell>
                         <TableCell className="text-muted">
-                          {label.sku || "—"}
+                          {label.sku || "-"}
                         </TableCell>
                         <TableCell>
                           {label.batch_code ? (
@@ -180,7 +180,7 @@ export default function KitchenLabelsPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-muted">
-                          {label.expiry_date || "—"}
+                          {label.expiry_date || "-"}
                         </TableCell>
                         <TableCell className="text-right font-medium text-content">
                           {label.quantity}

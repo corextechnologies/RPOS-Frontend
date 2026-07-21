@@ -5,6 +5,7 @@ import type {
   CreateWarehouseProductInput,
   CreateWarehouseStaffInput,
   CreateWarehouseStaffResult,
+  UpdateWarehouseStaffInput,
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
@@ -249,6 +250,28 @@ export const warehouseApi = {
       user_id: String(data.user_id),
       warehouse_id: String(data.warehouse_id),
     };
+  },
+
+  async revokeWarehouseUser(id: string): Promise<WarehouseStaff> {
+    const data = await request<WarehouseStaff>(`/warehouse/users/${id}/revoke`, { method: "POST" });
+    return normalizeStaff(data);
+  },
+
+  async restoreWarehouseUser(id: string): Promise<WarehouseStaff> {
+    const data = await request<WarehouseStaff>(`/warehouse/users/${id}/restore`, { method: "POST" });
+    return normalizeStaff(data);
+  },
+
+  async deleteWarehouseUser(id: string): Promise<void> {
+    await request<{ detail: string }>(`/warehouse/users/${id}`, { method: "DELETE" });
+  },
+
+  async updateWarehouseUser(id: string, body: UpdateWarehouseStaffInput): Promise<WarehouseStaff> {
+    const data = await request<WarehouseStaff>(`/warehouse/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return normalizeStaff(data);
   },
 
   async createWarehousePo(

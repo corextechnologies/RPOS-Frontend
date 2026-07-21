@@ -267,7 +267,7 @@ function NeedsActionTable({
           >
             <TableCell>
               <p className="font-medium text-content">
-                {request.line_items[0]?.product_name ?? "—"}
+                {request.line_items[0]?.product_name ?? "-"}
               </p>
               <p className="text-xs text-muted">
                 {request.line_items.length} line item(s)

@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, TriangleAlert, UserRound } from "lucide-react";
+import { MoreHorizontal, Pencil, Plus, ShieldCheck, ShieldOff, Trash2, TriangleAlert, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -30,7 +38,7 @@ import { CredentialsDialog } from "@/components/ui/credentials-dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { BranchPosition } from "@/lib/types/super-admin";
-import type { CreateBranchStaffInput, CreateBranchStaffResult } from "@/lib/types/branch";
+import type { BranchStaff, CreateBranchStaffInput, CreateBranchStaffResult, UpdateBranchStaffInput } from "@/lib/types/branch";
 
 /**
  * Branch staff, and the position that decides what they can do at a till.
@@ -59,13 +67,62 @@ const POSITIONS: Array<{ value: BranchPosition; label: string; hint: string }> =
 ];
 
 export default function BranchStaffPage() {
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<CreateBranchStaffResult | null>(null);
+  const [editing, setEditing] = useState<BranchStaff | null>(null);
+  const [confirm, setConfirm] = useState<{
+    type: "revoke" | "delete";
+    staff: BranchStaff;
+  } | null>(null);
 
   const staff = useQuery({
     queryKey: ["branch-staff"],
     queryFn: () => api.listBranchStaff(),
   });
+
+  const revokeMut = useMutation({
+    mutationFn: (id: string) => api.revokeBranchStaff(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["branch-staff"] });
+      setConfirm(null);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't revoke access"),
+  });
+
+  const restoreMut = useMutation({
+    mutationFn: (id: string) => api.restoreBranchStaff(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["branch-staff"] }),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't restore access"),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.deleteBranchStaff(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["branch-staff"] });
+      setConfirm(null);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't delete staff"),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateBranchStaffInput }) =>
+      api.updateBranchStaff(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["branch-staff"] });
+      setEditing(null);
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't update staff"),
+  });
+
+  const handleConfirm = async () => {
+    if (!confirm) return;
+    if (confirm.type === "revoke") {
+      await revokeMut.mutateAsync(confirm.staff.id);
+    } else {
+      await deleteMut.mutateAsync(confirm.staff.id);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -104,6 +161,7 @@ export default function BranchStaffPage() {
                     <TableHead>Email</TableHead>
                     <TableHead>Position</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="w-[72px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -119,8 +177,6 @@ export default function BranchStaffPage() {
                             {person.position.toLowerCase().replace(/_/g, " ")}
                           </Badge>
                         ) : (
-                          // Not cosmetic: no position means an empty capability
-                          // set, which means 403 on every POS action.
                           <Badge variant="destructive" className="gap-1">
                             <TriangleAlert className="size-3" aria-hidden />
                             none — can&apos;t use a till
@@ -131,6 +187,37 @@ export default function BranchStaffPage() {
                         <Badge variant={person.is_active ? "secondary" : "outline"}>
                           {person.is_active ? "active" : "revoked"}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label="Actions">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditing(person)}>
+                              <Pencil className="mr-2 h-4 w-4" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {person.is_active ? (
+                              <DropdownMenuItem onClick={() => setConfirm({ type: "revoke", staff: person })}>
+                                <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => restoreMut.mutate(person.id)}>
+                                <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-danger"
+                              onClick={() => setConfirm({ type: "delete", staff: person })}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -143,6 +230,13 @@ export default function BranchStaffPage() {
 
       <AddStaffDialog open={open} onOpenChange={setOpen} onCreated={setCreated} />
 
+      <EditBranchStaffDialog
+        staff={editing}
+        onOpenChange={(o) => { if (!o) setEditing(null); }}
+        onSave={(id, body) => updateMut.mutate({ id, body })}
+        isSaving={updateMut.isPending}
+      />
+
       <CredentialsDialog
         open={created !== null}
         onOpenChange={(o) => !o && setCreated(null)}
@@ -154,6 +248,23 @@ export default function BranchStaffPage() {
         temporaryPassword={created?.temporary_password ?? undefined}
         credentialEmailSent={created?.credential_email_sent ?? false}
         onDone={() => setCreated(null)}
+      />
+
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(o) => { if (!o) setConfirm(null); }}
+        title={confirm?.type === "delete" ? "Delete staff member?" : "Revoke access?"}
+        description={
+          confirm?.type === "delete"
+            ? `Permanently delete "${confirm.staff.full_name || confirm.staff.email}"? This cannot be undone.`
+            : confirm
+              ? `Revoke login access for "${confirm.staff.full_name || confirm.staff.email}"? They will not be able to sign in until restored.`
+              : ""
+        }
+        confirmLabel={confirm?.type === "delete" ? "Delete" : "Revoke access"}
+        destructive
+        loading={revokeMut.isPending || deleteMut.isPending}
+        onConfirm={handleConfirm}
       />
     </div>
   );
@@ -255,6 +366,116 @@ function AddStaffDialog({
             }
           >
             Add
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditBranchStaffDialog({
+  staff,
+  onOpenChange,
+  onSave,
+  isSaving,
+}: {
+  staff: BranchStaff | null;
+  onOpenChange: (open: boolean) => void;
+  onSave: (id: string, body: UpdateBranchStaffInput) => void;
+  isSaving: boolean;
+}) {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [position, setPosition] = useState<BranchPosition>("CASHIER");
+
+  const staffId = staff?.id;
+  const [prevId, setPrevId] = useState<string | undefined>();
+  if (staffId !== prevId) {
+    setPrevId(staffId);
+    if (staff) {
+      setEmail(staff.email);
+      setName(staff.full_name ?? "");
+      setPosition(staff.position ?? "CASHIER");
+    }
+  }
+
+  const validEmail = /\S+@\S+\.\S+/.test(email);
+
+  return (
+    <Dialog open={staff !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="size-4 text-brand" aria-hidden />
+            Edit staff
+          </DialogTitle>
+          <DialogDescription>
+            Update details for {staff?.full_name || staff?.email || "this person"}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-staff-email">Email</Label>
+            <Input
+              id="edit-staff-email"
+              type="email"
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-staff-name">Name</Label>
+            <Input
+              id="edit-staff-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Position</Label>
+            <div className="space-y-2">
+              {POSITIONS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPosition(p.value)}
+                  className={cn(
+                    "w-full rounded-xl border p-3 text-left transition",
+                    position === p.value
+                      ? "border-brand bg-brand/10"
+                      : "border-line bg-surface hover:border-brand/50",
+                  )}
+                >
+                  <span className="text-sm font-medium text-content">{p.label}</span>
+                  <span className="mt-0.5 block text-xs text-faint">{p.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            disabled={isSaving || !validEmail}
+            onClick={() => {
+              if (!staff) return;
+              const body: UpdateBranchStaffInput = {};
+              const trimmedEmail = email.trim();
+              if (trimmedEmail !== staff.email) body.email = trimmedEmail;
+              const trimmedName = name.trim();
+              if (trimmedName !== (staff.full_name ?? "")) body.full_name = trimmedName;
+              if (position !== staff.position) body.position = position;
+              onSave(staff.id, body);
+            }}
+          >
+            Save
           </Button>
         </DialogFooter>
       </DialogContent>

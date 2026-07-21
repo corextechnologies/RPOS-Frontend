@@ -49,9 +49,19 @@ export default function AdminEmployeesPage() {
       if (employee.warehouse_id) {
         return warehouseNames.get(employee.warehouse_id) ?? `Warehouse ${employee.warehouse_id}`;
       }
-      return "—";
+      return "-";
     };
   }, [branches.data, kitchens.data, warehouses.data]);
+
+  const MANAGER_ROLES = ["BRANCH_MANAGER", "KITCHEN_MANAGER", "WAREHOUSE_MANAGER"];
+  const managers = useMemo(
+    () => (employees.data?.items ?? []).filter((e) => MANAGER_ROLES.includes(e.role)),
+    [employees.data?.items],
+  );
+  const subStaff = useMemo(
+    () => (employees.data?.items ?? []).filter((e) => !MANAGER_ROLES.includes(e.role)),
+    [employees.data?.items],
+  );
 
   const total = employees.data?.total ?? 0;
   const pageSize = employees.data?.page_size ?? 20;
@@ -88,8 +98,9 @@ export default function AdminEmployeesPage() {
         )}
       </div>
 
+      <h2 className="font-display text-lg font-semibold text-content">Managers</h2>
       <EmployeeList
-        items={employees.data?.items}
+        items={managers}
         isLoading={employees.isLoading}
         isError={employees.isError}
         onRetry={() => employees.refetch()}
@@ -108,6 +119,19 @@ export default function AdminEmployeesPage() {
         onDelete={
           canManage ? (employee) => setConfirm({ type: "delete", employee }) : undefined
         }
+        emptyTitle="No managers yet"
+        emptyDescription="Branch, kitchen, and warehouse managers will appear here."
+      />
+
+      <h2 className="font-display text-lg font-semibold text-content">Sub Staff</h2>
+      <EmployeeList
+        items={subStaff}
+        isLoading={employees.isLoading}
+        isError={employees.isError}
+        onRetry={() => employees.refetch()}
+        locationLabel={locationLabel}
+        emptyTitle="No sub-staff yet"
+        emptyDescription="Staff members created by managers will appear here."
       />
 
       {total > pageSize && (

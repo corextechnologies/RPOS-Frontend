@@ -54,6 +54,6 @@ export function IncomeKpiCard({ label, value, hint, change, className }: KpiCard
 
 export function moneyLabel(amount: string | number | null | undefined, suffix = ""): string {
   const formatted = formatPlanAmount(amount);
-  if (formatted === "—") return "—";
+  if (formatted === "-") return "-";
   return `$${formatted}${suffix}`;
 }

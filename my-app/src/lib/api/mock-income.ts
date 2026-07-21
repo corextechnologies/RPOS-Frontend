@@ -377,7 +377,7 @@ export function buildMockInvoiceExportRows(
       return {
         restaurant_name: r?.name ?? "Unknown",
         owner_email: r?.admin.email ?? "",
-        plan: r?.plan_tier ? titleCase(String(r.plan_tier)) : "—",
+        plan: r?.plan_tier ? titleCase(String(r.plan_tier)) : "-",
         issued_on: inv.issued_on,
         amount: inv.amount,
         payment_status: (inv.paid ? "Paid" : "Unpaid") as "Paid" | "Unpaid",

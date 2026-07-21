@@ -114,7 +114,7 @@ export function PricingTable({
                     <p className="font-mono text-xs text-faint">{product.sku}</p>
                   )}
                 </TableCell>
-                <TableCell className="text-muted">{product.category || "—"}</TableCell>
+                <TableCell className="text-muted">{product.category || "-"}</TableCell>
                 <TableCell>
                   {/*
                     A raw material is not "unpriced" — it is unsellable. Showing
@@ -134,7 +134,7 @@ export function PricingTable({
                   )}
                 </TableCell>
                 <TableCell className="tabular-nums text-muted">
-                  {product.cost_price == null ? "—" : formatPlanAmount(product.cost_price)}
+                  {product.cost_price == null ? "-" : formatPlanAmount(product.cost_price)}
                 </TableCell>
                 {canEdit && (
                   <TableCell>

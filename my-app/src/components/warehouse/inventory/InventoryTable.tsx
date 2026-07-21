@@ -101,7 +101,7 @@ export function InventoryTable({
                 <TableCell>
                   <p className="font-medium text-content">{item.product.name}</p>
                 </TableCell>
-                <TableCell className="text-muted">{item.product.sku || "—"}</TableCell>
+                <TableCell className="text-muted">{item.product.sku || "-"}</TableCell>
                 <TableCell>
                   {item.batch_code ? (
                     <span className="text-muted">{item.batch_code}</span>
@@ -109,7 +109,7 @@ export function InventoryTable({
                     <Badge variant="secondary">Unbatched</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-muted">{item.expiry_date || "—"}</TableCell>
+                <TableCell className="text-muted">{item.expiry_date || "-"}</TableCell>
                 <TableCell className="text-right font-medium text-content">
                   {item.quantity}
                 </TableCell>

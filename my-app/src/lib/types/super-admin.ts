@@ -236,7 +236,7 @@ export const PLAN_AMOUNTS: Record<string, number> = {
 };
 
 export function formatPlanAmount(amount: string | number | null | undefined): string {
-  if (amount === null || amount === undefined || amount === "") return "—";
+  if (amount === null || amount === undefined || amount === "") return "-";
   const n = typeof amount === "string" ? parseFloat(amount) : amount;
   if (Number.isNaN(n)) return String(amount);
   return n.toFixed(2);

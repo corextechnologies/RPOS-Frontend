@@ -74,7 +74,7 @@ export function PriceMismatchDialog({
                   <span className="tabular-nums text-faint line-through">{line.proposed}</span>
                 )}
                 <ArrowRight className="size-3.5 shrink-0 text-faint" aria-hidden />
-                <span className="font-medium tabular-nums text-content">{line.server ?? "—"}</span>
+                <span className="font-medium tabular-nums text-content">{line.server ?? "-"}</span>
               </li>
             ))}
           </ul>

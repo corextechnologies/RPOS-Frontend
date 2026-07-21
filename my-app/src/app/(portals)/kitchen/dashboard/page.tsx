@@ -142,7 +142,7 @@ export default function KitchenDashboardPage() {
                   <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
                     <span className="min-w-0 truncate text-content">{item.product.name}</span>
                     <span className="shrink-0 text-xs text-warning">
-                      {item.expiry_date ? formatDate(item.expiry_date) : "—"}
+                      {item.expiry_date ? formatDate(item.expiry_date) : "-"}
                     </span>
                   </li>
                 ))}
@@ -245,7 +245,7 @@ export default function KitchenDashboardPage() {
 
 function summarizeLines(request: KitchenRequest): string {
   const [first] = request.line_items;
-  if (!first) return "—";
+  if (!first) return "-";
   const extra = request.line_items.length - 1;
   return extra > 0 ? `${first.product_name} +${extra} more` : first.product_name;
 }

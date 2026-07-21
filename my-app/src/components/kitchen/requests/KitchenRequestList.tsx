@@ -32,7 +32,7 @@ interface KitchenRequestListProps {
 
 function summarizeLines(request: KitchenRequest): string {
   const [first] = request.line_items;
-  if (!first) return "—";
+  if (!first) return "-";
   const extra = request.line_items.length - 1;
   return extra > 0 ? `${first.product_name} +${extra} more` : first.product_name;
 }

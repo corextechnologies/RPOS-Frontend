@@ -100,7 +100,7 @@ function RestaurantMobileCard({
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-medium text-content">{restaurant.name || "—"}</p>
+            <p className="font-medium text-content">{restaurant.name || "-"}</p>
             <p className="text-sm text-muted">{restaurant.admin.email}</p>
           </div>
           <DropdownMenu>
@@ -365,7 +365,7 @@ export default function DashboardPage() {
                         className={cn(r.plan_status === "halted" && "opacity-[var(--halted-opacity)]")}
                       >
                         <TableCell>
-                          <p className="font-medium">{r.name || "—"}</p>
+                          <p className="font-medium">{r.name || "-"}</p>
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1.5">
@@ -379,7 +379,7 @@ export default function DashboardPage() {
                           {USE_MOCK ? `${r.branch_count} / ${r.branch_limit}` : r.branch_limit}
                         </TableCell>
                         <TableCell>
-                          <p className="text-sm">{r.admin.name || "—"}</p>
+                          <p className="text-sm">{r.admin.name || "-"}</p>
                           <p className="text-xs text-muted">{r.admin.email}</p>
                         </TableCell>
                         {USE_MOCK && (

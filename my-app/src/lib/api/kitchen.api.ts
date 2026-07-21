@@ -5,6 +5,7 @@ import type {
   CreateKitchenStaffInput,
   CreateKitchenStaffResult,
   CreateKitchenWarehouseRequestInput,
+  UpdateKitchenStaffInput,
   KitchenCountFilters,
   KitchenInventoryItem,
   KitchenLabel,
@@ -276,6 +277,28 @@ export const kitchenApi = {
       user_id: String(data.user_id),
       kitchen_id: String(data.kitchen_id),
     };
+  },
+
+  async revokeKitchenUser(id: string): Promise<KitchenStaff> {
+    const data = await request<KitchenStaff>(`/kitchen/users/${id}/revoke`, { method: "POST" });
+    return normalizeStaff(data);
+  },
+
+  async restoreKitchenUser(id: string): Promise<KitchenStaff> {
+    const data = await request<KitchenStaff>(`/kitchen/users/${id}/restore`, { method: "POST" });
+    return normalizeStaff(data);
+  },
+
+  async deleteKitchenUser(id: string): Promise<void> {
+    await request<{ detail: string }>(`/kitchen/users/${id}`, { method: "DELETE" });
+  },
+
+  async updateKitchenUser(id: string, body: UpdateKitchenStaffInput): Promise<KitchenStaff> {
+    const data = await request<KitchenStaff>(`/kitchen/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    });
+    return normalizeStaff(data);
   },
 
   async listKitchenWarehouses(): Promise<KitchenWarehouse[]> {

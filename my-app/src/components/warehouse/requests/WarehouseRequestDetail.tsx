@@ -81,7 +81,7 @@ export function WarehouseRequestDetail({ request }: { request: WarehouseRequest 
                     {line.quantity_requested}
                   </TableCell>
                   <TableCell className="text-right font-medium text-content">
-                    {line.quantity_approved ?? "—"}
+                    {line.quantity_approved ?? "-"}
                   </TableCell>
                 </TableRow>
               ))}

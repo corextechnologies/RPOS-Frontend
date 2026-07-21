@@ -93,7 +93,7 @@ export function AdminInventoryTable({
                 <TableCell>
                   <p className="font-medium text-content">{item.product.name}</p>
                 </TableCell>
-                <TableCell className="text-muted">{item.product.sku || "—"}</TableCell>
+                <TableCell className="text-muted">{item.product.sku || "-"}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">{item.location_type}</Badge>
                   <p className="mt-1 text-xs text-muted">{item.location_id}</p>
@@ -107,14 +107,14 @@ export function AdminInventoryTable({
                     <Badge variant="secondary">No batch</Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-muted">{item.expiry_date || "—"}</TableCell>
+                <TableCell className="text-muted">{item.expiry_date || "-"}</TableCell>
                 <TableCell className="text-right font-medium text-content">
                   {item.quantity}
                 </TableCell>
                 <TableCell className="text-right font-medium text-content">
                   {/* Rendered verbatim: it is a decimal money string, and parsing
                       it into a float would lose precision the backend keeps. */}
-                  {item.product.cost_price ?? "—"}
+                  {item.product.cost_price ?? "-"}
                 </TableCell>
               </TableRow>
             ))}

@@ -248,9 +248,9 @@ function DeviceRow({
 }
 
 function formatLastSeen(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "—";
+  if (Number.isNaN(at.getTime())) return "-";
   return at.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 

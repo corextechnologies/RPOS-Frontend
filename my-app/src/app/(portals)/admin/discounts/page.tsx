@@ -185,7 +185,7 @@ export default function AdminDiscountsPage() {
                           {rule.type === "PCT" ? formatBasisPoints(rule.value_bp) : "Fixed amount"}
                         </TableCell>
                         <TableCell className="tabular-nums text-muted">
-                          {rule.max_pct_bp != null ? formatBasisPoints(rule.max_pct_bp) : "—"}
+                          {rule.max_pct_bp != null ? formatBasisPoints(rule.max_pct_bp) : "-"}
                         </TableCell>
                         <TableCell className="max-w-[200px] text-xs text-muted">
                           {schedule ? (
@@ -344,10 +344,10 @@ function RuleDetailDialog({
               {(rule.valid_from || rule.valid_to) && (
                 <div className="grid grid-cols-2 gap-x-4">
                   <DetailItem icon={Calendar} label="Valid from">
-                    {rule.valid_from ? new Date(rule.valid_from).toLocaleDateString() : "—"}
+                    {rule.valid_from ? new Date(rule.valid_from).toLocaleDateString() : "-"}
                   </DetailItem>
                   <DetailItem icon={Calendar} label="Valid until">
-                    {rule.valid_to ? new Date(rule.valid_to).toLocaleDateString() : "—"}
+                    {rule.valid_to ? new Date(rule.valid_to).toLocaleDateString() : "-"}
                   </DetailItem>
                 </div>
               )}

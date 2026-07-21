@@ -31,7 +31,14 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import type { SellableProduct } from "@/lib/types/pos";
 import { cn } from "@/lib/utils";
+import { apiConfig } from "@/lib/api/config";
 import { toast } from "sonner";
+
+function resolveImageUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("/")) return `${apiConfig.baseUrl.replace(/\/v1$/, "")}${url}`;
+  return url;
+}
 
 const tempId = () => `t${Date.now()}${Math.round(performance.now() * 1000)}`;
 
@@ -185,6 +192,7 @@ function LiveMenu({ live }: { live: ReturnType<typeof usePublishedMenu> }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">Image</TableHead>
                 <TableHead>Item</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Price</TableHead>
@@ -193,6 +201,19 @@ function LiveMenu({ live }: { live: ReturnType<typeof usePublishedMenu> }) {
             <TableBody>
               {live.data.items.map((item) => (
                 <TableRow key={item.id}>
+                  <TableCell>
+                    {resolveImageUrl(item.image_url) ? (
+                      <img
+                        src={resolveImageUrl(item.image_url)!}
+                        alt={item.name}
+                        className="size-10 rounded-lg border border-line object-cover"
+                      />
+                    ) : (
+                      <div className="flex size-10 items-center justify-center rounded-lg border border-line bg-surface-2">
+                        <ImagePlus className="size-4 text-faint" aria-hidden />
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <span className="text-content">{item.name}</span>
                     {item.is_combo && (
@@ -204,7 +225,7 @@ function LiveMenu({ live }: { live: ReturnType<typeof usePublishedMenu> }) {
                       </span>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted">{item.category ?? "—"}</TableCell>
+                  <TableCell className="text-muted">{item.category ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums text-content">
                     {minorToDecimalString(item.price_minor)}
                   </TableCell>

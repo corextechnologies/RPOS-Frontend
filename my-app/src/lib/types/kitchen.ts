@@ -157,6 +157,12 @@ export interface KitchenStaff {
   created_at?: string;
 }
 
+/** Body for `PATCH /kitchen/users/{id}`. */
+export interface UpdateKitchenStaffInput {
+  email?: string;
+  full_name?: string;
+}
+
 /** Body for `POST /kitchen/users`. */
 export interface CreateKitchenStaffInput {
   email: string;

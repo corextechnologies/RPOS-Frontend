@@ -34,6 +34,8 @@ interface EmployeeListProps {
   onRevoke?: (employee: Employee) => void;
   onRestore?: (employee: Employee) => void;
   onDelete?: (employee: Employee) => void;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }
 
 export function EmployeeList({
@@ -46,6 +48,8 @@ export function EmployeeList({
   onRevoke,
   onRestore,
   onDelete,
+  emptyTitle = "No employees yet",
+  emptyDescription = "Managers and staff for this restaurant will appear here.",
 }: EmployeeListProps) {
   const showActions = Boolean(onEdit || onRevoke || onRestore || onDelete);
 
@@ -76,8 +80,8 @@ export function EmployeeList({
       <Card>
         <CardContent className="p-0">
           <EmptyState
-            title="No employees yet"
-            description="Managers and staff for this restaurant will appear here."
+            title={emptyTitle}
+            description={emptyDescription}
           />
         </CardContent>
       </Card>
@@ -116,7 +120,7 @@ export function EmployeeList({
                 </TableCell>
                 <TableCell className="text-muted">{locationLabel(employee)}</TableCell>
                 <TableCell className="text-muted">
-                  {employee.created_at ? formatDate(employee.created_at) : "—"}
+                  {employee.created_at ? formatDate(employee.created_at) : "-"}
                 </TableCell>
                 {showActions && (
                   <TableCell className="text-right">

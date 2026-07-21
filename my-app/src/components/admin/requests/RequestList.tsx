@@ -92,7 +92,7 @@ export function RequestList({
               >
                 <TableCell>
                   <p className="font-medium text-content">
-                    {resolveRequestFromLabel(req, warehouses) || "—"}
+                    {resolveRequestFromLabel(req, warehouses) || "-"}
                   </p>
                   <p className="text-xs text-muted">{req.line_items.length} line item(s)</p>
                 </TableCell>
@@ -100,7 +100,7 @@ export function RequestList({
                   <RequestStatusBadge status={req.status} />
                 </TableCell>
                 <TableCell className="max-w-[240px] truncate text-muted">
-                  {req.notes || "—"}
+                  {req.notes || "-"}
                 </TableCell>
                 <TableCell className="text-muted">{formatDate(req.created_at)}</TableCell>
               </TableRow>

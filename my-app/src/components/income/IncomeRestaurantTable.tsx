@@ -51,10 +51,10 @@ export function IncomeRestaurantTable({ rows }: { rows: IncomeRestaurantRow[] })
                     <TableRow key={r.restaurant_id}>
                       <TableCell>
                         <p className="font-medium">{r.restaurant_name}</p>
-                        <p className="text-xs text-muted">{r.owner_contact_email || "—"}</p>
+                        <p className="text-xs text-muted">{r.owner_contact_email || "-"}</p>
                       </TableCell>
                       <TableCell>
-                        {r.plan_tier ? titleCase(r.plan_tier) : "—"}
+                        {r.plan_tier ? titleCase(r.plan_tier) : "-"}
                         {r.plan_amount != null && (
                           <span className="text-muted"> · ${formatPlanAmount(r.plan_amount)}</span>
                         )}
@@ -66,7 +66,7 @@ export function IncomeRestaurantTable({ rows }: { rows: IncomeRestaurantRow[] })
                           {titleCase(r.status.toLowerCase())}
                         </Badge>
                       </TableCell>
-                      <TableCell>{r.onboarded_on ? formatDate(r.onboarded_on) : "—"}</TableCell>
+                      <TableCell>{r.onboarded_on ? formatDate(r.onboarded_on) : "-"}</TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/super-admin/restaurants/${r.restaurant_id}/billing`}>
@@ -86,7 +86,7 @@ export function IncomeRestaurantTable({ rows }: { rows: IncomeRestaurantRow[] })
                   <CardContent className="space-y-3 p-4">
                     <div>
                       <p className="font-medium">{r.restaurant_name}</p>
-                      <p className="text-xs text-muted">{r.owner_contact_email || "—"}</p>
+                      <p className="text-xs text-muted">{r.owner_contact_email || "-"}</p>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted">Collected</span>
