@@ -27,6 +27,7 @@
 
 import type {
   CreateDiscountRuleInput,
+  UpdateDiscountRuleInput,
   CreateMenuItemInput,
   CreateModifierGroupInput,
   DiscountRule,
@@ -151,6 +152,14 @@ export const posAdminApi = {
 
   createDiscountRule(input: CreateDiscountRuleInput): Promise<DiscountRule> {
     return request<DiscountRule>("/pos/discount-rules", { method: "POST", ...json(input) });
+  },
+
+  updateDiscountRule(id: number, input: UpdateDiscountRuleInput): Promise<DiscountRule> {
+    return request<DiscountRule>(`/pos/discount-rules/${id}`, { method: "PATCH", ...json(input) });
+  },
+
+  deleteDiscountRule(id: number): Promise<void> {
+    return request(`/pos/discount-rules/${id}`, { method: "DELETE" });
   },
 
   // ---- Phase 7 feed ----

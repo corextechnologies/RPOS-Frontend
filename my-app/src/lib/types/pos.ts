@@ -474,25 +474,57 @@ export interface RefundResult {
 
 // ---- Discounts ----
 
-export type DiscountType = "PCT" | "AMOUNT" | (string & {});
+export type DiscountType = "PCT" | "AMT" | (string & {});
+
+export type DiscountScope = "ORDER" | "LINE";
+
+export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export interface DiscountRule {
   id: number;
   code: string;
   name: string;
+  scope: DiscountScope;
   type: DiscountType;
   /** Basis points. 5000 = 50%. */
   value_bp: number;
+  amount_minor: number;
   max_pct_bp?: number | null;
   is_active?: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
+  active_days?: DayOfWeek[] | null;
+  active_hours_start?: string | null;
+  active_hours_end?: string | null;
 }
 
-export interface CreateDiscountRuleInput {
+export interface DiscountScheduleInput {
+  valid_from?: string | null;
+  valid_to?: string | null;
+  active_days?: DayOfWeek[] | null;
+  active_hours_start?: string | null;
+  active_hours_end?: string | null;
+}
+
+export interface CreateDiscountRuleInput extends DiscountScheduleInput {
   code: string;
   name: string;
+  scope?: DiscountScope;
   type: DiscountType;
   value_bp: number;
+  amount_minor?: number;
   max_pct_bp?: number | null;
+}
+
+export interface UpdateDiscountRuleInput extends DiscountScheduleInput {
+  code?: string;
+  name?: string;
+  scope?: DiscountScope;
+  type?: DiscountType;
+  value_bp?: number;
+  amount_minor?: number;
+  max_pct_bp?: number | null;
+  is_active?: boolean;
 }
 
 export interface ApplyDiscountInput {

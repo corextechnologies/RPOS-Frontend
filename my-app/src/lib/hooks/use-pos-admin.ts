@@ -6,6 +6,7 @@ import { posAdminApi } from "@/lib/api/pos-admin.api";
 import { posErrorMessage } from "@/lib/api/errors";
 import type {
   CreateDiscountRuleInput,
+  UpdateDiscountRuleInput,
   CreateMenuItemInput,
   CreateModifierGroupInput,
 } from "@/lib/types/pos";
@@ -91,6 +92,31 @@ export function useCreateAdminDiscountRule() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: posAdminKeys.discountRules });
       toast.success("Discount rule created");
+    },
+    onError: (err) => toast.error(posErrorMessage(err)),
+  });
+}
+
+export function useUpdateAdminDiscountRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: number; input: UpdateDiscountRuleInput }) =>
+      posAdminApi.updateDiscountRule(id, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: posAdminKeys.discountRules });
+      toast.success("Discount rule updated");
+    },
+    onError: (err) => toast.error(posErrorMessage(err)),
+  });
+}
+
+export function useDeleteAdminDiscountRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => posAdminApi.deleteDiscountRule(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: posAdminKeys.discountRules });
+      toast.success("Discount rule deleted");
     },
     onError: (err) => toast.error(posErrorMessage(err)),
   });
