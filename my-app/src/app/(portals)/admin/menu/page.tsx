@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Layers, Lock, Plus, Send, Trash2, TriangleAlert } from "lucide-react";
+import { useRef, useState } from "react";
+import { ImagePlus, Layers, Lock, Plus, Send, Trash2, TriangleAlert, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -382,6 +382,8 @@ function ItemBuilder({
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [productId, setProductId] = useState("");
   const [isCombo, setIsCombo] = useState(false);
   const [componentTempIds, setComponentTempIds] = useState<string[]>([]);
@@ -554,31 +556,81 @@ function ItemBuilder({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="menu-category">
-              Category
-            </Label>
-            <Input
-              id="menu-category"
-              className="h-9"
-              placeholder="Mains"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="menu-image">
-              Image URL
-            </Label>
-            <Input
-              id="menu-image"
-              className="h-9"
-              placeholder="https://…"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-            />
-          </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs" htmlFor="menu-category">
+            Category
+          </Label>
+          <Input
+            id="menu-category"
+            className="h-9"
+            placeholder="Mains"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs">Product image</Label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              e.target.value = "";
+              if (file.size > 2 * 1024 * 1024) {
+                toast.error("Image must be under 2 MB");
+                return;
+              }
+              setUploading(true);
+              try {
+                const url = await posAdminApi.uploadMenuImage(file);
+                setImageUrl(url);
+              } catch (err) {
+                toast.error(posErrorMessage(err));
+              } finally {
+                setUploading(false);
+              }
+            }}
+          />
+          {imageUrl ? (
+            <div className="relative inline-block">
+              <img
+                src={imageUrl}
+                alt="Preview"
+                className="h-20 w-20 rounded-xl border border-line object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => setImageUrl("")}
+                className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-danger text-white shadow-soft"
+                aria-label="Remove image"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-20 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface-2 text-sm text-muted transition hover:border-brand/50 hover:text-content disabled:opacity-50"
+            >
+              {uploading ? (
+                <>
+                  <span className="size-4 animate-spin rounded-full border-2 border-muted border-t-brand" />
+                  Uploading…
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="size-4" />
+                  Upload image
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         {isCombo && (

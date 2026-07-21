@@ -43,7 +43,7 @@ import type {
   SalesHistoryRow,
   WasteHistoryRow,
 } from "@/lib/types/pos";
-import { request } from "./client";
+import { request, requestUpload } from "./client";
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
 
@@ -160,6 +160,15 @@ export const posAdminApi = {
 
   deleteDiscountRule(id: number): Promise<void> {
     return request(`/pos/discount-rules/${id}`, { method: "DELETE" });
+  },
+
+  // ---- Image upload ----
+
+  async uploadMenuImage(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    const data = await requestUpload<{ url: string }>("/admin/upload/menu-image", form);
+    return data.url;
   },
 
   // ---- Phase 7 feed ----

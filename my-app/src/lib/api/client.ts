@@ -126,6 +126,45 @@ export async function requestEnvelope<T>(
   return { data: unwrapData<T>(json), meta };
 }
 
+/** Upload a file via multipart/form-data with the same auth/refresh behavior. */
+export async function requestUpload<T>(
+  path: string,
+  body: FormData,
+  retried = false,
+): Promise<T> {
+  const headers: Record<string, string> = {};
+
+  if (apiConfig.isNgrok) {
+    headers["ngrok-skip-browser-warning"] = "true";
+  }
+
+  const access = tokens.access;
+  if (access) {
+    headers.Authorization = `Bearer ${access}`;
+  }
+
+  const res = await fetch(`${apiConfig.baseUrl}${path}`, {
+    method: "POST",
+    headers,
+    body,
+    credentials: "include",
+  });
+
+  if (res.status === 401 && !retried && tokens.refresh) {
+    const refreshed = await refreshOnce();
+    if (refreshed) return requestUpload<T>(path, body, true);
+    tokens.clear();
+  }
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw parseApiError(json, res.status);
+  }
+
+  const json = await res.json();
+  return unwrapData<T>(json);
+}
+
 /** Fetch non-JSON responses (e.g. CSV export) with the same auth/refresh behavior. */
 export async function requestText(
   path: string,
