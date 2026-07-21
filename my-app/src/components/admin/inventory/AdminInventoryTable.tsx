@@ -21,6 +21,7 @@ interface AdminInventoryTableProps {
   onRetry?: () => void;
   emptyTitle?: string;
   emptyDescription?: string;
+  locationName?: (item: AdminInventoryItem) => string;
 }
 
 /**
@@ -39,6 +40,7 @@ export function AdminInventoryTable({
   onRetry,
   emptyTitle = "No stock on hand",
   emptyDescription = "Stock appears here once it is received into a branch, kitchen, or warehouse.",
+  locationName,
 }: AdminInventoryTableProps) {
   if (isLoading) {
     return (
@@ -96,7 +98,9 @@ export function AdminInventoryTable({
                 <TableCell className="text-muted">{item.product.sku || "-"}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">{item.location_type}</Badge>
-                  <p className="mt-1 text-xs text-muted">{item.location_id}</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {locationName ? locationName(item) : item.location_id}
+                  </p>
                 </TableCell>
                 <TableCell>
                   {item.batch_code ? (

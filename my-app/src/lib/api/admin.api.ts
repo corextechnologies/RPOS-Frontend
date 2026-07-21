@@ -1,4 +1,6 @@
 import type {
+  AdminCustomer,
+  AdminCustomerFilters,
   AdminInventoryFilters,
   AdminInventoryItem,
   ProductKind,
@@ -229,7 +231,34 @@ function normalizePricing(p: ProductPricing): ProductPricing {
   };
 }
 
+function normalizeAdminCustomer(c: AdminCustomer): AdminCustomer {
+  return {
+    ...c,
+    id: String(c.id),
+    phone: c.phone ?? null,
+  };
+}
+
 export const adminApi = {
+  /**
+   * Every customer in the admin's restaurant, across all branches. Read-only —
+   * the create/edit/delete verbs live in the Branch portal.
+   */
+  async listAdminCustomers(
+    filters?: AdminCustomerFilters,
+  ): Promise<Paginated<AdminCustomer>> {
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+    const qs = new URLSearchParams({
+      page: String(page),
+      page_size: String(page_size),
+    });
+    const { data, meta } = await adminGetEnvelope<AdminCustomer[] | Paginated<AdminCustomer>>(
+      `/admin/customers?${qs.toString()}`,
+    );
+    return toPaginated(data, normalizeAdminCustomer, meta, page, page_size);
+  },
+
   async getMyBilling(): Promise<BillingSummary> {
     const data = await request<BillingOut>("/admin/billing");
     return billingFromApi(data);
@@ -445,6 +474,7 @@ export const adminApi = {
       },
       quantity: Number(item.quantity),
       batch_code: item.batch_code ?? "",
+      expiry_date: item.expiry_date ?? null,
       location_id: String(item.location_id),
     }));
   },

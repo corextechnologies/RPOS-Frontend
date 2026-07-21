@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import { useAdminInventory } from "@/lib/hooks/use-requests";
-import type { AdminInventoryFilters, AdminLocationType } from "@/lib/types/admin";
+import type { AdminInventoryFilters, AdminInventoryItem, AdminLocationType } from "@/lib/types/admin";
 
 const LOCATION_TYPES: AdminLocationType[] = ["BRANCH", "KITCHEN", "WAREHOUSE"];
 
@@ -43,6 +43,22 @@ export default function AdminInventoryPage() {
   );
 
   const inventory = useAdminInventory(filters);
+
+  const locationName = useMemo(() => {
+    const branchNames = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
+    const kitchenNames = new Map((kitchens.data ?? []).map((k) => [k.id, k.name]));
+    const warehouseNames = new Map((warehouses.data ?? []).map((w) => [w.id, w.name]));
+
+    return (item: AdminInventoryItem) => {
+      if (item.location_type === "BRANCH")
+        return branchNames.get(item.location_id) ?? item.location_id;
+      if (item.location_type === "KITCHEN")
+        return kitchenNames.get(item.location_id) ?? item.location_id;
+      if (item.location_type === "WAREHOUSE")
+        return warehouseNames.get(item.location_id) ?? item.location_id;
+      return item.location_id;
+    };
+  }, [branches.data, kitchens.data, warehouses.data]);
 
   return (
     <div className="space-y-6">
@@ -100,6 +116,7 @@ export default function AdminInventoryPage() {
         isLoading={inventory.isLoading}
         isError={inventory.isError}
         onRetry={() => inventory.refetch()}
+        locationName={locationName}
       />
     </div>
   );

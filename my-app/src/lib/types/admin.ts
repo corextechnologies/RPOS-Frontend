@@ -431,3 +431,23 @@ export const INVALID_RECEIVED_QUANTITY = "invalid_received_quantity";
 
 /** 409 raised when a report says nothing is wrong — that is not a report. */
 export const NOTHING_REPORTED = "nothing_reported";
+
+// ---- Customers (Admin, read-only) ----
+
+/**
+ * A customer as the Admin portal reads it. Customers are tenant-scoped
+ * (`restaurant_id`), so this is every customer across all of the restaurant's
+ * branches — there is no `branch_id` here. Admin can only view them; creating,
+ * editing, and deleting live in the Branch portal.
+ */
+export interface AdminCustomer {
+  id: string;
+  name: string;
+  phone: string | null;
+  created_at?: string;
+}
+
+export interface AdminCustomerFilters {
+  page?: number;
+  page_size?: number;
+}

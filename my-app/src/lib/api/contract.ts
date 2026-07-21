@@ -1,4 +1,6 @@
 import type {
+  AdminCustomer,
+  AdminCustomerFilters,
   AdminProfile,
   AllocateDispatchInput,
   Branch,
@@ -163,6 +165,7 @@ export interface ApiClient {
   updateWarehouse(id: string, body: UpdateLocationInput): Promise<Warehouse>;
   deleteWarehouse(id: string): Promise<void>;
 
+  listAdminCustomers(filters?: AdminCustomerFilters): Promise<Paginated<AdminCustomer>>;
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
   createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
   updateUser(id: string, body: UpdateAdminUserInput): Promise<Employee>;

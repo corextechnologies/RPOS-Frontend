@@ -24,6 +24,7 @@ export type AuthAction =
   | "requests:update"
   | "sales:read"
   | "sales:create"
+  | "customers:read"
   | "overview:read"
   // POS back-office (Admin). The till reads these and cannot change them.
   | "devices:read"
@@ -113,6 +114,7 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "requests:update",
     "sales:read",
     "sales:create",
+    "customers:read",
     "overview:read",
     "menu:read",
     "menu:publish",

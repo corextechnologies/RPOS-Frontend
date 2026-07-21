@@ -20,7 +20,7 @@ import {
 import type { RequestFilters, RequestStatus } from "@/lib/types/admin";
 import { cn } from "@/lib/utils";
 
-type InboxTab = "products" | "distribution" | "dispatch";
+type InboxTab = "products" | "Dispatch" | "Distribution";
 
 const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
   "all",
@@ -53,12 +53,12 @@ export default function AdminRequestsPage() {
   );
 
   const products = useProductRequests(filters);
-  const distribution = useDistributionRequests(filters);
-  const dispatch = useDispatchRequests(filters);
+  const Distribution = useDistributionRequests(filters);
+  const Dispatch = useDispatchRequests(filters);
   // Distribution POs arrive without a `from_label`; resolve the warehouse name.
   const warehouses = useWarehouses();
   const active =
-    tab === "products" ? products : tab === "distribution" ? distribution : dispatch;
+    tab === "products" ? products : tab === "Distribution" ? Dispatch : Distribution;
 
   const total = active.data?.total ?? 0;
   const pageSize = active.data?.page_size ?? 20;
@@ -71,7 +71,7 @@ export default function AdminRequestsPage() {
           Requests
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Incoming product and warehouse distribution requests awaiting Admin action.
+          Incoming product and warehouse Distribution requests awaiting Admin action.
         </p>
       </div>
 
@@ -90,10 +90,10 @@ export default function AdminRequestsPage() {
           </Button>
           <Button
             type="button"
-            variant={tab === "distribution" ? "default" : "outline"}
-            className={cn(tab === "distribution" && "pointer-events-none")}
+            variant={tab === "Distribution" ? "default" : "outline"}
+            className={cn(tab === "Distribution" && "pointer-events-none")}
             onClick={() => {
-              setTab("distribution");
+              setTab("Distribution");
               setPage(1);
             }}
           >
@@ -101,10 +101,10 @@ export default function AdminRequestsPage() {
           </Button>
           <Button
             type="button"
-            variant={tab === "dispatch" ? "default" : "outline"}
-            className={cn(tab === "dispatch" && "pointer-events-none")}
+            variant={tab === "Dispatch" ? "default" : "outline"}
+            className={cn(tab === "Dispatch" && "pointer-events-none")}
             onClick={() => {
-              setTab("dispatch");
+              setTab("Dispatch");
               setPage(1);
             }}
           >
@@ -146,16 +146,16 @@ export default function AdminRequestsPage() {
         emptyTitle={
           tab === "products"
             ? "No product requests"
-            : tab === "distribution"
-              ? "No distribution requests"
-              : "No dispatch requests"
+            : tab === "Distribution"
+              ? "No Distribution requests"
+              : "No Dispatch requests"
         }
         emptyDescription={
           tab === "products"
             ? "Branch product requests will appear here."
-            : tab === "distribution"
-              ? "Warehouse PO / distribution requests will appear here."
-              : "Kitchen dispatch notifications will appear here, ready to allocate across branches."
+            : tab === "Distribution"
+              ? "Warehouse PO / Distribution requests will appear here."
+              : "Kitchen Dispatch notifications will appear here, ready to allocate across branches."
         }
       />
 

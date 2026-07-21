@@ -1,6 +1,7 @@
 import type { IncomeForecastHorizon, IncomePeriodFilter } from "@/lib/types/income";
 import type { RestaurantFilters } from "@/lib/types/super-admin";
 import type {
+  AdminCustomerFilters,
   AdminInventoryFilters,
   ProductPricingFilters,
   RequestFilters,
@@ -37,6 +38,10 @@ export const queryKeys = {
   kitchens: ["admin-kitchens"] as const,
   warehouses: ["admin-warehouses"] as const,
   employees: (page?: number) => ["admin-employees", page] as const,
+  adminCustomers: (filters?: AdminCustomerFilters) =>
+    filters
+      ? (["admin-customers", filters] as const)
+      : (["admin-customers"] as const),
   productPricing: (filters?: ProductPricingFilters) =>
     filters && Object.keys(filters).length
       ? (["admin-product-pricing", filters] as const)

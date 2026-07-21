@@ -2,6 +2,8 @@
  * Mock Super Admin API — in-memory backend persisted to localStorage.
  */
 import type {
+  AdminCustomer,
+  AdminCustomerFilters,
   AdminProfile,
   AdminRequestType,
   Branch,
@@ -2758,6 +2760,34 @@ export const mockClient: ApiClient = {
     db.warehouses = db.warehouses.filter((w) => w.id !== id);
     saveDb(db);
     return delay(undefined);
+  },
+
+  async listAdminCustomers(
+    filters?: AdminCustomerFilters,
+  ): Promise<Paginated<AdminCustomer>> {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+    // Restaurant-scoped, across every branch, and soft-deleted rows are hidden.
+    const rows = db.customers
+      .filter((c) => c.restaurant_id === r.id && c.deleted_at === null)
+      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+    const start = (page - 1) * page_size;
+    const items: AdminCustomer[] = rows.slice(start, start + page_size).map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      created_at: c.created_at,
+    }));
+    const result: Paginated<AdminCustomer> = {
+      items,
+      page,
+      page_size,
+      total: rows.length,
+    };
+    return delay(result);
   },
 
   async listEmployees(params) {

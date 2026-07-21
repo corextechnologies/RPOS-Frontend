@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Building2,
+  Contact,
   CookingPot,
   DollarSign,
   Inbox,
@@ -70,6 +71,13 @@ export const ADMIN_NAV: NavSection[] = [
         icon: Users,
         action: "employees:read",
         match: "prefix",
+      },
+      {
+        label: "Customers",
+        href: "/admin/customers",
+        icon: Contact,
+        action: "customers:read",
+        match: "exact",
       },
     ],
   },
