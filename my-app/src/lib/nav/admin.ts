@@ -10,6 +10,7 @@ import {
   Receipt,
   Settings,
   Tag,
+  Target,
   TicketPercent,
   Users,
   Utensils,
@@ -125,6 +126,13 @@ export const ADMIN_NAV: NavSection[] = [
       //   action: "recipes:read",
       //   match: "exact",
       // },
+      {
+        label: "Production targets",
+        href: "/admin/production-targets",
+        icon: Target,
+        action: "production-targets:read",
+        match: "prefix",
+      },
       {
         label: "Requests",
         href: "/admin/requests",

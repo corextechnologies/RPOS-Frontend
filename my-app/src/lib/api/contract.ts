@@ -1,4 +1,11 @@
 import type {
+  AdminProductionTargetFilters,
+  CreateProductionTargetInput,
+  KitchenProductionTargetFilters,
+  ProductionTarget,
+  UpdateProductionTargetInput,
+} from "@/lib/types/production-target";
+import type {
   AdminCustomer,
   AdminCustomerFilters,
   AdminProfile,
@@ -166,6 +173,15 @@ export interface ApiClient {
   deleteWarehouse(id: string): Promise<void>;
 
   listAdminCustomers(filters?: AdminCustomerFilters): Promise<Paginated<AdminCustomer>>;
+
+  listProductionTargets(filters?: AdminProductionTargetFilters): Promise<ProductionTarget[]>;
+  getProductionTarget(id: string): Promise<ProductionTarget>;
+  createProductionTarget(body: CreateProductionTargetInput): Promise<ProductionTarget>;
+  updateProductionTarget(
+    id: string,
+    body: UpdateProductionTargetInput,
+  ): Promise<ProductionTarget>;
+  deleteProductionTarget(id: string): Promise<void>;
   listEmployees(params?: { page?: number; page_size?: number }): Promise<Paginated<Employee>>;
   createUser(body: CreateAdminUserInput): Promise<CreateAdminUserResult>;
   updateUser(id: string, body: UpdateAdminUserInput): Promise<Employee>;
@@ -309,6 +325,13 @@ export interface ApiClient {
   listKitchenProduction(): Promise<ProductionRun[]>;
   getKitchenProductionRun(id: string): Promise<ProductionRun>;
   produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun>;
+
+  listKitchenProductionTargets(
+    filters?: KitchenProductionTargetFilters,
+  ): Promise<ProductionTarget[]>;
+  getKitchenProductionTarget(id: string): Promise<ProductionTarget>;
+  acknowledgeProductionTarget(id: string): Promise<ProductionTarget>;
+  completeProductionTarget(id: string): Promise<ProductionTarget>;
 
   getKitchenRequest(requestId: string): Promise<KitchenRequest>;
   updateKitchenRequestStatus(

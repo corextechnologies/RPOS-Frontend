@@ -10,6 +10,10 @@ import type {
 } from "@/lib/types/admin";
 import type { WarehouseRequestFilters } from "@/lib/types/warehouse";
 import type { KitchenLabelFilters, KitchenRequestFilters } from "@/lib/types/kitchen";
+import type {
+  AdminProductionTargetFilters,
+  KitchenProductionTargetFilters,
+} from "@/lib/types/production-target";
 
 
 export const queryKeys = {
@@ -60,6 +64,17 @@ export const queryKeys = {
       : (["admin-requests-dispatch"] as const),
   request: (id: string) => ["admin-request", id] as const,
   adminSettings: ["admin-settings"] as const,
+  productionTargets: (filters?: AdminProductionTargetFilters) =>
+    filters && Object.keys(filters).length
+      ? (["admin-production-targets", filters] as const)
+      : (["admin-production-targets"] as const),
+  productionTarget: (id: string) => ["admin-production-target", id] as const,
+  kitchenProductionTargets: (filters?: KitchenProductionTargetFilters) =>
+    filters && Object.keys(filters).length
+      ? (["kitchen-production-targets", filters] as const)
+      : (["kitchen-production-targets"] as const),
+  kitchenProductionTarget: (id: string) =>
+    ["kitchen-production-target", id] as const,
   salesRecords: (filters?: SalesRecordFilters) =>
     filters
       ? (["admin-sales-records", filters] as const)

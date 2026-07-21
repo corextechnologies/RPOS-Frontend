@@ -31,8 +31,24 @@ export function notificationLink(
       // on the stock list that the limit is measured against — the warehouse's
       // own inventory. Point it at a product page if one is ever built.
       return role === "WAREHOUSE_MANAGER" ? "/warehouse/inventory" : null;
+    case "production_target":
+      // Admin is told when a kitchen acknowledges or completes; the kitchen
+      // manager is told when Admin creates one. Each lands on its own detail
+      // screen for the same target id.
+      return productionTargetLink(id, role);
     default:
       // A type this build has never heard of. Inert, not broken.
+      return null;
+  }
+}
+
+function productionTargetLink(id: string, role: UserRole): string | null {
+  switch (role) {
+    case "ADMIN":
+      return `/admin/production-targets/${id}`;
+    case "KITCHEN_MANAGER":
+      return `/kitchen/production-targets/${id}`;
+    default:
       return null;
   }
 }

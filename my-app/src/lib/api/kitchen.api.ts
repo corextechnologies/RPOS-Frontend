@@ -27,7 +27,12 @@ import type {
   KitchenRecipe,
 } from "@/lib/types/kitchen";
 import type { ProductionRun } from "@/lib/types/branch";
+import type {
+  KitchenProductionTargetFilters,
+  ProductionTarget,
+} from "@/lib/types/production-target";
 import { request, requestEnvelope } from "./client";
+import { normalizeProductionTarget } from "./admin.api";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
 function normalizeInventoryItem(item: KitchenInventoryItem): KitchenInventoryItem {
@@ -471,6 +476,44 @@ export const kitchenApi = {
         }),
       }),
     );
+  },
+
+  // ---- Daily production targets (from Admin) ----
+  //
+  // Auto-scoped to the logged-in manager's kitchen server-side; there is no
+  // kitchen filter here, only date.
+
+  async listKitchenProductionTargets(
+    filters?: KitchenProductionTargetFilters,
+  ): Promise<ProductionTarget[]> {
+    const qs = filters?.date
+      ? `?${new URLSearchParams({ date: filters.date }).toString()}`
+      : "";
+    const data = await request<ProductionTarget[]>(`/kitchen/production-targets${qs}`);
+    return (data ?? []).map(normalizeProductionTarget);
+  },
+
+  async getKitchenProductionTarget(id: string): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(`/kitchen/production-targets/${id}`);
+    return normalizeProductionTarget(data);
+  },
+
+  /** PENDING → ACKNOWLEDGED. 409 `invalid_target_status` on any other state. */
+  async acknowledgeProductionTarget(id: string): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(
+      `/kitchen/production-targets/${id}/acknowledge`,
+      { method: "POST" },
+    );
+    return normalizeProductionTarget(data);
+  },
+
+  /** ACKNOWLEDGED → COMPLETED. 409 `invalid_target_status` on any other state. */
+  async completeProductionTarget(id: string): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(
+      `/kitchen/production-targets/${id}/complete`,
+      { method: "POST" },
+    );
+    return normalizeProductionTarget(data);
   },
 };
 

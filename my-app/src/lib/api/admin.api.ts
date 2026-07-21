@@ -31,6 +31,12 @@ import type {
   UpdateRequestStatusInput,
   Warehouse,
 } from "@/lib/types/admin";
+import type {
+  AdminProductionTargetFilters,
+  CreateProductionTargetInput,
+  ProductionTarget,
+  UpdateProductionTargetInput,
+} from "@/lib/types/production-target";
 import type { BillingOut, BillingSummary } from "@/lib/types/super-admin";
 import { billingFromApi } from "./adapters";
 import { apiConfig } from "./config";
@@ -239,6 +245,22 @@ function normalizeAdminCustomer(c: AdminCustomer): AdminCustomer {
   };
 }
 
+/** Shared by the Admin and Kitchen reads — ids are strings, quantities numbers. */
+export function normalizeProductionTarget(t: ProductionTarget): ProductionTarget {
+  return {
+    ...t,
+    id: String(t.id),
+    kitchen_id: String(t.kitchen_id),
+    note: t.note ?? null,
+    lines: (t.lines ?? []).map((line) => ({
+      ...line,
+      id: String(line.id),
+      product_id: String(line.product_id),
+      quantity: Number(line.quantity),
+    })),
+  };
+}
+
 export const adminApi = {
   /**
    * Every customer in the admin's restaurant, across all branches. Read-only —
@@ -257,6 +279,72 @@ export const adminApi = {
       `/admin/customers?${qs.toString()}`,
     );
     return toPaginated(data, normalizeAdminCustomer, meta, page, page_size);
+  },
+
+  // ---- Daily production targets (Admin → Kitchen) ----
+
+  async listProductionTargets(
+    filters?: AdminProductionTargetFilters,
+  ): Promise<ProductionTarget[]> {
+    const qs = new URLSearchParams();
+    if (filters?.kitchen_id) qs.set("kitchen_id", filters.kitchen_id);
+    if (filters?.date) qs.set("date", filters.date);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const data = await request<ProductionTarget[]>(`/admin/production-targets${suffix}`);
+    return (data ?? []).map(normalizeProductionTarget);
+  },
+
+  async getProductionTarget(id: string): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(`/admin/production-targets/${id}`);
+    return normalizeProductionTarget(data);
+  },
+
+  async createProductionTarget(
+    body: CreateProductionTargetInput,
+  ): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>("/admin/production-targets", {
+      method: "POST",
+      body: JSON.stringify({
+        kitchen_id: body.kitchen_id,
+        target_date: body.target_date,
+        note: body.note?.trim() ? body.note.trim() : undefined,
+        lines: body.lines.map((line) => ({
+          product_id: line.product_id,
+          quantity: line.quantity,
+        })),
+      }),
+    });
+    return normalizeProductionTarget(data);
+  },
+
+  /**
+   * Partial: `note` and `lines` are each optional and omitted keys are left
+   * untouched. `lines`, when sent, fully replaces the existing set. Only allowed
+   * while the target is PENDING (409 `target_not_editable` otherwise).
+   */
+  async updateProductionTarget(
+    id: string,
+    body: UpdateProductionTargetInput,
+  ): Promise<ProductionTarget> {
+    const payload: Record<string, unknown> = {};
+    if (body.note !== undefined) payload.note = body.note.trim();
+    if (body.lines !== undefined) {
+      payload.lines = body.lines.map((line) => ({
+        product_id: line.product_id,
+        quantity: line.quantity,
+      }));
+    }
+    const data = await request<ProductionTarget>(`/admin/production-targets/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    return normalizeProductionTarget(data);
+  },
+
+  async deleteProductionTarget(id: string): Promise<void> {
+    await request<{ detail: string }>(`/admin/production-targets/${id}`, {
+      method: "DELETE",
+    });
   },
 
   async getMyBilling(): Promise<BillingSummary> {

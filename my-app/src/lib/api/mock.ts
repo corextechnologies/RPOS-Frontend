@@ -100,6 +100,19 @@ import type {
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import { INVALID_PRODUCTION_RUN, MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
+import type {
+  AdminProductionTargetFilters,
+  CreateProductionTargetInput,
+  KitchenProductionTargetFilters,
+  ProductionTarget,
+  UpdateProductionTargetInput,
+} from "@/lib/types/production-target";
+import {
+  DUPLICATE_TARGET,
+  INVALID_TARGET_STATUS,
+  TARGET_NOT_DELETABLE,
+  TARGET_NOT_EDITABLE,
+} from "@/lib/types/production-target";
 import { POS_ERROR } from "@/lib/api/errors";
 import type { BranchPosition } from "@/lib/types/super-admin";
 // Mock and live agree on the state machine by sharing the real map, the same way
@@ -180,7 +193,7 @@ const SESSION_KEY = "ros-super-admin-session";
  * 17: branch portal — `customers`, `branch_orders`, `production_runs`, a second
  *     branch (br-002), and selling_price/category/is_available on products.
  */
-const SEED_VERSION = 19;
+const SEED_VERSION = 20;
 
 interface MockInvoiceRecord {
   id: number;
@@ -274,6 +287,11 @@ interface MockProductionRun extends ProductionRun {
   restaurant_id: string;
 }
 
+/** A daily production target, tenant-scoped and keyed to one kitchen. */
+interface MockProductionTarget extends ProductionTarget {
+  restaurant_id: string;
+}
+
 interface MockRecipe extends KitchenRecipe {
   restaurant_id: string;
   kitchen_id: string;
@@ -299,6 +317,7 @@ interface MockDb {
   kitchen_recipes: MockRecipe[];
   branch_orders: MockBranchOrder[];
   production_runs: MockProductionRun[];
+  production_targets: MockProductionTarget[];
   /**
    * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
    * limit is compared against total on hand across every batch, so it cannot
@@ -1239,7 +1258,93 @@ function seedDb(): MockDb {
     kitchen_recipes: [],
     branch_orders: [],
     production_runs: [],
+    production_targets: seedProductionTargets(),
   };
+}
+
+/**
+ * Two targets for the demo kitchen: one PENDING for today (so the kitchen has
+ * something to acknowledge) and one already COMPLETED yesterday (so the list
+ * shows a finished row and the edit/delete guards are exercisable).
+ */
+function seedProductionTargets(): MockProductionTarget[] {
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  return [
+    {
+      id: "ptgt-001",
+      restaurant_id: "rest-001",
+      kitchen_id: "kit-001",
+      kitchen_name: "Central Kitchen",
+      target_date: localYmd(),
+      status: "PENDING",
+      note: "Weekend rush — extra mains",
+      created_at: isoDaysAgo(0),
+      lines: [
+        { id: "ptgt-001-l1", product_id: "prod-006", product_name: "Classic Burger", quantity: 80 },
+      ],
+    },
+    {
+      id: "ptgt-002",
+      restaurant_id: "rest-001",
+      kitchen_id: "kit-001",
+      kitchen_name: "Central Kitchen",
+      target_date: localYmd(yesterday),
+      status: "COMPLETED",
+      note: null,
+      created_at: isoDaysAgo(1),
+      lines: [
+        { id: "ptgt-002-l1", product_id: "prod-006", product_name: "Classic Burger", quantity: 60 },
+      ],
+    },
+  ];
+}
+
+/** Strip the internal `restaurant_id` before a target crosses the wire. */
+function toPublicTarget(t: MockProductionTarget): ProductionTarget {
+  return {
+    id: t.id,
+    kitchen_id: t.kitchen_id,
+    kitchen_name: t.kitchen_name,
+    target_date: t.target_date,
+    status: t.status,
+    note: t.note,
+    created_at: t.created_at,
+    lines: t.lines.map((l) => ({ ...l })),
+  };
+}
+
+/** Newest target date first, then newest created — used by both portals' lists. */
+function sortTargets(rows: MockProductionTarget[]): MockProductionTarget[] {
+  return [...rows].sort(
+    (a, b) =>
+      b.target_date.localeCompare(a.target_date) ||
+      b.created_at.localeCompare(a.created_at),
+  );
+}
+
+function buildTargetLines(
+  db: MockDb,
+  targetId: string,
+  lines: { product_id: string; quantity: number }[],
+): ProductionTarget["lines"] {
+  return lines.map((line, i) => ({
+    id: `${targetId}-l${i + 1}`,
+    product_id: line.product_id,
+    product_name:
+      db.products.find((p) => p.id === line.product_id)?.name ?? "Unknown product",
+    quantity: line.quantity,
+  }));
+}
+
+function validateTargetLines(lines: { quantity: number }[]) {
+  if (lines.length === 0) {
+    throw new ApiError("At least one line is required.", 422);
+  }
+  for (const line of lines) {
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new ApiError("Quantity must be greater than 0.", 422);
+    }
+  }
 }
 
 /**
@@ -2788,6 +2893,121 @@ export const mockClient: ApiClient = {
       total: rows.length,
     };
     return delay(result);
+  },
+
+  // ---- Daily production targets (Admin) ----
+
+  async listProductionTargets(
+    filters?: AdminProductionTargetFilters,
+  ): Promise<ProductionTarget[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    let rows = db.production_targets.filter((t) => t.restaurant_id === r.id);
+    if (filters?.kitchen_id) rows = rows.filter((t) => t.kitchen_id === filters.kitchen_id);
+    if (filters?.date) rows = rows.filter((t) => t.target_date === filters.date);
+    return delay(sortTargets(rows).map(toPublicTarget));
+  },
+
+  async getProductionTarget(id: string): Promise<ProductionTarget> {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.production_targets.find(
+      (t) => t.id === id && t.restaurant_id === r.id,
+    );
+    if (!found) throw new ApiError("Production target not found", 404);
+    return delay(toPublicTarget(found));
+  },
+
+  async createProductionTarget(
+    body: CreateProductionTargetInput,
+  ): Promise<ProductionTarget> {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const kitchen = db.kitchens.find(
+      (k) => k.id === body.kitchen_id && k.restaurant_id === r.id,
+    );
+    if (!kitchen) throw new ApiError("Kitchen not found", 404);
+    validateTargetLines(body.lines ?? []);
+    const duplicate = db.production_targets.find(
+      (t) =>
+        t.restaurant_id === r.id &&
+        t.kitchen_id === body.kitchen_id &&
+        t.target_date === body.target_date,
+    );
+    if (duplicate) {
+      throw new ApiError(
+        "A target already exists for this kitchen and date.",
+        409,
+        DUPLICATE_TARGET,
+      );
+    }
+    const id = `ptgt-${Date.now()}`;
+    const created: MockProductionTarget = {
+      id,
+      restaurant_id: r.id,
+      kitchen_id: kitchen.id,
+      kitchen_name: kitchen.name,
+      target_date: body.target_date,
+      status: "PENDING",
+      note: body.note?.trim() ? body.note.trim() : null,
+      created_at: now(),
+      lines: buildTargetLines(db, id, body.lines),
+    };
+    db.production_targets.push(created);
+    saveDb(db);
+    return delay(toPublicTarget(created));
+  },
+
+  async updateProductionTarget(
+    id: string,
+    body: UpdateProductionTargetInput,
+  ): Promise<ProductionTarget> {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.production_targets.find(
+      (t) => t.id === id && t.restaurant_id === r.id,
+    );
+    if (!found) throw new ApiError("Production target not found", 404);
+    if (found.status !== "PENDING") {
+      throw new ApiError(
+        "Only pending targets can be edited.",
+        409,
+        TARGET_NOT_EDITABLE,
+      );
+    }
+    if (body.note !== undefined) {
+      found.note = body.note.trim() ? body.note.trim() : null;
+    }
+    if (body.lines !== undefined) {
+      validateTargetLines(body.lines);
+      found.lines = buildTargetLines(db, id, body.lines);
+    }
+    saveDb(db);
+    return delay(toPublicTarget(found));
+  },
+
+  async deleteProductionTarget(id: string): Promise<void> {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.production_targets.find(
+      (t) => t.id === id && t.restaurant_id === r.id,
+    );
+    if (!found) throw new ApiError("Production target not found", 404);
+    if (found.status !== "PENDING") {
+      throw new ApiError(
+        "Only pending targets can be deleted.",
+        409,
+        TARGET_NOT_DELETABLE,
+      );
+    }
+    db.production_targets = db.production_targets.filter((t) => t.id !== id);
+    saveDb(db);
+    return delay(undefined);
   },
 
   async listEmployees(params) {
@@ -5139,6 +5359,74 @@ export const mockClient: ApiClient = {
     db.production_runs.push(run);
     saveDb(db);
     return delay(run);
+  },
+
+  // ---- Daily production targets (Kitchen) — manager-only, kitchen-scoped ----
+
+  async listKitchenProductionTargets(
+    filters?: KitchenProductionTargetFilters,
+  ): Promise<ProductionTarget[]> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    let rows = db.production_targets.filter((t) => t.kitchen_id === kitchen.id);
+    if (filters?.date) rows = rows.filter((t) => t.target_date === filters.date);
+    return delay(sortTargets(rows).map(toPublicTarget));
+  },
+
+  async getKitchenProductionTarget(id: string): Promise<ProductionTarget> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = db.production_targets.find(
+      (t) => t.id === id && t.kitchen_id === kitchen.id,
+    );
+    if (!found) throw new ApiError("Production target not found", 404);
+    return delay(toPublicTarget(found));
+  },
+
+  async acknowledgeProductionTarget(id: string): Promise<ProductionTarget> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = db.production_targets.find(
+      (t) => t.id === id && t.kitchen_id === kitchen.id,
+    );
+    if (!found) throw new ApiError("Production target not found", 404);
+    if (found.status !== "PENDING") {
+      throw new ApiError(
+        `Cannot acknowledge a ${found.status.toLowerCase()} target.`,
+        409,
+        INVALID_TARGET_STATUS,
+      );
+    }
+    found.status = "ACKNOWLEDGED";
+    saveDb(db);
+    return delay(toPublicTarget(found));
+  },
+
+  async completeProductionTarget(id: string): Promise<ProductionTarget> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = db.production_targets.find(
+      (t) => t.id === id && t.kitchen_id === kitchen.id,
+    );
+    if (!found) throw new ApiError("Production target not found", 404);
+    if (found.status !== "ACKNOWLEDGED") {
+      throw new ApiError(
+        `Cannot complete a ${found.status.toLowerCase()} target.`,
+        409,
+        INVALID_TARGET_STATUS,
+      );
+    }
+    found.status = "COMPLETED";
+    saveDb(db);
+    return delay(toPublicTarget(found));
   },
 
   // ---- Branch (Phase 5) ----

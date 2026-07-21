@@ -25,6 +25,10 @@ export type AuthAction =
   | "sales:read"
   | "sales:create"
   | "customers:read"
+  | "production-targets:read"
+  | "production-targets:create"
+  | "production-targets:update"
+  | "production-targets:delete"
   | "overview:read"
   // POS back-office (Admin). The till reads these and cannot change them.
   | "devices:read"
@@ -58,6 +62,11 @@ export type AuthAction =
   | "kitchen-warehouse-requests:create"
   | "kitchen-branch-requests:read"
   | "kitchen-requests:update"
+  // Daily production targets — set by Admin, read + progressed by the Kitchen
+  // manager (acknowledge/complete). Manager-only: the endpoints require
+  // KITCHEN_MANAGER, so a sub-chef never sees these.
+  | "kitchen-production-targets:read"
+  | "kitchen-production-targets:update"
   // Branch (Phase 5). Namespaced away from Kitchen/Warehouse for the same
   // reason those are namespaced from each other: different roles, different
   // endpoints, same English words.
@@ -115,6 +124,10 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "sales:read",
     "sales:create",
     "customers:read",
+    "production-targets:read",
+    "production-targets:create",
+    "production-targets:update",
+    "production-targets:delete",
     "overview:read",
     "menu:read",
     "menu:publish",
@@ -148,6 +161,8 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "kitchen-warehouse-requests:create",
     "kitchen-branch-requests:read",
     "kitchen-requests:update",
+    "kitchen-production-targets:read",
+    "kitchen-production-targets:update",
   ],
   /**
    * Read-only, plus logging waste. No approvals, transitions, stock requests,
