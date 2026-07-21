@@ -40,7 +40,7 @@ export function restaurantFromApi(r: RestaurantOut): Restaurant {
     plan_amount: r.plan_amount,
     next_billing_date: r.next_billing_date,
     admin: {
-      name: "",
+      name: r.admin_full_name ?? "",
       email: r.owner_contact_email ?? "",
       phone: r.owner_contact_number ?? "",
       access_status: "active",

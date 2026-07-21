@@ -50,9 +50,16 @@ export default function RootLayout({
               {children}
               <Toaster
                 position="top-right"
+                closeButton
                 toastOptions={{
                   classNames: {
-                    toast: "rounded-xl border border-line bg-surface text-content shadow-soft",
+                    toast:
+                      "rounded-xl border border-line bg-surface text-content shadow-soft !pr-12",
+                    closeButton:
+                      "!left-auto !right-3 !top-1/2 !-translate-y-1/2 !transform " +
+                      "!size-7 !rounded-full !border-0 " +
+                      "!bg-danger/15 !text-danger hover:!bg-danger/25 " +
+                      "[&>svg]:size-3.5",
                   },
                 }}
               />

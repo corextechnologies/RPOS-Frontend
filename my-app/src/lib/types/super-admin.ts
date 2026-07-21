@@ -57,6 +57,7 @@ export interface Restaurant {
 export interface RestaurantOut {
   id: number;
   name: string;
+  admin_full_name: string | null;
   owner_contact_number: string | null;
   owner_contact_email: string | null;
   status: RestaurantStatus;
