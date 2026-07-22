@@ -151,6 +151,7 @@ import type {
   WarehouseProduct,
   WarehouseProductFilters,
   CreateWarehouseProductInput,
+  UpdateWarehouseProductInput,
   ReorderLevel,
   UpdateReorderLevelInput,
   WarehouseRequestStatus,
@@ -3795,6 +3796,69 @@ export const mockClient: ApiClient = {
       id: created.id,
       name: created.name,
       sku: created.sku,
+    };
+    return delay(result);
+  },
+
+  async updateWarehouseProduct(
+    productId: string,
+    body: UpdateWarehouseProductInput,
+  ) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const product = db.products.find(
+      (p) => p.id === productId && p.restaurant_id === warehouse.restaurant_id,
+    );
+    if (!product) throw new ApiError("Product not found", 404);
+
+    // Name, when sent, must not be blanked out.
+    if (body.name !== undefined) {
+      const name = body.name.trim();
+      if (!name) throw new ApiError("Request validation failed", 422);
+      product.name = name;
+    }
+
+    // Kind is still constrained to what a warehouse may own — never a
+    // FINISHED_GOOD, exactly as on create.
+    if (body.kind !== undefined) {
+      if (body.kind !== "RAW_MATERIAL" && body.kind !== "RESALE") {
+        throw new ApiError("A warehouse can't own kitchen-made products", 422);
+      }
+      product.kind = body.kind;
+      product.is_sellable = body.kind === "RESALE";
+    }
+
+    // SKU: "" clears it; a value must stay unique per restaurant (ignoring self).
+    if (body.sku !== undefined) {
+      const sku = body.sku?.trim() || null;
+      if (
+        sku &&
+        db.products.some(
+          (p) =>
+            p.id !== productId &&
+            p.restaurant_id === warehouse.restaurant_id &&
+            (p.sku ?? "").toLowerCase() === sku.toLowerCase(),
+        )
+      ) {
+        throw new ApiError(
+          "A product with this SKU already exists.",
+          409,
+          DUPLICATE_SKU,
+        );
+      }
+      product.sku = sku;
+    }
+
+    // Quantity is intentionally untouched: inventory rows are a separate store
+    // and this endpoint has no access to them.
+    saveDb(db);
+
+    const result: WarehouseProduct = {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
     };
     return delay(result);
   },

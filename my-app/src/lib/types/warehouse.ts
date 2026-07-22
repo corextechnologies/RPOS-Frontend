@@ -121,6 +121,22 @@ export interface WarehouseProductFilters {
   kind?: WarehouseProductKind;
 }
 
+/**
+ * Body for `PATCH /warehouse/products/{product_id}` — edit catalog metadata.
+ *
+ * All fields optional: this is a partial update for filling in details the
+ * warehouse missed at creation (a name typo, a still-blank SKU). Quantity is
+ * deliberately absent — stock lives on `InventoryItem` behind the stock
+ * endpoints, so a catalog edit can never move on-hand.
+ */
+export interface UpdateWarehouseProductInput {
+  /** 1–255 characters. */
+  name?: string;
+  /** Up to 100 characters, unique per restaurant. Send "" to clear it. */
+  sku?: string | null;
+  kind?: WarehouseProductKind;
+}
+
 /** Body for `PUT /warehouse/products/{product_id}/reorder-level`. */
 export interface UpdateReorderLevelInput {
   /** >= 0. */

@@ -5,6 +5,7 @@ import type {
   CreateWarehouseProductInput,
   CreateWarehouseStaffInput,
   CreateWarehouseStaffResult,
+  UpdateWarehouseProductInput,
   UpdateWarehouseStaffInput,
   InventoryItem,
   NearExpiryFilters,
@@ -148,6 +149,28 @@ export const warehouseApi = {
         ...(body.kind ? { kind: body.kind } : {}),
       }),
     });
+    return normalizeProduct(data);
+  },
+
+  async updateWarehouseProduct(
+    productId: string,
+    body: UpdateWarehouseProductInput,
+  ): Promise<WarehouseProduct> {
+    // Partial PATCH: only fields the caller actually touched are sent, so an
+    // edit that fills in a SKU never re-asserts (or clears) the name. There is
+    // no quantity field to send — stock lives on a separate endpoint.
+    const payload: Record<string, unknown> = {};
+    if (body.name !== undefined) payload.name = body.name.trim();
+    // `null`/"" clears the SKU; a real value is trimmed. `undefined` = untouched.
+    if (body.sku !== undefined) payload.sku = optionalText(body.sku ?? undefined) ?? null;
+    if (body.kind !== undefined) payload.kind = body.kind;
+    const data = await request<WarehouseProduct>(
+      `/warehouse/products/${productId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      },
+    );
     return normalizeProduct(data);
   },
 

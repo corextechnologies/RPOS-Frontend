@@ -65,6 +65,26 @@ export const createWarehouseProductDefaults: CreateWarehouseProductForm = {
   kind: "RAW_MATERIAL",
 };
 
+/**
+ * Editing an existing product's catalog metadata.
+ *
+ * Deliberately mirrors {@link createWarehouseProductSchema} minus the create-only
+ * concerns — and, critically, carries NO quantity field. Stock lives on
+ * inventory rows behind the stock endpoints, so an edit built on this schema
+ * cannot change on-hand no matter what the form renders.
+ */
+export const updateWarehouseProductSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .max(255, "Name must be 255 characters or fewer"),
+  sku: z.string().max(100, "SKU must be 100 characters or fewer").optional(),
+});
+
+export type UpdateWarehouseProductForm = z.infer<
+  typeof updateWarehouseProductSchema
+>;
+
 export const adjustStockSchema = z.object({
   quantity_delta: z
     .string()

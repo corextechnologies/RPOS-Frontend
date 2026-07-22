@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, SlidersHorizontal, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +31,7 @@ interface InventoryTableProps {
   emptyDescription?: string;
   onAdjust?: (item: InventoryItem) => void;
   onWaste?: (item: InventoryItem) => void;
+  onEdit?: (item: InventoryItem) => void;
 }
 
 /**
@@ -47,8 +48,9 @@ export function InventoryTable({
   emptyDescription = "Items will appear here once stock is received into your warehouse.",
   onAdjust,
   onWaste,
+  onEdit,
 }: InventoryTableProps) {
-  const showActions = Boolean(onAdjust || onWaste);
+  const showActions = Boolean(onAdjust || onWaste || onEdit);
   if (isLoading) {
     return (
       <Card>
@@ -122,6 +124,11 @@ export function InventoryTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {onEdit && (
+                          <DropdownMenuItem onClick={() => onEdit(item)}>
+                            <Pencil className="mr-2 h-4 w-4" /> Edit product
+                          </DropdownMenuItem>
+                        )}
                         {onAdjust && (
                           <DropdownMenuItem onClick={() => onAdjust(item)}>
                             <SlidersHorizontal className="mr-2 h-4 w-4" /> Adjust

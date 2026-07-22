@@ -58,6 +58,7 @@ import type {
   WarehouseProduct,
   WarehouseProductFilters,
   CreateWarehouseProductInput,
+  UpdateWarehouseProductInput,
   ReorderLevel,
   UpdateReorderLevelInput,
 } from "@/lib/types/warehouse";
@@ -235,6 +236,10 @@ export interface ApiClient {
   listWarehouseProducts(filters?: WarehouseProductFilters): Promise<WarehouseProduct[]>;
   createWarehouseProduct(
     body: CreateWarehouseProductInput,
+  ): Promise<WarehouseProduct>;
+  updateWarehouseProduct(
+    productId: string,
+    body: UpdateWarehouseProductInput,
   ): Promise<WarehouseProduct>;
   setWarehouseReorderLevel(
     productId: string,
