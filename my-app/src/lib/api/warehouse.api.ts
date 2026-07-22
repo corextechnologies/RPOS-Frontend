@@ -12,6 +12,7 @@ import type {
   ReceiveStockInput,
   ReorderLevel,
   UpdateReorderLevelInput,
+  UpdateStockExpiryInput,
   UpdateWarehouseRequestStatusInput,
   WarehouseProduct,
   WarehouseProductFilters,
@@ -20,8 +21,26 @@ import type {
   WarehouseStaff,
   WasteStockInput,
 } from "@/lib/types/warehouse";
+import type {
+  WasteEvent,
+  WasteEventFilters,
+  UpdateWasteEventInput,
+} from "@/lib/types/waste";
 import { request, requestEnvelope } from "./client";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
+
+/** Backend ids are numeric; normalize a waste record to the app's string ids. */
+function normalizeWasteEvent(event: WasteEvent): WasteEvent {
+  return {
+    ...event,
+    id: String(event.id),
+    product_id: String(event.product_id),
+    product: { ...event.product, id: String(event.product.id) },
+    quantity: Number(event.quantity),
+    batch_code: event.batch_code ?? "",
+    location_id: String(event.location_id),
+  };
+}
 
 /**
  * Backend ids are numeric; the app keys off strings everywhere.
@@ -219,6 +238,21 @@ export const warehouseApi = {
     return normalizeInventoryItem(data);
   },
 
+  async updateWarehouseStockExpiry(
+    itemId: string,
+    body: UpdateStockExpiryInput,
+  ): Promise<InventoryItem> {
+    const data = await request<InventoryItem>(
+      `/warehouse/inventory/${itemId}`,
+      {
+        method: "PATCH",
+        // Explicit null clears the date; a value sets it. Never sends quantity.
+        body: JSON.stringify({ expiry_date: body.expiry_date }),
+      },
+    );
+    return normalizeInventoryItem(data);
+  },
+
   async wasteWarehouseStock(body: WasteStockInput): Promise<InventoryItem> {
     const data = await request<InventoryItem>("/warehouse/stock/waste", {
       method: "POST",
@@ -233,6 +267,36 @@ export const warehouseApi = {
       }),
     });
     return normalizeInventoryItem(data);
+  },
+
+  async listWarehouseWasteEvents(
+    filters?: WasteEventFilters,
+  ): Promise<WasteEvent[]> {
+    // The write-off history for this warehouse. Scoped server-side; the only
+    // filter the warehouse itself sets is the movement type.
+    const qs = filters?.movement_type
+      ? `?movement_type=${filters.movement_type}`
+      : "";
+    const data = await request<WasteEvent[]>(`/warehouse/stock/waste${qs}`);
+    return (data ?? []).map(normalizeWasteEvent);
+  },
+
+  async updateWarehouseWasteEvent(
+    eventId: string,
+    body: UpdateWasteEventInput,
+  ): Promise<WasteEvent> {
+    // Partial PATCH: only the corrected fields are sent.
+    const payload: Record<string, unknown> = {};
+    if (body.quantity !== undefined) payload.quantity = body.quantity;
+    if (body.movement_type !== undefined) payload.movement_type = body.movement_type;
+    if (body.waste_reason !== undefined) payload.waste_reason = body.waste_reason;
+    if (body.notes !== undefined)
+      payload.notes = optionalText(body.notes ?? undefined) ?? null;
+    const data = await request<WasteEvent>(
+      `/warehouse/stock/waste/${eventId}`,
+      { method: "PATCH", body: JSON.stringify(payload) },
+    );
+    return normalizeWasteEvent(data);
   },
 
   async listWarehouseUsers(params?: {

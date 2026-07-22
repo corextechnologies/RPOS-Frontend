@@ -1,11 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
+import { matchesStockSearch } from "@/lib/inventory-search";
 import {
   Table,
   TableBody,
@@ -24,6 +26,8 @@ interface KitchenInventoryTableProps {
   emptyTitle?: string;
   emptyDescription?: string;
   onWaste?: (item: KitchenInventoryItem) => void;
+  /** Filters by product name, SKU, or batch code. Owned by the page. */
+  search?: string;
 }
 
 /**
@@ -43,7 +47,12 @@ export function KitchenInventoryTable({
   emptyTitle = "No stock on hand",
   emptyDescription = "Items appear here once stock is received into your kitchen.",
   onWaste,
+  search = "",
 }: KitchenInventoryTableProps) {
+  const filtered = useMemo(
+    () => (items ?? []).filter((item) => matchesStockSearch(item, search)),
+    [items, search],
+  );
   if (isLoading) {
     return (
       <Card>
@@ -76,6 +85,19 @@ export function KitchenInventoryTable({
     );
   }
 
+  if (filtered.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <EmptyState
+            title="No matches"
+            description="No stock matches your search."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -91,7 +113,7 @@ export function KitchenInventoryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
+            {filtered.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <p className="font-medium text-content">{item.product.name}</p>

@@ -49,6 +49,7 @@ import type {
   InventoryItem,
   NearExpiryFilters,
   ReceiveStockInput,
+  UpdateStockExpiryInput,
   UpdateWarehouseRequestStatusInput,
   WarehouseRequest,
   WarehouseRequestFilters,
@@ -62,6 +63,11 @@ import type {
   ReorderLevel,
   UpdateReorderLevelInput,
 } from "@/lib/types/warehouse";
+import type {
+  WasteEvent,
+  WasteEventFilters,
+  UpdateWasteEventInput,
+} from "@/lib/types/waste";
 import type {
   CreateKitchenProductInput,
   CreateKitchenRecipeInput,
@@ -231,6 +237,8 @@ export interface ApiClient {
   getIncomeForecast(horizon: IncomeForecastHorizon): Promise<IncomeForecast>;
   downloadIncomeCsv(filter: IncomePeriodFilter): Promise<string>;
 
+  listAdminWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
+
   // Warehouse (Phase 3) — auto-scoped to the caller's warehouse.
   listWarehouseInventory(): Promise<InventoryItem[]>;
   listWarehouseProducts(filters?: WarehouseProductFilters): Promise<WarehouseProduct[]>;
@@ -248,7 +256,18 @@ export interface ApiClient {
   listNearExpiryInventory(filters?: NearExpiryFilters): Promise<InventoryItem[]>;
   receiveWarehouseStock(body: ReceiveStockInput): Promise<InventoryItem>;
   adjustWarehouseStock(body: AdjustStockInput): Promise<InventoryItem>;
+  updateWarehouseStockExpiry(
+    itemId: string,
+    body: UpdateStockExpiryInput,
+  ): Promise<InventoryItem>;
   wasteWarehouseStock(body: WasteStockInput): Promise<InventoryItem>;
+  listWarehouseWasteEvents(
+    filters?: WasteEventFilters,
+  ): Promise<WasteEvent[]>;
+  updateWarehouseWasteEvent(
+    eventId: string,
+    body: UpdateWasteEventInput,
+  ): Promise<WasteEvent>;
   listWarehouseUsers(params?: {
     page?: number;
     page_size?: number;

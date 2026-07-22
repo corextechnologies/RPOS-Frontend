@@ -26,7 +26,7 @@ import {
   updateWarehouseProductSchema,
   type UpdateWarehouseProductForm,
 } from "@/lib/schemas/warehouse-stock";
-import type { InventoryItem } from "@/lib/types/warehouse";
+import type { WarehouseProduct } from "@/lib/types/warehouse";
 
 /** The two kinds a warehouse may own — mirrors `AddProductDialog`'s `KINDS`. */
 const KINDS = [
@@ -43,8 +43,8 @@ const KINDS = [
 ];
 
 interface EditProductDialogProps {
-  /** The row being edited; `null` keeps the dialog closed. */
-  item: InventoryItem | null;
+  /** The product being edited; `null` keeps the dialog closed. */
+  product: WarehouseProduct | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: UpdateWarehouseProductForm) => Promise<void>;
@@ -52,16 +52,16 @@ interface EditProductDialogProps {
 }
 
 /**
- * Fill in the catalog details a product was created without — most often a SKU
- * that has been showing as "-" in inventory.
+ * Fill in or correct a product's catalog details — its name, category, or a SKU
+ * that's been showing as "-".
  *
  * There is intentionally NO quantity field. Quantity lives on the inventory
- * row, not the product, and is changed through "Adjust quantity" / receiving —
- * never here. The read-only line just reminds the editor what's on hand; it is
- * not editable and is never submitted.
+ * row, not the product, and is changed through "Adjust quantity" / receiving /
+ * write-off — never here. Usable from anywhere a product is listed (inventory,
+ * the waste log), since it edits the catalog product, not a stock row.
  */
 export function EditProductDialog({
-  item,
+  product,
   open,
   onOpenChange,
   onSubmit,
@@ -72,17 +72,17 @@ export function EditProductDialog({
     defaultValues: { name: "", sku: "", kind: "RAW_MATERIAL" },
   });
 
-  // Reseed whenever a different row is opened.
+  // Reseed whenever a different product is opened.
   useEffect(() => {
-    if (open && item) {
+    if (open && product) {
       form.reset({
-        name: item.product.name,
-        sku: item.product.sku ?? "",
+        name: product.name,
+        sku: product.sku ?? "",
         // Fall back to the default only for legacy rows that never had a kind.
-        kind: item.product.kind ?? "RAW_MATERIAL",
+        kind: product.kind ?? "RAW_MATERIAL",
       });
     }
-  }, [open, item, form]);
+  }, [open, product, form]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -159,15 +159,6 @@ export function EditProductDialog({
                 </FormItem>
               )}
             />
-
-            {/* Read-only: on-hand quantity is not editable from the catalog. */}
-            <div className="rounded-xl border border-line bg-surface px-3 py-2">
-              <p className="text-xs text-muted">On hand (not editable here)</p>
-              <p className="text-sm font-medium text-content">
-                {item ? item.quantity : "-"}
-                {item?.batch_code ? ` · ${item.batch_code}` : ""}
-              </p>
-            </div>
 
             <DialogFooter>
               <Button

@@ -6,8 +6,13 @@ import { api, queryKeys } from "@/lib/api";
 import type {
   AdjustStockInput,
   ReceiveStockInput,
+  UpdateStockExpiryInput,
   WasteStockInput,
 } from "@/lib/types/warehouse";
+import type {
+  UpdateWasteEventInput,
+  WasteEventFilters,
+} from "@/lib/types/waste";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 import { useWarehouseProducts } from "./use-warehouse-products";
 import { toast } from "sonner";
@@ -84,6 +89,16 @@ export function useNearExpiryInventory(withinDays: number) {
   });
 }
 
+/** The warehouse's own write-off history (waste + expiry). */
+export function useWarehouseWasteEvents(filters?: WasteEventFilters) {
+  return useQuery({
+    queryKey: queryKeys.warehouseWaste(filters),
+    queryFn: () => api.listWarehouseWasteEvents(filters),
+    retry: (failureCount, error) =>
+      !isMissingWarehouseAssignment(error) && failureCount < 3,
+  });
+}
+
 /**
  * Any stock movement can change both the on-hand list and which items are near
  * expiry, so both are refreshed together.
@@ -124,15 +139,62 @@ export function useAdjustWarehouseStock() {
   });
 }
 
+export function useUpdateWarehouseStockExpiry() {
+  const invalidate = useStockMovementInvalidation();
+
+  return useMutation({
+    mutationFn: ({
+      itemId,
+      body,
+    }: {
+      itemId: string;
+      body: UpdateStockExpiryInput;
+    }) => api.updateWarehouseStockExpiry(itemId, body),
+    onSuccess: () => {
+      // Changing an expiry moves the row in and out of the near-expiry window.
+      invalidate();
+      toast.success("Expiry date updated");
+    },
+    onError: (err) =>
+      toast.error(stockAwareMessage(err, "Failed to update expiry date")),
+  });
+}
+
 export function useWasteWarehouseStock() {
   const invalidate = useStockMovementInvalidation();
+  const qc = useQueryClient();
 
   return useMutation({
     mutationFn: (body: WasteStockInput) => api.wasteWarehouseStock(body),
     onSuccess: () => {
       invalidate();
+      // The write-off just added a row to the waste log — refresh it too.
+      qc.invalidateQueries({ queryKey: ["warehouse-waste"] });
       toast.success("Stock written off");
     },
     onError: (err) => toast.error(stockAwareMessage(err, "Failed to write off stock")),
+  });
+}
+
+export function useUpdateWarehouseWasteEvent() {
+  const invalidate = useStockMovementInvalidation();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      eventId,
+      body,
+    }: {
+      eventId: string;
+      body: UpdateWasteEventInput;
+    }) => api.updateWarehouseWasteEvent(eventId, body),
+    onSuccess: () => {
+      // A quantity correction re-syncs on-hand, so refresh inventory too.
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["warehouse-waste"] });
+      toast.success("Waste record updated");
+    },
+    onError: (err) =>
+      toast.error(stockAwareMessage(err, "Failed to update waste record")),
   });
 }

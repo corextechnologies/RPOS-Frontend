@@ -4,6 +4,7 @@ import { useState } from "react";
 import { KitchenInventoryTable } from "@/components/kitchen/inventory/KitchenInventoryTable";
 import { KitchenWasteDialog } from "@/components/kitchen/inventory/KitchenWasteDialog";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import {
   useKitchenInventory,
@@ -18,6 +19,7 @@ export default function KitchenInventoryPage() {
   const inventory = useKitchenInventory();
   const wasteStock = useWasteKitchenStock();
   const [wasting, setWasting] = useState<KitchenInventoryItem | null>(null);
+  const [search, setSearch] = useState("");
 
   const unassigned = isMissingKitchenAssignment(inventory.error);
 
@@ -38,13 +40,23 @@ export default function KitchenInventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-          Inventory
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          On-hand stock in your kitchen, one row per product and batch.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
+            Inventory
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            On-hand stock in your kitchen, one row per product and batch.
+          </p>
+        </div>
+        {!unassigned && (
+          <Input
+            className="sm:w-80"
+            placeholder="Search name, SKU, or batch…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
       </div>
 
       {unassigned ? (
@@ -56,6 +68,7 @@ export default function KitchenInventoryPage() {
           isError={inventory.isError}
           onRetry={() => inventory.refetch()}
           onWaste={can("kitchen-stock:waste") ? setWasting : undefined}
+          search={search}
         />
       )}
 

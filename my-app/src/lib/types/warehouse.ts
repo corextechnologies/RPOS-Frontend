@@ -158,6 +158,17 @@ export interface ReorderLevel {
   reorder_level: number;
 }
 
+/**
+ * Body for `PATCH /warehouse/inventory/{item_id}` — correct a batch's expiry.
+ *
+ * Only the expiry date is editable this way; quantity is moved through
+ * receive/adjust/waste, never here.
+ */
+export interface UpdateStockExpiryInput {
+  /** `YYYY-MM-DD`, or null to clear it (non-perishable / unbatched stock). */
+  expiry_date: string | null;
+}
+
 /** Body for `POST /warehouse/stock/receive` — incoming stock. */
 export interface ReceiveStockInput {
   product_id: string;

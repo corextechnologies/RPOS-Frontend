@@ -160,7 +160,14 @@ import type {
   WarehouseRequestType,
   WarehouseStaff,
   WasteStockInput,
+  UpdateStockExpiryInput,
 } from "@/lib/types/warehouse";
+import type {
+  WasteEvent,
+  WasteEventFilters,
+  WasteLocationType,
+  UpdateWasteEventInput,
+} from "@/lib/types/waste";
 import {
   DUPLICATE_SKU,
   INSUFFICIENT_STOCK,
@@ -195,8 +202,9 @@ const SESSION_KEY = "ros-super-admin-session";
  *
  * 17: branch portal — `customers`, `branch_orders`, `production_runs`, a second
  *     branch (br-002), and selling_price/category/is_available on products.
+ * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 20;
+const SEED_VERSION = 21;
 
 interface MockInvoiceRecord {
   id: number;
@@ -258,6 +266,10 @@ interface MockStockRequest extends Omit<StockRequest, "type" | "status"> {
 }
 
 interface MockInventoryItem extends InventoryItem {
+  restaurant_id: string;
+}
+
+interface MockWasteEvent extends WasteEvent {
   restaurant_id: string;
 }
 
@@ -327,6 +339,8 @@ interface MockDb {
    * live on a per-batch row.
    */
   reorder_levels: MockReorderLevel[];
+  /** Write-off history — every waste/expiry event, across all locations. */
+  waste_events: MockWasteEvent[];
 }
 
 interface MockNotification extends AppNotification {
@@ -1256,6 +1270,7 @@ function seedDb(): MockDb {
     inventory,
     stock_counts: [],
     reorder_levels: [],
+    waste_events: seedWasteEvents(),
     notifications: seedNotifications(),
     customers: seedCustomers(),
     kitchen_recipes: [],
@@ -1270,6 +1285,64 @@ function seedDb(): MockDb {
  * something to acknowledge) and one already COMPLETED yesterday (so the list
  * shows a finished row and the edit/delete guards are exercisable).
  */
+/**
+ * A little write-off history so the Waste & expired table isn't empty on first
+ * load. A mix of ordinary waste and an expiry, across the demo warehouse.
+ */
+function seedWasteEvents(): MockWasteEvent[] {
+  return [
+    {
+      id: "waste-001",
+      restaurant_id: "rest-001",
+      product_id: "prod-003",
+      product: { id: "prod-003", name: "Mozzarella Block", sku: "DAI-MOZ-10" },
+      quantity: 4,
+      movement_type: "EXPIRY",
+      waste_reason: "EXPIRED",
+      batch_code: "B-MOZ-11",
+      notes: "Past use-by on the shelf.",
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+      created_at: isoDaysAgo(2),
+      created_by: "Warehouse Manager",
+    },
+    {
+      id: "waste-002",
+      restaurant_id: "rest-001",
+      product_id: "prod-002",
+      product: { id: "prod-002", name: "Tomato Sauce (Can)", sku: "ING-TOM-02" },
+      quantity: 6,
+      movement_type: "WASTE",
+      waste_reason: "DAMAGED",
+      batch_code: "B-TOM-03",
+      notes: "Cans dented in transit.",
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+      created_at: isoDaysAgo(5),
+      created_by: "Warehouse Manager",
+    },
+    {
+      id: "waste-003",
+      restaurant_id: "rest-001",
+      product_id: "prod-001",
+      product: {
+        id: "prod-001",
+        name: "House Blend Coffee Beans",
+        sku: "BN-COF-001",
+      },
+      quantity: 3,
+      movement_type: "WASTE",
+      waste_reason: "SPOILAGE",
+      batch_code: "B-COF-07",
+      notes: null,
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+      created_at: isoDaysAgo(9),
+      created_by: "Warehouse Manager",
+    },
+  ];
+}
+
 function seedProductionTargets(): MockProductionTarget[] {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
   return [
@@ -1791,6 +1864,24 @@ function toPublicInventoryItem(
     expiry_date: item.expiry_date,
     location_type: item.location_type,
     location_id: item.location_id,
+  };
+}
+
+/** Strip the tenant key off a stored waste event for the public shape. */
+function toPublicWasteEvent(event: MockWasteEvent): WasteEvent {
+  return {
+    id: event.id,
+    product_id: event.product_id,
+    product: event.product,
+    quantity: event.quantity,
+    movement_type: event.movement_type,
+    waste_reason: event.waste_reason,
+    batch_code: event.batch_code,
+    notes: event.notes,
+    location_type: event.location_type,
+    location_id: event.location_id,
+    created_at: event.created_at,
+    created_by: event.created_by,
   };
 }
 
@@ -3526,6 +3617,25 @@ export const mockClient: ApiClient = {
     return delay(items);
   },
 
+  async listAdminWasteEvents(filters?: WasteEventFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+
+    const events = db.waste_events
+      .filter((e) => e.restaurant_id === r.id)
+      .filter((e) => !filters?.movement_type || e.movement_type === filters.movement_type)
+      .filter(
+        (e) =>
+          !filters?.location_type ||
+          e.location_type === (filters.location_type as WasteLocationType),
+      )
+      .filter((e) => !filters?.location_id || e.location_id === filters.location_id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map(toPublicWasteEvent);
+    return delay(events);
+  },
+
   async getRequest(requestId) {
     const me = requireAuth();
     const db = loadDb();
@@ -4046,6 +4156,33 @@ export const mockClient: ApiClient = {
     return delay(toPublicInventoryItem(item, db));
   },
 
+  async updateWarehouseStockExpiry(
+    itemId: string,
+    body: UpdateStockExpiryInput,
+  ) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const item = db.inventory.find(
+      (i) =>
+        i.id === itemId &&
+        i.location_type === "WAREHOUSE" &&
+        i.location_id === warehouse.id,
+    );
+    if (!item) throw new ApiError("Stock not found", 404);
+
+    const expiry = body.expiry_date?.trim() || null;
+    if (expiry && !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+      throw new ApiError("Expiry date must be YYYY-MM-DD", 422);
+    }
+
+    // Only the date changes — quantity and batch stay put.
+    item.expiry_date = expiry;
+    saveDb(db);
+    return delay(toPublicInventoryItem(item, db));
+  },
+
   async wasteWarehouseStock(body: WasteStockInput) {
     const me = requireAuth();
     const db = loadDb();
@@ -4077,8 +4214,116 @@ export const mockClient: ApiClient = {
     }
 
     item.quantity -= quantity;
+
+    // Persist the write-off so it shows up in the Waste & expired history for
+    // both the warehouse and Admin. Reason/notes are captured here — the point
+    // of the log is to answer "what was thrown away and why" later.
+    const wasteReason = body.waste_reason ?? null;
+    db.waste_events.push({
+      id: `waste-${Date.now()}`,
+      restaurant_id: warehouse.restaurant_id,
+      product_id: item.product_id,
+      product: {
+        id: item.product.id,
+        name: item.product.name,
+        sku: item.product.sku,
+      },
+      quantity,
+      movement_type: movementType,
+      waste_reason: wasteReason,
+      batch_code: item.batch_code,
+      notes: body.notes?.trim() || null,
+      location_type: "WAREHOUSE",
+      location_id: warehouse.id,
+      created_at: now(),
+      created_by: me.full_name ?? me.email,
+    });
+
     saveDb(db);
     return delay(toPublicInventoryItem(item, db));
+  },
+
+  async listWarehouseWasteEvents(filters?: WasteEventFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const events = db.waste_events
+      .filter(
+        (e) =>
+          e.restaurant_id === warehouse.restaurant_id &&
+          e.location_type === "WAREHOUSE" &&
+          e.location_id === warehouse.id,
+      )
+      .filter((e) => !filters?.movement_type || e.movement_type === filters.movement_type)
+      // Newest first — a write-off log is read top-down.
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map(toPublicWasteEvent);
+    return delay(events);
+  },
+
+  async updateWarehouseWasteEvent(
+    eventId: string,
+    body: UpdateWasteEventInput,
+  ) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const event = db.waste_events.find(
+      (e) =>
+        e.id === eventId &&
+        e.restaurant_id === warehouse.restaurant_id &&
+        e.location_type === "WAREHOUSE" &&
+        e.location_id === warehouse.id,
+    );
+    if (!event) throw new ApiError("Waste record not found", 404);
+
+    if (body.movement_type !== undefined) {
+      if (body.movement_type !== "WASTE" && body.movement_type !== "EXPIRY") {
+        throw new ApiError(
+          "Movement type must be WASTE or EXPIRY",
+          409,
+          INVALID_MOVEMENT_TYPE,
+        );
+      }
+      event.movement_type = body.movement_type;
+    }
+    if (body.waste_reason !== undefined) event.waste_reason = body.waste_reason;
+    if (body.notes !== undefined) event.notes = body.notes?.trim() || null;
+
+    if (body.quantity !== undefined) {
+      const newQty = Number(body.quantity);
+      if (!Number.isInteger(newQty) || newQty <= 0) {
+        throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+      }
+      // Keep on-hand honest: correcting a write-off up removes the extra units,
+      // down returns them. If the batch row is gone (fully consumed since), we
+      // can't re-sync stock, so just record the corrected figure.
+      const delta = newQty - event.quantity;
+      if (delta !== 0) {
+        const stock = findWarehouseStock(
+          db,
+          warehouse,
+          event.product_id,
+          event.batch_code,
+        );
+        if (stock) {
+          if (delta > 0 && delta > stock.quantity) {
+            throw new ApiError(
+              `Only ${stock.quantity} on hand for this batch`,
+              409,
+              INSUFFICIENT_STOCK,
+            );
+          }
+          stock.quantity -= delta;
+        }
+      }
+      event.quantity = newQty;
+    }
+
+    saveDb(db);
+    return delay(toPublicWasteEvent(event));
   },
 
   async listWarehouseUsers(params) {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AdminInventoryTable } from "@/components/admin/inventory/AdminInventoryTable";
+import { WasteEventsTable } from "@/components/waste/WasteEventsTable";
+import { WasteEventDetailDialog } from "@/components/waste/WasteEventDetailDialog";
 import {
   Select,
   SelectContent,
@@ -11,14 +12,19 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
-import { useAdminInventory } from "@/lib/hooks/use-requests";
-import type { AdminInventoryFilters, AdminInventoryItem, AdminLocationType } from "@/lib/types/admin";
+import { useAdminWasteEvents } from "@/lib/hooks/use-requests";
+import type { AdminLocationType } from "@/lib/types/admin";
+import type { StockMovementType } from "@/lib/types/warehouse";
+import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 
 const LOCATION_TYPES: AdminLocationType[] = ["BRANCH", "KITCHEN", "WAREHOUSE"];
+const MOVEMENT_TYPES: StockMovementType[] = ["WASTE", "EXPIRY"];
 
-export default function AdminInventoryPage() {
+export default function AdminWastePage() {
   const [locationType, setLocationType] = useState<AdminLocationType | "all">("all");
   const [locationId, setLocationId] = useState<string>("all");
+  const [movementType, setMovementType] = useState<StockMovementType | "all">("all");
+  const [viewing, setViewing] = useState<WasteEvent | null>(null);
   const [search, setSearch] = useState("");
 
   const branches = useBranches();
@@ -34,31 +40,30 @@ export default function AdminInventoryPage() {
           ? warehouses.data
           : undefined;
 
-  // Only the filters the user actually set — the API treats an omitted key as
-  // "no filter", not as a wildcard value.
-  const filters: AdminInventoryFilters = useMemo(
+  const filters: WasteEventFilters = useMemo(
     () => ({
       ...(locationType !== "all" && { location_type: locationType }),
       ...(locationId !== "all" && { location_id: locationId }),
+      ...(movementType !== "all" && { movement_type: movementType }),
     }),
-    [locationType, locationId],
+    [locationType, locationId, movementType],
   );
 
-  const inventory = useAdminInventory(filters);
+  const waste = useAdminWasteEvents(filters);
 
   const locationName = useMemo(() => {
     const branchNames = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
     const kitchenNames = new Map((kitchens.data ?? []).map((k) => [k.id, k.name]));
     const warehouseNames = new Map((warehouses.data ?? []).map((w) => [w.id, w.name]));
 
-    return (item: AdminInventoryItem) => {
-      if (item.location_type === "BRANCH")
-        return branchNames.get(item.location_id) ?? item.location_id;
-      if (item.location_type === "KITCHEN")
-        return kitchenNames.get(item.location_id) ?? item.location_id;
-      if (item.location_type === "WAREHOUSE")
-        return warehouseNames.get(item.location_id) ?? item.location_id;
-      return item.location_id;
+    return (event: WasteEvent) => {
+      if (event.location_type === "BRANCH")
+        return branchNames.get(event.location_id) ?? event.location_id;
+      if (event.location_type === "KITCHEN")
+        return kitchenNames.get(event.location_id) ?? event.location_id;
+      if (event.location_type === "WAREHOUSE")
+        return warehouseNames.get(event.location_id) ?? event.location_id;
+      return event.location_id;
     };
   }, [branches.data, kitchens.data, warehouses.data]);
 
@@ -66,10 +71,10 @@ export default function AdminInventoryPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-          Inventory
+          Waste &amp; expired
         </h1>
         <p className="mt-1 text-sm text-muted">
-          On-hand stock across every branch, kitchen, and warehouse.
+          Everything written off across every branch, kitchen, and warehouse.
         </p>
       </div>
 
@@ -81,11 +86,28 @@ export default function AdminInventoryPage() {
           onChange={(e) => setSearch(e.target.value)}
         />
         <Select
+          value={movementType}
+          onValueChange={(v) => setMovementType(v as StockMovementType | "all")}
+        >
+          <SelectTrigger className="sm:w-44">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            {MOVEMENT_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {type === "EXPIRY" ? "Expiry" : "Waste"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
           value={locationType}
           onValueChange={(v) => {
             setLocationType(v as AdminLocationType | "all");
-            // A location only belongs to one type, so the previous selection is
-            // meaningless once the type changes.
+            // A location belongs to one type, so the prior pick is meaningless
+            // once the type changes.
             setLocationId("all");
           }}
         >
@@ -119,13 +141,24 @@ export default function AdminInventoryPage() {
         )}
       </div>
 
-      <AdminInventoryTable
-        items={inventory.data}
-        isLoading={inventory.isLoading}
-        isError={inventory.isError}
-        onRetry={() => inventory.refetch()}
+      <WasteEventsTable
+        items={waste.data}
+        isLoading={waste.isLoading}
+        isError={waste.isError}
+        onRetry={() => waste.refetch()}
+        showLocation
         locationName={locationName}
+        onSelect={setViewing}
         search={search}
+      />
+
+      <WasteEventDetailDialog
+        event={viewing}
+        open={!!viewing}
+        onOpenChange={(open) => {
+          if (!open) setViewing(null);
+        }}
+        locationLabel={viewing ? locationName(viewing) : undefined}
       />
     </div>
   );

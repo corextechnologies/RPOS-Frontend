@@ -9,6 +9,7 @@ import type {
   SalesSummaryFilters,
 } from "@/lib/types/admin";
 import type { WarehouseRequestFilters } from "@/lib/types/warehouse";
+import type { WasteEventFilters } from "@/lib/types/waste";
 import type { KitchenLabelFilters, KitchenRequestFilters } from "@/lib/types/kitchen";
 import type {
   AdminProductionTargetFilters,
@@ -34,6 +35,10 @@ export const queryKeys = {
     filters
       ? (["admin-inventory", filters] as const)
       : (["admin-inventory"] as const),
+  adminWaste: (filters?: WasteEventFilters) =>
+    filters && Object.keys(filters).length
+      ? (["admin-waste", filters] as const)
+      : (["admin-waste"] as const),
   adminKitchenRequests: (filters?: RequestFilters) =>
     filters
       ? (["admin-requests-kitchen", filters] as const)
@@ -88,6 +93,10 @@ export const queryKeys = {
   warehouseProducts: ["warehouse-products"] as const,
   warehouseNearExpiry: (withinDays: number) =>
     ["warehouse-near-expiry", withinDays] as const,
+  warehouseWaste: (filters?: WasteEventFilters) =>
+    filters && Object.keys(filters).length
+      ? (["warehouse-waste", filters] as const)
+      : (["warehouse-waste"] as const),
   warehouseStaff: (page?: number) => ["warehouse-staff", page] as const,
   warehousePos: (filters?: WarehouseRequestFilters) =>
     filters ? (["warehouse-pos", filters] as const) : (["warehouse-pos"] as const),

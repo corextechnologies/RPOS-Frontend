@@ -2,17 +2,21 @@
 
 import { useState } from "react";
 import { AdjustStockDialog } from "@/components/warehouse/inventory/AdjustStockDialog";
+import { EditExpiryDialog } from "@/components/warehouse/inventory/EditExpiryDialog";
 import { InventoryTable } from "@/components/warehouse/inventory/InventoryTable";
 import { EditProductDialog } from "@/components/warehouse/products/EditProductDialog";
 import { WarehouseUnassigned } from "@/components/warehouse/WarehouseUnassigned";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import {
   useAdjustWarehouseStock,
+  useUpdateWarehouseStockExpiry,
   useWarehouseInventory,
 } from "@/lib/hooks/use-warehouse-inventory";
 import { useUpdateWarehouseProduct } from "@/lib/hooks/use-warehouse-products";
 import type {
   AdjustStockForm,
+  UpdateStockExpiryForm,
   UpdateWarehouseProductForm,
 } from "@/lib/schemas/warehouse-stock";
 import type { InventoryItem } from "@/lib/types/warehouse";
@@ -23,8 +27,11 @@ export default function WarehouseInventoryPage() {
   const inventory = useWarehouseInventory();
   const adjustStock = useAdjustWarehouseStock();
   const updateProduct = useUpdateWarehouseProduct();
+  const updateExpiry = useUpdateWarehouseStockExpiry();
   const [adjusting, setAdjusting] = useState<InventoryItem | null>(null);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
+  const [editingExpiry, setEditingExpiry] = useState<InventoryItem | null>(null);
+  const [search, setSearch] = useState("");
 
   const unassigned = isMissingWarehouseAssignment(inventory.error);
 
@@ -49,15 +56,34 @@ export default function WarehouseInventoryPage() {
     setEditing(null);
   };
 
+  const handleEditExpiry = async (values: UpdateStockExpiryForm) => {
+    if (!editingExpiry) return;
+    await updateExpiry.mutateAsync({
+      itemId: editingExpiry.id,
+      body: { expiry_date: values.expiry_date ? values.expiry_date : null },
+    });
+    setEditingExpiry(null);
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-          Inventory
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          On-hand stock in your warehouse.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
+            Inventory
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            On-hand stock in your warehouse.
+          </p>
+        </div>
+        {!unassigned && (
+          <Input
+            className="sm:w-80"
+            placeholder="Search name, SKU, or batch…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        )}
       </div>
 
       {unassigned ? (
@@ -70,6 +96,8 @@ export default function WarehouseInventoryPage() {
           onRetry={() => inventory.refetch()}
           onAdjust={can("stock:adjust") ? setAdjusting : undefined}
           onEdit={can("stock:receive") ? setEditing : undefined}
+          onEditExpiry={can("stock:waste") ? setEditingExpiry : undefined}
+          search={search}
         />
       )}
 
@@ -84,13 +112,32 @@ export default function WarehouseInventoryPage() {
       />
 
       <EditProductDialog
-        item={editing}
+        product={
+          editing
+            ? {
+                id: editing.product_id,
+                name: editing.product.name,
+                sku: editing.product.sku,
+                kind: editing.product.kind,
+              }
+            : null
+        }
         open={!!editing}
         onOpenChange={(open) => {
           if (!open) setEditing(null);
         }}
         onSubmit={handleEdit}
         isSubmitting={updateProduct.isPending}
+      />
+
+      <EditExpiryDialog
+        item={editingExpiry}
+        open={!!editingExpiry}
+        onOpenChange={(open) => {
+          if (!open) setEditingExpiry(null);
+        }}
+        onSubmit={handleEditExpiry}
+        isSubmitting={updateExpiry.isPending}
       />
     </div>
   );

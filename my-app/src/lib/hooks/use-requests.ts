@@ -8,6 +8,7 @@ import type {
   RequestFilters,
   UpdateRequestStatusInput,
 } from "@/lib/types/admin";
+import type { WasteEventFilters } from "@/lib/types/waste";
 import { toast } from "sonner";
 
 export function useProductRequests(filters?: RequestFilters) {
@@ -49,6 +50,14 @@ export function useAdminInventory(filters?: AdminInventoryFilters) {
   return useQuery({
     queryKey: queryKeys.adminInventory(filters),
     queryFn: () => api.listAdminInventory(filters),
+  });
+}
+
+/** Admin's cross-location view of every waste/expiry write-off. */
+export function useAdminWasteEvents(filters?: WasteEventFilters) {
+  return useQuery({
+    queryKey: queryKeys.adminWaste(filters),
+    queryFn: () => api.listAdminWasteEvents(filters),
   });
 }
 

@@ -16,6 +16,8 @@ interface NearExpiryListProps {
   onRetry?: () => void;
   /** Omit for a read-only list — the dashboard links out instead of acting. */
   onWaste?: (item: InventoryItem) => void;
+  /** Correct a batch's expiry date. */
+  onEditExpiry?: (item: InventoryItem) => void;
   headerAction?: React.ReactNode;
 }
 
@@ -44,6 +46,7 @@ export function NearExpiryList({
   isError,
   onRetry,
   onWaste,
+  onEditExpiry,
   headerAction,
 }: NearExpiryListProps) {
   return (
@@ -106,6 +109,15 @@ export function NearExpiryList({
                       <Badge variant={label.expired ? "destructive" : "warning"}>
                         {label.text}
                       </Badge>
+                    )}
+                    {onEditExpiry && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEditExpiry(item)}
+                      >
+                        Edit expiry
+                      </Button>
                     )}
                     {onWaste && (
                       <Button variant="outline" size="sm" onClick={() => onWaste(item)}>

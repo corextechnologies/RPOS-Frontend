@@ -1,6 +1,13 @@
 "use client";
 
-import { MoreHorizontal, Pencil, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useMemo } from "react";
+import {
+  CalendarClock,
+  MoreHorizontal,
+  Pencil,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
+import { matchesStockSearch } from "@/lib/inventory-search";
 import {
   PRODUCT_KIND_LABEL,
   productKindBadgeVariant,
@@ -36,6 +44,9 @@ interface InventoryTableProps {
   onAdjust?: (item: InventoryItem) => void;
   onWaste?: (item: InventoryItem) => void;
   onEdit?: (item: InventoryItem) => void;
+  onEditExpiry?: (item: InventoryItem) => void;
+  /** Filters by product name, SKU, or batch code. Owned by the page. */
+  search?: string;
 }
 
 /**
@@ -53,8 +64,14 @@ export function InventoryTable({
   onAdjust,
   onWaste,
   onEdit,
+  onEditExpiry,
+  search = "",
 }: InventoryTableProps) {
-  const showActions = Boolean(onAdjust || onWaste || onEdit);
+  const showActions = Boolean(onAdjust || onWaste || onEdit || onEditExpiry);
+  const filtered = useMemo(
+    () => (items ?? []).filter((item) => matchesStockSearch(item, search)),
+    [items, search],
+  );
   if (isLoading) {
     return (
       <Card>
@@ -87,6 +104,19 @@ export function InventoryTable({
     );
   }
 
+  if (filtered.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <EmptyState
+            title="No matches"
+            description="No stock matches your search."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -99,11 +129,11 @@ export function InventoryTable({
               <TableHead>Batch</TableHead>
               <TableHead>Expiry</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
-              {showActions && <TableHead className="w-[72px]" />}
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
+            {filtered.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <p className="font-medium text-content">{item.product.name}</p>
@@ -141,6 +171,12 @@ export function InventoryTable({
                         {onEdit && (
                           <DropdownMenuItem onClick={() => onEdit(item)}>
                             <Pencil className="mr-2 h-4 w-4" /> Edit product
+                          </DropdownMenuItem>
+                        )}
+                        {onEditExpiry && (
+                          <DropdownMenuItem onClick={() => onEditExpiry(item)}>
+                            <CalendarClock className="mr-2 h-4 w-4" /> Edit expiry
+                            date
                           </DropdownMenuItem>
                         )}
                         {onAdjust && (

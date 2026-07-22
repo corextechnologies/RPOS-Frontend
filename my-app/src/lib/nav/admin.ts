@@ -12,6 +12,7 @@ import {
   Tag,
   Target,
   TicketPercent,
+  TriangleAlert,
   Users,
   Utensils,
   Warehouse,
@@ -92,6 +93,14 @@ export const ADMIN_NAV: NavSection[] = [
         // Not the Warehouse's "inventory:read" — that action is scoped to a
         // single warehouse's own stock. This page is Admin's cross-location
         // oversight, which is what "overview:read" already grants.
+        action: "overview:read",
+        match: "exact",
+      },
+      {
+        label: "Waste & expired",
+        href: "/admin/waste",
+        icon: TriangleAlert,
+        // Cross-location oversight, like Inventory — granted by "overview:read".
         action: "overview:read",
         match: "exact",
       },

@@ -1,9 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
+import { matchesStockSearch } from "@/lib/inventory-search";
 import {
   Table,
   TableBody,
@@ -26,6 +28,8 @@ interface AdminInventoryTableProps {
   emptyTitle?: string;
   emptyDescription?: string;
   locationName?: (item: AdminInventoryItem) => string;
+  /** Filters by product name, SKU, or batch code. Owned by the page. */
+  search?: string;
 }
 
 /**
@@ -45,7 +49,12 @@ export function AdminInventoryTable({
   emptyTitle = "No stock on hand",
   emptyDescription = "Stock appears here once it is received into a branch, kitchen, or warehouse.",
   locationName,
+  search = "",
 }: AdminInventoryTableProps) {
+  const filtered = useMemo(
+    () => (items ?? []).filter((item) => matchesStockSearch(item, search)),
+    [items, search],
+  );
   if (isLoading) {
     return (
       <Card>
@@ -78,6 +87,19 @@ export function AdminInventoryTable({
     );
   }
 
+  if (filtered.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <EmptyState
+            title="No matches"
+            description="No stock matches your search."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -95,7 +117,7 @@ export function AdminInventoryTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
+            {filtered.map((item) => (
               <TableRow key={item.id}>
                 <TableCell>
                   <p className="font-medium text-content">{item.product.name}</p>

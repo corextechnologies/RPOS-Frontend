@@ -37,6 +37,7 @@ import type {
   ProductionTarget,
   UpdateProductionTargetInput,
 } from "@/lib/types/production-target";
+import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import type { BillingOut, BillingSummary } from "@/lib/types/super-admin";
 import { billingFromApi } from "./adapters";
 import { apiConfig } from "./config";
@@ -564,6 +565,27 @@ export const adminApi = {
       batch_code: item.batch_code ?? "",
       expiry_date: item.expiry_date ?? null,
       location_id: String(item.location_id),
+    }));
+  },
+
+  async listAdminWasteEvents(
+    filters?: WasteEventFilters,
+  ): Promise<WasteEvent[]> {
+    // Every location's write-offs. Filterable by movement type and location.
+    const qs = new URLSearchParams();
+    if (filters?.movement_type) qs.set("movement_type", filters.movement_type);
+    if (filters?.location_type) qs.set("location_type", filters.location_type);
+    if (filters?.location_id) qs.set("location_id", filters.location_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    const data = await request<WasteEvent[]>(`/admin/waste${suffix}`);
+    return (data ?? []).map((event) => ({
+      ...event,
+      id: String(event.id),
+      product_id: String(event.product_id),
+      product: { ...event.product, id: String(event.product.id) },
+      quantity: Number(event.quantity),
+      batch_code: event.batch_code ?? "",
+      location_id: String(event.location_id),
     }));
   },
 

@@ -91,6 +91,21 @@ export type UpdateWarehouseProductForm = z.infer<
   typeof updateWarehouseProductSchema
 >;
 
+/**
+ * Editing a batch's expiry date. Blank clears it (non-perishable / unbatched).
+ */
+export const updateStockExpirySchema = z.object({
+  expiry_date: z
+    .string()
+    .refine(
+      (value) => value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value),
+      "Enter a valid date",
+    )
+    .optional(),
+});
+
+export type UpdateStockExpiryForm = z.infer<typeof updateStockExpirySchema>;
+
 export const adjustStockSchema = z.object({
   quantity_delta: z
     .string()
