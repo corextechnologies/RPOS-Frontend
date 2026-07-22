@@ -51,7 +51,12 @@ export default function WarehouseInventoryPage() {
     // Only catalog fields — quantity is never part of this payload.
     await updateProduct.mutateAsync({
       productId: editing.product_id,
-      body: { name: values.name, sku: values.sku ?? "", kind: values.kind },
+      body: {
+        name: values.name,
+        sku: values.sku ?? "",
+        kind: values.kind,
+        stock_unit: values.stock_unit,
+      },
     });
     setEditing(null);
   };

@@ -21,7 +21,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { STOCK_UNITS, STOCK_UNIT_LABEL } from "@/lib/stock-unit";
 import {
   createWarehouseProductDefaults,
   createWarehouseProductSchema,
@@ -125,6 +133,35 @@ export function AddProductDialog({
                       create a burger. */}
                   <p className="text-xs text-muted">
                     Things the kitchen makes are added by the kitchen, not here.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="stock_unit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Unit</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a unit" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {STOCK_UNITS.map((unit) => (
+                        <SelectItem key={unit} value={unit}>
+                          {STOCK_UNIT_LABEL[unit]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted">
+                    How this product is stocked and counted — each, kg, litre, and
+                    so on.
                   </p>
                   <FormMessage />
                 </FormItem>

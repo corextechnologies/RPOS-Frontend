@@ -15,6 +15,7 @@ import type {
   UpdateBranchStaffInput,
   BranchCustomerFilters,
   BranchInventoryItem,
+  BranchWasteInput,
   BranchOrder,
   BranchOrderFilters,
   CreateBranchCustomerInput,
@@ -26,10 +27,28 @@ import type {
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import type { DeviceCreateInput, PosDevice, PosDeviceActivation } from "@/lib/types/pos";
+import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
+import type { StockUnit } from "@/lib/stock-unit";
 import { request, requestEnvelope } from "./client";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
+
+/** Flatten a branch inventory row (nested or flat) into the UI's flat shape. */
+function normalizeBranchInventory(i: RawBranchInventoryItem): BranchInventoryItem {
+  return {
+    id: String(i.id),
+    product_id: String(i.product_id ?? i.product?.id ?? ""),
+    product_name: i.product_name ?? i.product?.name ?? "",
+    sku: i.sku ?? i.product?.sku ?? null,
+    quantity: Number(i.quantity),
+    batch_code: i.batch_code ?? "",
+    expiry_date: i.expiry_date ?? null,
+    // The serializer may put the unit top-level or nested under `product`.
+    stock_unit: i.stock_unit ?? i.product?.stock_unit,
+    location_id: String(i.location_id),
+  };
+}
 
 /**
  * `/branch/inventory` as it arrives from the live API: ids may be numbers, and
@@ -41,10 +60,16 @@ type RawBranchInventoryItem = {
   product_id?: string | number;
   product_name?: string;
   sku?: string | null;
-  product?: { id?: string | number; name?: string; sku?: string | null };
+  product?: {
+    id?: string | number;
+    name?: string;
+    sku?: string | null;
+    stock_unit?: StockUnit;
+  };
   quantity: string | number;
   batch_code?: string | null;
   expiry_date?: string | null;
+  stock_unit?: StockUnit;
   location_id: string | number;
 };
 
@@ -364,15 +389,39 @@ export const branchApi = {
     // The live API nests product name/sku under `product` — the same serializer
     // the warehouse and kitchen portals consume — so lift them into the flat
     // fields the UI reads. Tolerates a flat payload too (as the mock returns).
-    return items.map((i) => ({
-      id: String(i.id),
-      product_id: String(i.product_id ?? i.product?.id ?? ""),
-      product_name: i.product_name ?? i.product?.name ?? "",
-      sku: i.sku ?? i.product?.sku ?? null,
-      quantity: Number(i.quantity),
-      batch_code: i.batch_code ?? "",
-      expiry_date: i.expiry_date ?? null,
-      location_id: String(i.location_id),
+    return items.map(normalizeBranchInventory);
+  },
+
+  async wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem> {
+    const data = await request<RawBranchInventoryItem>("/branch/stock/waste", {
+      method: "POST",
+      body: JSON.stringify({
+        product_id: body.product_id,
+        quantity: body.quantity,
+        waste_reason: body.waste_reason,
+        movement_type: body.movement_type,
+        batch_code: optionalText(body.batch_code),
+        notes: optionalText(body.notes),
+      }),
+    });
+    return normalizeBranchInventory(data);
+  },
+
+  async listBranchWasteEvents(
+    filters?: WasteEventFilters,
+  ): Promise<WasteEvent[]> {
+    const suffix = filters?.movement_type
+      ? `?movement_type=${filters.movement_type}`
+      : "";
+    const data = await request<WasteEvent[]>(`/branch/waste${suffix}`);
+    return (data ?? []).map((event) => ({
+      ...event,
+      id: String(event.id),
+      product_id: String(event.product_id),
+      product: { ...event.product, id: String(event.product.id) },
+      quantity: Number(event.quantity),
+      batch_code: event.batch_code ?? "",
+      location_id: String(event.location_id),
     }));
   },
 

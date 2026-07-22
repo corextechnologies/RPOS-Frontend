@@ -79,6 +79,10 @@ export default function ReceiveStockPage() {
     const created = await createProduct.mutateAsync({
       name: values.name,
       sku: values.sku || undefined,
+      // Forward the catalog choices the dialog collects, so the new product is
+      // created with the manager's chosen kind and unit — not silent defaults.
+      kind: values.kind,
+      stock_unit: values.stock_unit,
     });
     setAddingProduct(false);
     // Select what was just created: adding a product here is almost always the

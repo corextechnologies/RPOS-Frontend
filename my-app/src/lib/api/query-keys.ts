@@ -112,6 +112,10 @@ export const queryKeys = {
   kitchenWarehouses: ["kitchen-warehouses"] as const,
   kitchenNearExpiry: (withinDays: number) =>
     ["kitchen-near-expiry", withinDays] as const,
+  kitchenWaste: (filters?: WasteEventFilters) =>
+    filters && Object.keys(filters).length
+      ? (["kitchen-waste", filters] as const)
+      : (["kitchen-waste"] as const),
   kitchenLabels: (filters?: KitchenLabelFilters) =>
     filters ? (["kitchen-labels", filters] as const) : (["kitchen-labels"] as const),
   kitchenCounts: (page?: number) => ["kitchen-counts", page] as const,

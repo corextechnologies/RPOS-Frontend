@@ -24,6 +24,7 @@ import {
   PRODUCT_KIND_LABEL,
   productKindBadgeVariant,
 } from "@/lib/product-kind";
+import { stockUnitLabel } from "@/lib/stock-unit";
 import {
   Table,
   TableBody,
@@ -158,6 +159,11 @@ export function InventoryTable({
                 <TableCell className="text-muted">{item.expiry_date || "-"}</TableCell>
                 <TableCell className="text-right font-medium text-content">
                   {item.quantity}
+                  {stockUnitLabel(item.product.stock_unit) && (
+                    <span className="ml-1 text-xs font-normal text-faint">
+                      {stockUnitLabel(item.product.stock_unit)}
+                    </span>
+                  )}
                 </TableCell>
                 {showActions && (
                   <TableCell className="text-right">

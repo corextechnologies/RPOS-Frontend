@@ -32,6 +32,7 @@ import {
 } from "@/lib/hooks/use-kitchen-recipes";
 import { useKitchenInventory } from "@/lib/hooks/use-kitchen-inventory";
 import { formatBasisPoints } from "@/lib/money";
+import { stockUnitLabel } from "@/lib/stock-unit";
 import { toast } from "sonner";
 import type { RecipeComponentInput } from "@/lib/types/kitchen";
 
@@ -138,8 +139,8 @@ export default function KitchenRecipesPage() {
                             </span>
                             <span className="tabular-nums text-muted">
                               {c.quantity}
-                              {c.stock_unit && c.stock_unit !== "EACH" && (
-                                <span className="text-faint"> {c.stock_unit.toLowerCase()}</span>
+                              {stockUnitLabel(c.stock_unit) && (
+                                <span className="text-faint"> {stockUnitLabel(c.stock_unit)}</span>
                               )}
                               {c.wastage_bp > 0 && (
                                 <span className="ml-1.5 text-xs text-faint">

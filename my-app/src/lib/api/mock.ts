@@ -28,6 +28,7 @@ import type {
   SalesSummaryBucket,
   SalesSummaryFilters,
   CreateSaleInput,
+  DispatchedBatch,
   StockRequest,
   UpdateAdminProfileInput,
   UpdateAdminUserInput,
@@ -67,6 +68,7 @@ import type {
   KitchenStockCount,
   KitchenWarehouse,
   KitchenWasteInput,
+  StockUnit,
   UpdateKitchenRequestStatusInput,
 } from "@/lib/types/kitchen";
 import {
@@ -90,6 +92,7 @@ import type {
   CreateBranchStaffResult,
   UpdateBranchStaffInput,
   BranchInventoryItem,
+  BranchWasteInput,
   BranchOrder,
   BranchOrderFilters,
   CreateBranchCustomerInput,
@@ -204,7 +207,7 @@ const SESSION_KEY = "ros-super-admin-session";
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 21;
+const SEED_VERSION = 23;
 
 interface MockInvoiceRecord {
   id: number;
@@ -235,6 +238,8 @@ interface MockEmployee extends Employee {
 
 interface MockProduct extends ProductPricing {
   restaurant_id: string;
+  /** Unit of measure, chosen when the product is created. Defaults to EACH. */
+  stock_unit?: StockUnit;
 }
 
 /**
@@ -729,6 +734,7 @@ function seedDb(): MockDb {
       restaurant_id: "rest-001",
       name: "House Blend Coffee Beans",
       sku: "BN-COF-001",
+      stock_unit: "KG",
       cost_price: "18.50",
       selling_price: null,
       category: null,
@@ -741,6 +747,7 @@ function seedDb(): MockDb {
       restaurant_id: "rest-001",
       name: "Tomato Sauce (Can)",
       sku: "ING-TOM-02",
+      stock_unit: "EACH",
       cost_price: null,
       selling_price: null,
       category: null,
@@ -753,6 +760,7 @@ function seedDb(): MockDb {
       restaurant_id: "rest-001",
       name: "Mozzarella Block",
       sku: "DAI-MOZ-10",
+      stock_unit: "KG",
       cost_price: "9.75",
       selling_price: null,
       category: null,
@@ -765,6 +773,7 @@ function seedDb(): MockDb {
       restaurant_id: "rest-001",
       name: "Paper Napkins (Pack)",
       sku: "SUP-NAP-50",
+      stock_unit: "PACK",
       cost_price: null,
       selling_price: null,
       category: null,
@@ -781,6 +790,7 @@ function seedDb(): MockDb {
       restaurant_id: "rest-001",
       name: "Bottled Cola",
       sku: "BEV-COLA-33",
+      stock_unit: "EACH",
       cost_price: "40.00",
       selling_price: "100.00",
       category: "Drinks",
@@ -794,6 +804,7 @@ function seedDb(): MockDb {
       restaurant_id: "rest-001",
       name: "Classic Burger",
       sku: "FG-BURG-01",
+      stock_unit: "EACH",
       cost_price: null,
       selling_price: "500.00",
       category: "Mains",
@@ -1008,6 +1019,18 @@ function seedDb(): MockDb {
           quantity_requested: 24,
           // Null for the whole lifecycle: this type has no partial approval.
           quantity_approved: null,
+          // Recorded when the warehouse dispatched, so receiving this in-transit
+          // request credits the kitchen with the real batch and expiry (matches
+          // the warehouse's B-TOM-03 row) rather than one unbatched lump.
+          dispatched_batches: [
+            {
+              batch_code: "B-TOM-03",
+              expiry_date: localYmd(
+                new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+              ),
+              quantity: 24,
+            },
+          ],
         },
       ],
     },
@@ -1339,6 +1362,40 @@ function seedWasteEvents(): MockWasteEvent[] {
       location_id: "wh-001",
       created_at: isoDaysAgo(9),
       created_by: "Warehouse Manager",
+    },
+    {
+      id: "waste-101",
+      restaurant_id: "rest-001",
+      product_id: "prod-001",
+      product: {
+        id: "prod-001",
+        name: "House Blend Coffee Beans",
+        sku: "BN-COF-001",
+      },
+      quantity: 2,
+      movement_type: "EXPIRY",
+      waste_reason: "EXPIRED",
+      batch_code: "B-COF-08",
+      notes: "Opened bag past its date.",
+      location_type: "KITCHEN",
+      location_id: "kit-001",
+      created_at: isoDaysAgo(1),
+      created_by: "Kitchen Manager",
+    },
+    {
+      id: "waste-201",
+      restaurant_id: "rest-001",
+      product_id: "prod-003",
+      product: { id: "prod-003", name: "Mozzarella Block", sku: "DAI-MOZ-10" },
+      quantity: 1,
+      movement_type: "WASTE",
+      waste_reason: "DAMAGED",
+      batch_code: "B-MOZ-11",
+      notes: "Dropped on the floor.",
+      location_type: "BRANCH",
+      location_id: "br-001",
+      created_at: isoDaysAgo(3),
+      created_by: "Branch Manager",
     },
   ];
 }
@@ -1801,6 +1858,9 @@ function applyDispatchToStock(
   request: MockStockRequest,
 ): void {
   const planned = new Map<string, number>();
+  // Per line, the batches it draws — captured here (not re-read after the
+  // decrement) so the receiving kitchen inherits each batch's code and expiry.
+  const picksByLine = new Map<string, DispatchedBatch[]>();
 
   for (const line of request.line_items) {
     // Falls back to the requested amount when nothing was approved.
@@ -1821,19 +1881,33 @@ function applyDispatchToStock(
     }
 
     let remaining = needed;
+    const picks: DispatchedBatch[] = [];
     for (const row of rows) {
       if (remaining <= 0) break;
       const free = row.quantity - (planned.get(row.id) ?? 0);
       if (free <= 0) continue;
       const take = Math.min(free, remaining);
       planned.set(row.id, (planned.get(row.id) ?? 0) + take);
+      picks.push({
+        batch_code: row.batch_code,
+        expiry_date: row.expiry_date ?? null,
+        quantity: take,
+      });
       remaining -= take;
     }
+    picksByLine.set(line.id, picks);
   }
 
   for (const [rowId, quantity] of planned) {
     const row = db.inventory.find((item) => item.id === rowId);
     if (row) row.quantity -= quantity;
+  }
+
+  // Stamp each line with the batches that left the warehouse, so RECEIVED can
+  // credit the kitchen batch-for-batch rather than as one unbatched pile.
+  for (const line of request.line_items) {
+    const picks = picksByLine.get(line.id);
+    if (picks && picks.length > 0) line.dispatched_batches = picks;
   }
 }
 
@@ -1852,13 +1926,18 @@ function toPublicInventoryItem(
   item: MockInventoryItem,
   db: MockDb,
 ): InventoryItem {
-  // The row stores only {id, name, sku}; resolve the kind from the catalog so
-  // the warehouse inventory view can show what each product is.
+  // The row stores only {id, name, sku}; resolve the kind and unit from the
+  // catalog so the warehouse inventory view can show what each product is and
+  // how it is measured.
   const product = db.products.find((p) => p.id === item.product_id);
   return {
     id: item.id,
     product_id: item.product_id,
-    product: { ...item.product, kind: warehouseKind(product?.kind) },
+    product: {
+      ...item.product,
+      kind: warehouseKind(product?.kind),
+      stock_unit: product?.stock_unit,
+    },
     quantity: item.quantity,
     batch_code: item.batch_code,
     expiry_date: item.expiry_date,
@@ -1926,13 +2005,20 @@ function isWarehouseVisibleRequest(
   return false;
 }
 
-function toPublicKitchenInventoryItem(item: MockInventoryItem): KitchenInventoryItem {
+function toPublicKitchenInventoryItem(
+  item: MockInventoryItem,
+  db: MockDb,
+): KitchenInventoryItem {
+  // The row stores only {id, name, sku}; resolve the kind and unit from the
+  // catalog so the kitchen inventory view can show a Category and unit for
+  // stock it received.
+  const product = db.products.find((p) => p.id === item.product_id);
   return {
     id: item.id,
     product_id: item.product_id,
     // Note the absence of cost_price: procurement cost is Admin-only, and the
     // field is missing from the projection rather than hidden at render time.
-    product: item.product,
+    product: { ...item.product, kind: product?.kind, stock_unit: product?.stock_unit },
     quantity: item.quantity,
     batch_code: item.batch_code,
     expiry_date: item.expiry_date,
@@ -2154,29 +2240,45 @@ function applyKitchenReceiptToStock(
   req: MockStockRequest,
 ) {
   for (const line of req.line_items) {
-    const quantity = line.quantity_approved ?? line.quantity_requested;
     const productId = line.product_id ?? "";
-    const existing = findKitchenStock(db, kitchen, productId, "");
-    if (existing) {
-      existing.quantity += quantity;
-      continue;
-    }
     const product = db.products.find((p) => p.id === productId);
-    db.inventory.push({
-      id: `inv-${Date.now()}-${productId}`,
-      restaurant_id: kitchen.restaurant_id,
-      product_id: productId,
-      product: {
-        id: productId,
-        name: product?.name ?? line.product_name,
-        sku: product?.sku,
-      },
-      quantity,
-      batch_code: "",
-      expiry_date: null,
-      location_type: "KITCHEN",
-      location_id: kitchen.id,
-    });
+    // Credit each batch the warehouse actually dispatched so the kitchen row
+    // inherits its code and expiry. Fall back to one unbatched lump for legacy
+    // requests dispatched before batches were tracked on the line.
+    const batches: DispatchedBatch[] = line.dispatched_batches?.length
+      ? line.dispatched_batches
+      : [
+          {
+            batch_code: "",
+            expiry_date: null,
+            quantity: line.quantity_approved ?? line.quantity_requested,
+          },
+        ];
+    for (const batch of batches) {
+      if (batch.quantity <= 0) continue;
+      const existing = findKitchenStock(db, kitchen, productId, batch.batch_code);
+      if (existing) {
+        existing.quantity += batch.quantity;
+        // A later dispatch of the same batch may carry a corrected expiry.
+        if (batch.expiry_date) existing.expiry_date = batch.expiry_date;
+        continue;
+      }
+      db.inventory.push({
+        id: `inv-${Date.now()}-${productId}-${batch.batch_code}`,
+        restaurant_id: kitchen.restaurant_id,
+        product_id: productId,
+        product: {
+          id: productId,
+          name: product?.name ?? line.product_name,
+          sku: product?.sku,
+        },
+        quantity: batch.quantity,
+        batch_code: batch.batch_code,
+        expiry_date: batch.expiry_date ?? null,
+        location_type: "KITCHEN",
+        location_id: kitchen.id,
+      });
+    }
   }
 }
 
@@ -3606,6 +3708,7 @@ export const mockClient: ApiClient = {
             sku: item.product.sku,
             cost_price: product?.cost_price ?? null,
             kind: product?.kind,
+            stock_unit: product?.stock_unit,
           },
           quantity: item.quantity,
           batch_code: item.batch_code,
@@ -3871,6 +3974,7 @@ export const mockClient: ApiClient = {
         name: p.name,
         sku: p.sku,
         kind: warehouseKind(p.kind),
+        stock_unit: p.stock_unit,
       }));
     return delay(products);
   },
@@ -3923,6 +4027,8 @@ export const mockClient: ApiClient = {
       selling_price: null,
       category: null,
       is_available: true,
+      // Unit of measure. Defaults to EACH when the caller omits it.
+      stock_unit: body.stock_unit ?? "EACH",
     };
     db.products.push(created);
     saveDb(db);
@@ -3932,6 +4038,7 @@ export const mockClient: ApiClient = {
       name: created.name,
       sku: created.sku,
       kind: warehouseKind(created.kind),
+      stock_unit: created.stock_unit,
     };
     return delay(result);
   },
@@ -3987,6 +4094,10 @@ export const mockClient: ApiClient = {
       product.sku = sku;
     }
 
+    if (body.stock_unit !== undefined) {
+      product.stock_unit = body.stock_unit;
+    }
+
     // Quantity is intentionally untouched: inventory rows are a separate store
     // and this endpoint has no access to them.
     saveDb(db);
@@ -3996,6 +4107,7 @@ export const mockClient: ApiClient = {
       name: product.name,
       sku: product.sku,
       kind: warehouseKind(product.kind),
+      stock_unit: product.stock_unit,
     };
     return delay(result);
   },
@@ -4739,7 +4851,7 @@ export const mockClient: ApiClient = {
         (item) =>
           item.location_type === "KITCHEN" && item.location_id === kitchen.id,
       )
-      .map(toPublicKitchenInventoryItem);
+      .map((item) => toPublicKitchenInventoryItem(item, db));
     return delay(items);
   },
 
@@ -4761,7 +4873,7 @@ export const mockClient: ApiClient = {
         (item) =>
           item.location_type === "WAREHOUSE" && item.location_id === warehouse.id,
       )
-      .map(toPublicKitchenInventoryItem);
+      .map((item) => toPublicKitchenInventoryItem(item, db));
     return delay(items);
   },
 
@@ -4786,7 +4898,7 @@ export const mockClient: ApiClient = {
           item.expiry_date <= cutoff,
       )
       .sort((a, b) => (a.expiry_date ?? "").localeCompare(b.expiry_date ?? ""))
-      .map(toPublicKitchenInventoryItem);
+      .map((item) => toPublicKitchenInventoryItem(item, db));
 
     return delay(items);
   },
@@ -4859,8 +4971,48 @@ export const mockClient: ApiClient = {
     }
 
     item.quantity -= quantity;
+
+    // Persist the write-off so it shows up in the kitchen's Waste & expired log.
+    db.waste_events.push({
+      id: `waste-${Date.now()}`,
+      restaurant_id: kitchen.restaurant_id,
+      product_id: item.product_id,
+      product: {
+        id: item.product.id,
+        name: item.product.name,
+        sku: item.product.sku,
+      },
+      quantity,
+      movement_type: movementType,
+      waste_reason: body.waste_reason ?? null,
+      batch_code: item.batch_code,
+      notes: body.notes?.trim() || null,
+      location_type: "KITCHEN",
+      location_id: kitchen.id,
+      created_at: now(),
+      created_by: me.full_name ?? me.email,
+    });
+
     saveDb(db);
-    return delay(toPublicKitchenInventoryItem(item));
+    return delay(toPublicKitchenInventoryItem(item, db));
+  },
+
+  async listKitchenWasteEvents(filters?: WasteEventFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+
+    const events = db.waste_events
+      .filter(
+        (e) =>
+          e.restaurant_id === kitchen.restaurant_id &&
+          e.location_type === "KITCHEN" &&
+          e.location_id === kitchen.id,
+      )
+      .filter((e) => !filters?.movement_type || e.movement_type === filters.movement_type)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map(toPublicWasteEvent);
+    return delay(events);
   },
 
   async createKitchenCount(body: CreateKitchenCountInput) {
@@ -6296,11 +6448,106 @@ export const mockClient: ApiClient = {
           quantity: i.quantity,
           batch_code: i.batch_code ?? "",
           expiry_date: i.expiry_date ?? null,
+          // Resolved from the catalog so the branch table can show the unit.
+          stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit,
           location_id: i.location_id,
           // No cost_price. Structurally absent, not nulled — the branch has no
           // business seeing it and `pricing-leak.test.ts` guards the type.
         })),
     );
+  },
+
+  async wasteBranchStock(body: BranchWasteInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const movementType = body.movement_type ?? "WASTE";
+    if (movementType !== "WASTE" && movementType !== "EXPIRY") {
+      throw new ApiError(
+        "Movement type must be WASTE or EXPIRY",
+        409,
+        INVALID_MOVEMENT_TYPE,
+      );
+    }
+
+    const quantity = Number(body.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+    }
+
+    const batch = body.batch_code?.trim() ?? "";
+    const item = db.inventory.find(
+      (i) =>
+        i.location_type === "BRANCH" &&
+        i.location_id === branch.id &&
+        i.product_id === body.product_id &&
+        i.batch_code === batch,
+    );
+    if (!item) throw new ApiError("Stock not found", 404);
+
+    if (quantity > item.quantity) {
+      throw new ApiError(
+        `Only ${item.quantity} on hand for this batch`,
+        409,
+        INSUFFICIENT_STOCK,
+      );
+    }
+
+    item.quantity -= quantity;
+
+    // Persist the write-off for the branch's Waste & expired log.
+    db.waste_events.push({
+      id: `waste-${Date.now()}`,
+      restaurant_id: branch.restaurant_id,
+      product_id: item.product_id,
+      product: {
+        id: item.product.id,
+        name: item.product.name,
+        sku: item.product.sku,
+      },
+      quantity,
+      movement_type: movementType,
+      waste_reason: body.waste_reason ?? null,
+      batch_code: item.batch_code,
+      notes: body.notes?.trim() || null,
+      location_type: "BRANCH",
+      location_id: branch.id,
+      created_at: now(),
+      created_by: me.full_name ?? me.email,
+    });
+
+    saveDb(db);
+
+    const result: BranchInventoryItem = {
+      id: item.id,
+      product_id: item.product_id,
+      product_name: item.product.name,
+      sku: item.product.sku ?? null,
+      quantity: item.quantity,
+      batch_code: item.batch_code ?? "",
+      expiry_date: item.expiry_date ?? null,
+      location_id: item.location_id,
+    };
+    return delay(result);
+  },
+
+  async listBranchWasteEvents(filters?: WasteEventFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const events = db.waste_events
+      .filter(
+        (e) =>
+          e.restaurant_id === branch.restaurant_id &&
+          e.location_type === "BRANCH" &&
+          e.location_id === branch.id,
+      )
+      .filter((e) => !filters?.movement_type || e.movement_type === filters.movement_type)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .map(toPublicWasteEvent);
+    return delay(events);
   },
 
   async listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>> {

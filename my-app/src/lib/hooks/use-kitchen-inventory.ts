@@ -13,6 +13,7 @@ import {
   isMissingKitchenAssignment,
   isNoSuchStock,
 } from "@/lib/types/kitchen";
+import type { WasteEventFilters } from "@/lib/types/waste";
 import { toast } from "sonner";
 import { stockAwareMessage } from "@/lib/api/errors";
 
@@ -34,6 +35,16 @@ export function useKitchenNearExpiry(withinDays: number) {
   return useQuery({
     queryKey: queryKeys.kitchenNearExpiry(withinDays),
     queryFn: () => api.listKitchenNearExpiry({ within_days: withinDays }),
+    retry: (failureCount, error) =>
+      !isMissingKitchenAssignment(error) && failureCount < 3,
+  });
+}
+
+/** The kitchen's own write-off history (waste + expiry). */
+export function useKitchenWasteEvents(filters?: WasteEventFilters) {
+  return useQuery({
+    queryKey: queryKeys.kitchenWaste(filters),
+    queryFn: () => api.listKitchenWasteEvents(filters),
     retry: (failureCount, error) =>
       !isMissingKitchenAssignment(error) && failureCount < 3,
   });
@@ -135,6 +146,8 @@ export function useKitchenStockInvalidation() {
     qc.invalidateQueries({ queryKey: queryKeys.kitchenInventory });
     qc.invalidateQueries({ queryKey: ["kitchen-near-expiry"] });
     qc.invalidateQueries({ queryKey: ["kitchen-labels"] });
+    // A write-off adds a row to the waste log — refresh it too.
+    qc.invalidateQueries({ queryKey: ["kitchen-waste"] });
   };
 }
 

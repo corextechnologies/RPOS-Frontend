@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { wasteReasonSchema } from "@/lib/stock/waste-reason";
+import { STOCK_UNITS } from "@/lib/stock-unit";
 
 export const receiveStockSchema = z.object({
   product_id: z.string().min(1, "Select a product"),
@@ -52,6 +53,8 @@ export const createWarehouseProductSchema = z.object({
    * it can't trigger that.
    */
   kind: z.enum(["RAW_MATERIAL", "RESALE"]),
+  /** Unit of measure the product is stocked and counted in. */
+  stock_unit: z.enum(STOCK_UNITS),
 });
 
 export type CreateWarehouseProductForm = z.infer<
@@ -63,6 +66,8 @@ export const createWarehouseProductDefaults: CreateWarehouseProductForm = {
   sku: "",
   // Most of what a warehouse buys is consumed, not resold.
   kind: "RAW_MATERIAL",
+  // Discrete items are the common case; measures are chosen explicitly.
+  stock_unit: "EACH",
 };
 
 /**
@@ -85,6 +90,8 @@ export const updateWarehouseProductSchema = z.object({
    * it can't send one.
    */
   kind: z.enum(["RAW_MATERIAL", "RESALE"]),
+  /** Unit of measure the product is stocked and counted in. */
+  stock_unit: z.enum(STOCK_UNITS),
 });
 
 export type UpdateWarehouseProductForm = z.infer<

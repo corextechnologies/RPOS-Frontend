@@ -31,6 +31,7 @@ import type {
   KitchenProductionTargetFilters,
   ProductionTarget,
 } from "@/lib/types/production-target";
+import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import { request, requestEnvelope } from "./client";
 import { normalizeProductionTarget } from "./admin.api";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
@@ -205,6 +206,24 @@ export const kitchenApi = {
       }),
     });
     return normalizeInventoryItem(data);
+  },
+
+  async listKitchenWasteEvents(
+    filters?: WasteEventFilters,
+  ): Promise<WasteEvent[]> {
+    const qs = filters?.movement_type
+      ? `?movement_type=${filters.movement_type}`
+      : "";
+    const data = await request<WasteEvent[]>(`/kitchen/stock/waste${qs}`);
+    return (data ?? []).map((event) => ({
+      ...event,
+      id: String(event.id),
+      product_id: String(event.product_id),
+      product: { ...event.product, id: String(event.product.id) },
+      quantity: Number(event.quantity),
+      batch_code: event.batch_code ?? "",
+      location_id: String(event.location_id),
+    }));
   },
 
   async createKitchenCount(

@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/types/super-admin";
 import type {
   BranchCustomerFilters,
   BranchOrderFilters,
+  BranchWasteInput,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
@@ -17,6 +18,7 @@ import type {
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import type { RequestFilters } from "@/lib/types/admin";
+import type { WasteEventFilters } from "@/lib/types/waste";
 import type { DeviceCreateInput } from "@/lib/types/pos";
 
 export const branchKeys = {
@@ -31,6 +33,10 @@ export const branchKeys = {
     filters ? (["branch-requests", filters] as const) : (["branch-requests"] as const),
   deliveries: ["branch-deliveries"] as const,
   inventory: ["branch-inventory"] as const,
+  waste: (filters?: WasteEventFilters) =>
+    filters && Object.keys(filters).length
+      ? (["branch-waste", filters] as const)
+      : (["branch-waste"] as const),
   production: (filters?: ProductionRunFilters) =>
     filters ? (["branch-production", filters] as const) : (["branch-production"] as const),
   productionRun: (id: string) => ["branch-production-run", id] as const,
@@ -226,6 +232,40 @@ export function useBranchInventory() {
   return useQuery({
     queryKey: branchKeys.inventory,
     queryFn: () => api.listBranchInventory(),
+  });
+}
+
+/**
+ * This branch's write-off history (waste + expiry).
+ *
+ * `enabled` gates the fetch: the endpoint is manager-only (same capability as
+ * logging waste), so a non-manager must not fire it — a 403 would surface as an
+ * error state on a table they should never have seen. Callers pass
+ * `can("branch-waste:log")`.
+ */
+export function useBranchWasteEvents(
+  filters?: WasteEventFilters,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: branchKeys.waste(filters),
+    queryFn: () => api.listBranchWasteEvents(filters),
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useWasteBranchStock() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: BranchWasteInput) => api.wasteBranchStock(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: branchKeys.inventory });
+      qc.invalidateQueries({ queryKey: ["branch-waste"] });
+      toast.success("Stock written off");
+    },
+    onError: (err) =>
+      toast.error(stockAwareMessage(err, "Failed to write off stock")),
   });
 }
 

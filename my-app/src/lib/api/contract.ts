@@ -105,6 +105,7 @@ import type {
   CreateBranchStaffResult,
   UpdateBranchStaffInput,
   BranchInventoryItem,
+  BranchWasteInput,
   BranchOrder,
   BranchOrderFilters,
   BranchDelivery,
@@ -302,6 +303,7 @@ export interface ApiClient {
   ): Promise<KitchenInventoryItem[]>;
   listKitchenLabels(filters?: KitchenLabelFilters): Promise<KitchenLabel[]>;
   wasteKitchenStock(body: KitchenWasteInput): Promise<KitchenInventoryItem>;
+  listKitchenWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
   createKitchenCount(body: CreateKitchenCountInput): Promise<KitchenStockCount>;
   listKitchenCounts(
     filters?: KitchenCountFilters,
@@ -393,6 +395,8 @@ export interface ApiClient {
   listBranchDeliveries(): Promise<BranchDelivery[]>;
   receiveBranchDelivery(deliveryId: string): Promise<BranchDelivery>;
   listBranchInventory(): Promise<BranchInventoryItem[]>;
+  wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem>;
+  listBranchWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
   listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
   getProductionRun(id: string): Promise<ProductionRun>;
   createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun>;

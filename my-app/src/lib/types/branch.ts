@@ -7,7 +7,9 @@
  */
 
 import type { BranchPosition } from "@/lib/types/super-admin";
-import type { StockLocationType } from "@/lib/types/warehouse";
+import type { StockLocationType, StockMovementType } from "@/lib/types/warehouse";
+import type { StockUnit } from "@/lib/stock-unit";
+import type { WasteReason } from "@/lib/stock/waste-reason";
 
 /** Mirrors MISSING_KITCHEN_ASSIGNMENT / MISSING_WAREHOUSE_ASSIGNMENT. */
 export const MISSING_BRANCH_ASSIGNMENT = "missing_branch_assignment";
@@ -196,7 +198,21 @@ export interface BranchInventoryItem {
   batch_code: string;
   /** Plain calendar date, `YYYY-MM-DD`. Named to match `InventoryItem`. */
   expiry_date?: string | null;
+  /** Unit of measure the product is stocked in. Undefined on legacy rows. */
+  stock_unit?: StockUnit;
   location_id: string;
+}
+
+/** Body for `POST /branch/stock/waste` — write off wasted or expired stock. */
+export interface BranchWasteInput {
+  product_id: string;
+  /** Whole units, must be > 0. */
+  quantity: number;
+  waste_reason?: WasteReason;
+  /** Defaults to "WASTE" server-side. */
+  movement_type?: StockMovementType;
+  batch_code?: string;
+  notes?: string;
 }
 
 // ---- Sub-kitchen production ----

@@ -2,6 +2,7 @@
 // Kept separate from super-admin.ts. Do NOT modify Super Admin types.
 
 import type { BranchPosition } from "@/lib/types/super-admin";
+import type { StockUnit } from "@/lib/stock-unit";
 
 // ---- Locations ----
 export interface Branch {
@@ -225,6 +226,8 @@ export interface AdminInventoryProduct {
    * legacy rows that predate the field.
    */
   kind?: ProductKind;
+  /** Unit of measure the product is stocked in. Undefined on legacy rows. */
+  stock_unit?: StockUnit;
 }
 
 export interface AdminInventoryItem {
@@ -305,6 +308,20 @@ export type RequestStatus =
   | "ALLOCATED"
   | "RECEIVED";
 
+/**
+ * One warehouse batch consumed to fulfil a dispatched line, recorded when the
+ * warehouse marks the request DISPATCHED. A single line can draw across several
+ * batches (FIFO by expiry), so a line carries a list. This is what lets the
+ * receiving kitchen credit each batch with its own code and expiry instead of
+ * one unbatched lump.
+ */
+export interface DispatchedBatch {
+  /** Empty string for unbatched warehouse stock. */
+  batch_code: string;
+  expiry_date?: string | null;
+  quantity: number;
+}
+
 export interface RequestLineItem {
   id: string;
   product_id?: string;
@@ -315,6 +332,11 @@ export interface RequestLineItem {
   quantity_received?: number | null;
   /** What was wrong with this line, set by a warehouse report. */
   issue_note?: string | null;
+  /**
+   * Batches drawn from warehouse stock at DISPATCHED, FIFO by expiry. Absent
+   * until then; carries batch code and expiry through to the kitchen on receipt.
+   */
+  dispatched_batches?: DispatchedBatch[] | null;
 }
 
 /**

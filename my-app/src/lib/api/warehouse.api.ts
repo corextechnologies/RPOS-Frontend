@@ -166,6 +166,8 @@ export const warehouseApi = {
         // Omitted means RAW_MATERIAL server-side; sent only when the user
         // actually chose otherwise.
         ...(body.kind ? { kind: body.kind } : {}),
+        // Omitted means EACH server-side.
+        ...(body.stock_unit ? { stock_unit: body.stock_unit } : {}),
       }),
     });
     return normalizeProduct(data);
@@ -183,6 +185,7 @@ export const warehouseApi = {
     // `null`/"" clears the SKU; a real value is trimmed. `undefined` = untouched.
     if (body.sku !== undefined) payload.sku = optionalText(body.sku ?? undefined) ?? null;
     if (body.kind !== undefined) payload.kind = body.kind;
+    if (body.stock_unit !== undefined) payload.stock_unit = body.stock_unit;
     const data = await request<WarehouseProduct>(
       `/warehouse/products/${productId}`,
       {

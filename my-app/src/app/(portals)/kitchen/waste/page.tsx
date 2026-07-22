@@ -5,6 +5,8 @@ import { KitchenInventoryTable } from "@/components/kitchen/inventory/KitchenInv
 import { KitchenWasteDialog } from "@/components/kitchen/inventory/KitchenWasteDialog";
 import { KitchenNearExpiryList } from "@/components/kitchen/waste/KitchenNearExpiryList";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
+import { WasteEventsTable } from "@/components/waste/WasteEventsTable";
+import { WasteEventDetailDialog } from "@/components/waste/WasteEventDetailDialog";
 import {
   Select,
   SelectContent,
@@ -16,23 +18,28 @@ import {
   KITCHEN_NEAR_EXPIRY_DEFAULT_DAYS,
   useKitchenInventory,
   useKitchenNearExpiry,
+  useKitchenWasteEvents,
   useWasteKitchenStock,
 } from "@/lib/hooks/use-kitchen-inventory";
 import type { KitchenWasteForm } from "@/lib/schemas/kitchen-stock";
 import type { KitchenInventoryItem } from "@/lib/types/kitchen";
 import { isMissingKitchenAssignment } from "@/lib/types/kitchen";
+import type { WasteEvent } from "@/lib/types/waste";
 
 const WINDOW_OPTIONS = [3, 7, 14, 30];
 
 export default function KitchenWastePage() {
   const [withinDays, setWithinDays] = useState(KITCHEN_NEAR_EXPIRY_DEFAULT_DAYS);
   const [wasting, setWasting] = useState<KitchenInventoryItem | null>(null);
+  const [wasteSearch, setWasteSearch] = useState("");
+  const [viewingWaste, setViewingWaste] = useState<WasteEvent | null>(null);
   // Opening from the expiry list means the reason is almost always "expired".
   const [defaultMovementType, setDefaultMovementType] =
     useState<KitchenWasteForm["movement_type"]>("WASTE");
 
   const nearExpiry = useKitchenNearExpiry(withinDays);
   const inventory = useKitchenInventory();
+  const wasteEvents = useKitchenWasteEvents();
   const wasteStock = useWasteKitchenStock();
 
   const unassigned =
@@ -104,6 +111,20 @@ export default function KitchenWastePage() {
           />
 
           <div className="space-y-3">
+            <WasteEventsTable
+            title="Waste & expired"
+            description="Everything written off from your kitchen."
+            searchPlaceholder="Search name, SKU, or batch…"
+            searchValue={wasteSearch}
+            onSearchChange={setWasteSearch}
+            items={wasteEvents.data}
+            isLoading={wasteEvents.isLoading}
+            isError={wasteEvents.isError}
+            onRetry={() => wasteEvents.refetch()}
+            onSelect={setViewingWaste}
+            />
+          </div>
+          <div className="space-y-3">
             <h2 className="font-display text-lg font-semibold tracking-tight text-content">
               All stock
             </h2>
@@ -115,6 +136,8 @@ export default function KitchenWastePage() {
               onWaste={(item) => openWasteDialog(item, "WASTE")}
             />
           </div>
+
+
         </>
       )}
 
@@ -127,6 +150,14 @@ export default function KitchenWastePage() {
         onSubmit={handleWaste}
         isSubmitting={wasteStock.isPending}
         defaultMovementType={defaultMovementType}
+      />
+
+      <WasteEventDetailDialog
+        event={viewingWaste}
+        open={!!viewingWaste}
+        onOpenChange={(open) => {
+          if (!open) setViewingWaste(null);
+        }}
       />
     </div>
   );

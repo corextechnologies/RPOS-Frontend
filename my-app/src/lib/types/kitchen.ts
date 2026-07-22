@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/types/super-admin";
 import type { WasteReason } from "@/lib/stock/waste-reason";
-import type { RequestBranchAllocation } from "@/lib/types/admin";
+import type { ProductKind, RequestBranchAllocation } from "@/lib/types/admin";
+import type { StockUnit } from "@/lib/stock-unit";
 
 // Kitchen (Phase 4) DTOs — mirrors the /v1/kitchen/* backend contract.
 //
@@ -29,6 +30,15 @@ export interface KitchenProduct {
   id: string;
   name: string;
   sku?: string | null;
+  /**
+   * What the product is — a raw material pulled from the warehouse or a finished
+   * good the kitchen makes. Surfaced as the inventory "Category" column, the same
+   * as the warehouse and admin views. Undefined only for legacy rows that predate
+   * the field.
+   */
+  kind?: ProductKind;
+  /** Unit of measure the product is stocked in. Undefined on legacy rows. */
+  stock_unit?: StockUnit;
 }
 
 /**
@@ -361,14 +371,10 @@ export function isStaleStatus(error: unknown): boolean {
 
 // ---- Finished goods, recipes & production (kitchen-owned) ----
 
-/**
- * The unit a component is stocked in.
- *
- * Recipe quantities are whole numbers of these — "30g of sauce" is `30`,
- * because sauce is stocked in grams. Same trick as money in minor units: one
- * mental model, no fractional stock, nothing to round.
- */
-export type StockUnit = "EACH" | "GRAM" | "ML";
+// The unit a component is stocked in. Canonical definition + labels live in
+// `@/lib/stock-unit`; re-exported here for the kitchen DTOs (and existing
+// importers) that reference it.
+export type { StockUnit };
 
 /**
  * The kitchen's own catalogue.

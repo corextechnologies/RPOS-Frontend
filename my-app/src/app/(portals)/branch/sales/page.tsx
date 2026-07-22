@@ -24,6 +24,7 @@ import {
 } from "@/lib/hooks/use-pos-feed";
 import { FEED_MAX_DAYS } from "@/lib/api/pos-admin.api";
 import { formatMinor, sumMinor } from "@/lib/money";
+import { stockUnitLabel } from "@/lib/stock-unit";
 import { posErrorMessage } from "@/lib/api/errors";
 
 /**
@@ -272,9 +273,9 @@ export default function BranchSalesPage() {
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-muted">
                             {row.on_hand}
-                            {row.stock_unit && row.stock_unit !== "EACH" && (
+                            {stockUnitLabel(row.stock_unit) && (
                               <span className="ml-1 text-xs text-faint">
-                                {row.stock_unit.toLowerCase()}
+                                {stockUnitLabel(row.stock_unit)}
                               </span>
                             )}
                           </TableCell>

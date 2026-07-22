@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/types/super-admin";
 import type { WasteReason } from "@/lib/stock/waste-reason";
 import type { ProductKind } from "@/lib/types/admin";
+import type { StockUnit } from "@/lib/types/kitchen";
 
 // Warehouse (Phase 3) DTOs — mirrors the /v1/warehouse/* backend contract.
 //
@@ -32,6 +33,8 @@ export interface InventoryProduct {
    * predate the field).
    */
   kind?: WarehouseProductKind;
+  /** Unit of measure, set at product creation. Undefined on legacy rows. */
+  stock_unit?: StockUnit;
 }
 
 export interface InventoryItem {
@@ -104,6 +107,8 @@ export interface WarehouseProduct {
   sku?: string | null;
   /** Only ever `RAW_MATERIAL` or `RESALE` here — the warehouse buys, it doesn't cook. */
   kind?: WarehouseProductKind;
+  /** Unit of measure, chosen at creation. Undefined on legacy rows. */
+  stock_unit?: StockUnit;
 }
 
 /**
@@ -122,6 +127,8 @@ export interface CreateWarehouseProductInput {
   sku?: string;
   /** Defaults to `RAW_MATERIAL` server-side when omitted. */
   kind?: WarehouseProductKind;
+  /** Unit of measure. Defaults to `EACH` server-side when omitted. */
+  stock_unit?: StockUnit;
 }
 
 export interface WarehouseProductFilters {
@@ -142,6 +149,8 @@ export interface UpdateWarehouseProductInput {
   /** Up to 100 characters, unique per restaurant. Send "" to clear it. */
   sku?: string | null;
   kind?: WarehouseProductKind;
+  /** Unit of measure. Omit to leave unchanged. */
+  stock_unit?: StockUnit;
 }
 
 /** Body for `PUT /warehouse/products/{product_id}/reorder-level`. */

@@ -21,7 +21,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { STOCK_UNITS, STOCK_UNIT_LABEL } from "@/lib/stock-unit";
 import {
   updateWarehouseProductSchema,
   type UpdateWarehouseProductForm,
@@ -69,7 +77,7 @@ export function EditProductDialog({
 }: EditProductDialogProps) {
   const form = useForm<UpdateWarehouseProductForm>({
     resolver: zodResolver(updateWarehouseProductSchema),
-    defaultValues: { name: "", sku: "", kind: "RAW_MATERIAL" },
+    defaultValues: { name: "", sku: "", kind: "RAW_MATERIAL", stock_unit: "EACH" },
   });
 
   // Reseed whenever a different product is opened.
@@ -80,6 +88,8 @@ export function EditProductDialog({
         sku: product.sku ?? "",
         // Fall back to the default only for legacy rows that never had a kind.
         kind: product.kind ?? "RAW_MATERIAL",
+        // Same for the unit — legacy rows predate it.
+        stock_unit: product.stock_unit ?? "EACH",
       });
     }
   }, [open, product, form]);
@@ -137,6 +147,34 @@ export function EditProductDialog({
                   </div>
                   <p className="text-xs text-muted">
                     Things the kitchen makes are added by the kitchen, not here.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="stock_unit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Unit</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a unit" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {STOCK_UNITS.map((unit) => (
+                        <SelectItem key={unit} value={unit}>
+                          {STOCK_UNIT_LABEL[unit]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted">
+                    How this product is stocked and counted.
                   </p>
                   <FormMessage />
                 </FormItem>

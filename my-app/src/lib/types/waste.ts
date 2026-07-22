@@ -11,7 +11,12 @@ import type { StockMovementType } from "@/lib/types/warehouse";
 
 export type WasteLocationType = "WAREHOUSE" | "KITCHEN" | "BRANCH";
 
-/** Product as captured on the waste record — a snapshot at write-off time. */
+/**
+ * Product on a waste record — the product's **current** name/SKU, not a
+ * write-off-time snapshot. A later rename shows the new name on historical rows,
+ * matching the warehouse/admin behaviour already in use. The UI only displays
+ * these, so it does not rely on frozen values.
+ */
 export interface WasteEventProduct {
   id: string;
   name: string;

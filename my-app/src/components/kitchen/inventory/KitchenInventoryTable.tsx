@@ -9,6 +9,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import { matchesStockSearch } from "@/lib/inventory-search";
 import {
+  PRODUCT_KIND_LABEL,
+  productKindBadgeVariant,
+} from "@/lib/product-kind";
+import { stockUnitLabel } from "@/lib/stock-unit";
+import {
   Table,
   TableBody,
   TableCell,
@@ -106,6 +111,7 @@ export function KitchenInventoryTable({
             <TableRow>
               <TableHead>Product</TableHead>
               <TableHead>SKU</TableHead>
+              <TableHead>Category</TableHead>
               <TableHead>Batch</TableHead>
               <TableHead>Expiry</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
@@ -120,6 +126,15 @@ export function KitchenInventoryTable({
                 </TableCell>
                 <TableCell className="text-muted">{item.product.sku || "-"}</TableCell>
                 <TableCell>
+                  {item.product.kind ? (
+                    <Badge variant={productKindBadgeVariant(item.product.kind)}>
+                      {PRODUCT_KIND_LABEL[item.product.kind]}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted">-</span>
+                  )}
+                </TableCell>
+                <TableCell>
                   {item.batch_code ? (
                     <span className="text-muted">{item.batch_code}</span>
                   ) : (
@@ -131,6 +146,11 @@ export function KitchenInventoryTable({
                 <TableCell className="text-muted">{item.expiry_date || "-"}</TableCell>
                 <TableCell className="text-right font-medium text-content">
                   {item.quantity}
+                  {stockUnitLabel(item.product.stock_unit) && (
+                    <span className="ml-1 text-xs font-normal text-faint">
+                      {stockUnitLabel(item.product.stock_unit)}
+                    </span>
+                  )}
                 </TableCell>
                 {onWaste && (
                   <TableCell className="text-right">
