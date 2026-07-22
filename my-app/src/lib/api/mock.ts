@@ -34,6 +34,7 @@ import type {
   UpdateLocationInput,
   UpdateProductPricingInput,
   UpdateRequestStatusInput,
+  ProductKind,
   Warehouse,
 } from "@/lib/types/admin";
 import {
@@ -150,6 +151,7 @@ import type {
   WarehouseRequestFilters,
   WarehouseProduct,
   WarehouseProductFilters,
+  WarehouseProductKind,
   CreateWarehouseProductInput,
   UpdateWarehouseProductInput,
   ReorderLevel,
@@ -1762,11 +1764,28 @@ function applyDispatchToStock(
   }
 }
 
-function toPublicInventoryItem(item: MockInventoryItem): InventoryItem {
+/**
+ * Narrow a stored product kind to what a warehouse may own. A warehouse never
+ * stocks finished goods, so anything but RAW_MATERIAL/RESALE resolves to
+ * undefined rather than leaking a kitchen kind onto a warehouse row.
+ */
+function warehouseKind(
+  kind: ProductKind | undefined,
+): WarehouseProductKind | undefined {
+  return kind === "RAW_MATERIAL" || kind === "RESALE" ? kind : undefined;
+}
+
+function toPublicInventoryItem(
+  item: MockInventoryItem,
+  db: MockDb,
+): InventoryItem {
+  // The row stores only {id, name, sku}; resolve the kind from the catalog so
+  // the warehouse inventory view can show what each product is.
+  const product = db.products.find((p) => p.id === item.product_id);
   return {
     id: item.id,
     product_id: item.product_id,
-    product: item.product,
+    product: { ...item.product, kind: warehouseKind(product?.kind) },
     quantity: item.quantity,
     batch_code: item.batch_code,
     expiry_date: item.expiry_date,
@@ -3495,6 +3514,7 @@ export const mockClient: ApiClient = {
             name: item.product.name,
             sku: item.product.sku,
             cost_price: product?.cost_price ?? null,
+            kind: product?.kind,
           },
           quantity: item.quantity,
           batch_code: item.batch_code,
@@ -3736,7 +3756,12 @@ export const mockClient: ApiClient = {
     // product and Admin prices it, and the keeper must never see what it cost.
     const products: WarehouseProduct[] = db.products
       .filter((p) => p.restaurant_id === warehouse.restaurant_id)
-      .map((p) => ({ id: p.id, name: p.name, sku: p.sku }));
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        kind: warehouseKind(p.kind),
+      }));
     return delay(products);
   },
 
@@ -3796,6 +3821,7 @@ export const mockClient: ApiClient = {
       id: created.id,
       name: created.name,
       sku: created.sku,
+      kind: warehouseKind(created.kind),
     };
     return delay(result);
   },
@@ -3859,6 +3885,7 @@ export const mockClient: ApiClient = {
       id: product.id,
       name: product.name,
       sku: product.sku,
+      kind: warehouseKind(product.kind),
     };
     return delay(result);
   },
@@ -3901,7 +3928,7 @@ export const mockClient: ApiClient = {
         (item) =>
           item.location_type === "WAREHOUSE" && item.location_id === warehouse.id,
       )
-      .map(toPublicInventoryItem);
+      .map((item) => toPublicInventoryItem(item, db));
     return delay(items);
   },
 
@@ -3958,7 +3985,7 @@ export const mockClient: ApiClient = {
     }
 
     saveDb(db);
-    return delay(toPublicInventoryItem(received));
+    return delay(toPublicInventoryItem(received, db));
   },
 
   async listNearExpiryInventory(filters?: NearExpiryFilters) {
@@ -3983,7 +4010,7 @@ export const mockClient: ApiClient = {
           item.expiry_date <= cutoff,
       )
       .sort((a, b) => (a.expiry_date ?? "").localeCompare(b.expiry_date ?? ""))
-      .map(toPublicInventoryItem);
+      .map((item) => toPublicInventoryItem(item, db));
 
     return delay(items);
   },
@@ -4016,7 +4043,7 @@ export const mockClient: ApiClient = {
 
     item.quantity = next;
     saveDb(db);
-    return delay(toPublicInventoryItem(item));
+    return delay(toPublicInventoryItem(item, db));
   },
 
   async wasteWarehouseStock(body: WasteStockInput) {
@@ -4051,7 +4078,7 @@ export const mockClient: ApiClient = {
 
     item.quantity -= quantity;
     saveDb(db);
-    return delay(toPublicInventoryItem(item));
+    return delay(toPublicInventoryItem(item, db));
   },
 
   async listWarehouseUsers(params) {

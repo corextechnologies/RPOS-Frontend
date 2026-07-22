@@ -13,6 +13,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { AdminInventoryItem } from "@/lib/types/admin";
+import {
+  PRODUCT_KIND_LABEL,
+  productKindBadgeVariant,
+} from "@/lib/product-kind";
 
 interface AdminInventoryTableProps {
   items?: AdminInventoryItem[];
@@ -82,6 +86,7 @@ export function AdminInventoryTable({
             <TableRow>
               <TableHead>Product</TableHead>
               <TableHead>SKU</TableHead>
+              <TableHead>Category</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Batch</TableHead>
               <TableHead>Expiry</TableHead>
@@ -96,6 +101,15 @@ export function AdminInventoryTable({
                   <p className="font-medium text-content">{item.product.name}</p>
                 </TableCell>
                 <TableCell className="text-muted">{item.product.sku || "-"}</TableCell>
+                <TableCell>
+                  {item.product.kind ? (
+                    <Badge variant={productKindBadgeVariant(item.product.kind)}>
+                      {PRODUCT_KIND_LABEL[item.product.kind]}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted">-</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{item.location_type}</Badge>
                   <p className="mt-1 text-xs text-muted">

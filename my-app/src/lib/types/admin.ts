@@ -219,6 +219,12 @@ export interface AdminInventoryProduct {
   sku?: string | null;
   /** Decimal string, e.g. "1.20". Null until Admin prices it. */
   cost_price: string | null;
+  /**
+   * What the product is — raw material, resale, or made in-house. Admin sees
+   * every location, so any of the three can appear here. Undefined only for
+   * legacy rows that predate the field.
+   */
+  kind?: ProductKind;
 }
 
 export interface AdminInventoryItem {

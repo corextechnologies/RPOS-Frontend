@@ -13,6 +13,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import {
+  PRODUCT_KIND_LABEL,
+  productKindBadgeVariant,
+} from "@/lib/product-kind";
+import {
   Table,
   TableBody,
   TableCell,
@@ -91,6 +95,7 @@ export function InventoryTable({
             <TableRow>
               <TableHead>Product</TableHead>
               <TableHead>SKU</TableHead>
+              <TableHead>Category</TableHead>
               <TableHead>Batch</TableHead>
               <TableHead>Expiry</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
@@ -104,6 +109,15 @@ export function InventoryTable({
                   <p className="font-medium text-content">{item.product.name}</p>
                 </TableCell>
                 <TableCell className="text-muted">{item.product.sku || "-"}</TableCell>
+                <TableCell>
+                  {item.product.kind ? (
+                    <Badge variant={productKindBadgeVariant(item.product.kind)}>
+                      {PRODUCT_KIND_LABEL[item.product.kind]}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted">-</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {item.batch_code ? (
                     <span className="text-muted">{item.batch_code}</span>

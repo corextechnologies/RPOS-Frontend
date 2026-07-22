@@ -79,6 +79,12 @@ export const updateWarehouseProductSchema = z.object({
     .min(1, "Name is required")
     .max(255, "Name must be 255 characters or fewer"),
   sku: z.string().max(100, "SKU must be 100 characters or fewer").optional(),
+  /**
+   * The two kinds a warehouse may own. `FINISHED_GOOD` is absent for the same
+   * reason as on create — the kitchen makes those, and a form that can't offer
+   * it can't send one.
+   */
+  kind: z.enum(["RAW_MATERIAL", "RESALE"]),
 });
 
 export type UpdateWarehouseProductForm = z.infer<

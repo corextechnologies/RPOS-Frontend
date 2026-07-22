@@ -25,6 +25,13 @@ export interface InventoryProduct {
   id: string;
   name: string;
   sku?: string | null;
+  /**
+   * What the product is — `RAW_MATERIAL` or `RESALE`. Set when the warehouse
+   * creates it; the warehouse never stocks finished goods, so the field is
+   * narrowed to the two kinds it can own (undefined only for legacy rows that
+   * predate the field).
+   */
+  kind?: WarehouseProductKind;
 }
 
 export interface InventoryItem {
