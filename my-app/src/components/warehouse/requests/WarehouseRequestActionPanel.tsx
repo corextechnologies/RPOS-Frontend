@@ -9,6 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   UpdateWarehouseRequestStatusInput,
@@ -19,6 +21,7 @@ import {
   warehouseActionHint,
   warehouseActionLabel,
   warehouseAllowedTransitions,
+  warehouseTransitionNeedsApprovals,
   warehouseTransitionNeedsReceipts,
 } from "@/lib/warehouse/request-transitions";
 import {
@@ -64,6 +67,7 @@ export function WarehouseRequestActionPanel({
   const [pending, setPending] = useState<WarehouseRequestStatus | null>(null);
   const [notes, setNotes] = useState("");
   const [drafts, setDrafts] = useState<ReceiptDraft[]>([]);
+  const [lineQtys, setLineQtys] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
 
   const transitions = warehouseAllowedTransitions(
@@ -90,6 +94,10 @@ export function WarehouseRequestActionPanel({
     pending != null &&
     warehouseTransitionNeedsReceipts(request.request_type, pending);
 
+  const needsApprovals =
+    pending != null &&
+    warehouseTransitionNeedsApprovals(request.request_type, pending);
+
   // Coming out of REPORTED, the warehouse confirms the whole order's total, not
   // the delivery that just arrived.
   const isCumulative = request.status === "RESOLVED" || request.status === "REPORTED";
@@ -110,12 +118,23 @@ export function WarehouseRequestActionPanel({
     if (warehouseTransitionNeedsReceipts(request.request_type, status)) {
       setDrafts(seedReceiptDrafts(request.line_items));
     }
+    if (warehouseTransitionNeedsApprovals(request.request_type, status)) {
+      setLineQtys(
+        Object.fromEntries(
+          request.line_items.map((line) => [
+            line.id,
+            String(line.quantity_approved ?? line.quantity_requested),
+          ]),
+        ),
+      );
+    }
   };
 
   const reset = () => {
     setPending(null);
     setNotes("");
     setDrafts([]);
+    setLineQtys({});
     setErrorMessage(undefined);
   };
 
@@ -131,10 +150,32 @@ export function WarehouseRequestActionPanel({
       setErrorMessage("Enter a whole quantity within the ordered amount for every line.");
       return;
     }
+    if (needsApprovals) {
+      for (const line of request.line_items) {
+        const value = Number(lineQtys[line.id]);
+        if (
+          !Number.isInteger(value) ||
+          value < 0 ||
+          value > line.quantity_requested
+        ) {
+          setErrorMessage(
+            `Enter a valid quantity for ${line.product_name} (0–${line.quantity_requested}).`,
+          );
+          return;
+        }
+      }
+    }
     try {
       await onSubmit({
         to_status: pending,
         notes: notes || undefined,
+        // Per-line approved quantities for a partial approval.
+        line_approvals: needsApprovals
+          ? request.line_items.map((line) => ({
+              line_item_id: line.id,
+              quantity_approved: Number(lineQtys[line.id]),
+            }))
+          : undefined,
         // One entry per line: omitting a line loses its batch and expiry, which
         // would hide that stock from near-expiry alerts and labels.
         line_receipts: needsReceipts
@@ -196,6 +237,43 @@ export function WarehouseRequestActionPanel({
                 isCumulative={isCumulative}
                 onChange={patchDraft}
               />
+            )}
+
+            {needsApprovals && (
+              <div className="space-y-3">
+                {request.line_items.map((line) => (
+                  <div
+                    key={line.id}
+                    className="grid gap-2 sm:grid-cols-[1fr_140px] sm:items-end"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-content">
+                        {line.product_name}
+                      </p>
+                      <p className="text-xs text-muted">
+                        Requested: {line.quantity_requested}
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`approve-qty-${line.id}`}>Approved qty</Label>
+                      <Input
+                        id={`approve-qty-${line.id}`}
+                        type="number"
+                        min={0}
+                        max={line.quantity_requested}
+                        step={1}
+                        value={lineQtys[line.id] ?? ""}
+                        onChange={(e) =>
+                          setLineQtys((prev) => ({
+                            ...prev,
+                            [line.id]: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             {reportBlocked && (

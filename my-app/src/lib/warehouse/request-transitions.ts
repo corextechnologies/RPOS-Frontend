@@ -7,7 +7,9 @@ import type {
  * Status moves the WAREHOUSE may make. Deliberately narrower than the full
  * workflow — everything omitted here belongs to another portal:
  *
- * - Kitchen requests: the kitchen marks RECEIVED after we dispatch.
+ * - Kitchen requests: the warehouse drives PENDING → APPROVED/PARTIALLY_APPROVED
+ *   → DISPATCHED; a partial approval carries per-line quantities and dispatch
+ *   releases those. The kitchen marks RECEIVED after we dispatch.
  * - Purchase orders: Admin drives PENDING → APPROVED/PARTIALLY_APPROVED →
  *   DISPATCHED, and owns RESOLVED. The warehouse confirms or reports.
  *
@@ -25,8 +27,10 @@ export const WAREHOUSE_REQUEST_TRANSITIONS: Record<
   Partial<Record<WarehouseRequestStatus, readonly WarehouseRequestStatus[]>>
 > = {
   KITCHEN_TO_WAREHOUSE: {
-    PENDING: ["APPROVED"],
+    // Approve in full, or partially approve with per-line quantities.
+    PENDING: ["APPROVED", "PARTIALLY_APPROVED"],
     APPROVED: ["DISPATCHED"],
+    PARTIALLY_APPROVED: ["DISPATCHED"],
     // DISPATCHED is the kitchen's cue, not ours. Listed to make the ambiguity
     // explicit at the one place a reader would otherwise get it wrong.
     DISPATCHED: [],
@@ -50,6 +54,8 @@ export function warehouseActionLabel(toStatus: WarehouseRequestStatus): string {
   switch (toStatus) {
     case "APPROVED":
       return "Approve";
+    case "PARTIALLY_APPROVED":
+      return "Partial approve";
     case "DISPATCHED":
       return "Dispatch";
     case "REPORTED":
@@ -70,8 +76,11 @@ export function warehouseActionHint(
   toStatus: WarehouseRequestStatus,
   fromStatus?: WarehouseRequestStatus,
 ): string | null {
+  if (type === "KITCHEN_TO_WAREHOUSE" && toStatus === "PARTIALLY_APPROVED") {
+    return "Approve a lower quantity per line. Dispatch later releases the approved amounts, not the requested ones.";
+  }
   if (type === "KITCHEN_TO_WAREHOUSE" && toStatus === "DISPATCHED") {
-    return "Dispatching removes these quantities from your on-hand stock. The kitchen confirms receipt on their side.";
+    return "Dispatching removes the approved quantities from your on-hand stock. The kitchen confirms receipt on their side.";
   }
   if (type === "WAREHOUSE_TO_ADMIN_PO" && toStatus === "RECEIVED") {
     // This used to close the order only, with intake booked separately. Since
@@ -98,4 +107,17 @@ export function warehouseTransitionNeedsReceipts(
 ): boolean {
   if (type !== "WAREHOUSE_TO_ADMIN_PO") return false;
   return toStatus === "RECEIVED" || toStatus === "REPORTED";
+}
+
+/**
+ * Whether this move must carry `line_approvals` (per-line approved quantities).
+ *
+ * Only the warehouse's own PARTIALLY_APPROVED on a kitchen request does — the
+ * warehouse never partially approves a PO (that is Admin's move).
+ */
+export function warehouseTransitionNeedsApprovals(
+  type: WarehouseRequestType,
+  toStatus: WarehouseRequestStatus,
+): boolean {
+  return type === "KITCHEN_TO_WAREHOUSE" && toStatus === "PARTIALLY_APPROVED";
 }

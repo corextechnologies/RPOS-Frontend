@@ -15,6 +15,10 @@ import {
   useMarkNotificationRead,
   useNotifications,
 } from "@/lib/hooks/use-notifications";
+import {
+  formatNotificationBody,
+  formatNotificationTitle,
+} from "@/lib/notifications/format";
 import { notificationLink } from "@/lib/notifications/links";
 import type { AppNotification } from "@/lib/types/notification";
 import { cn, formatDate } from "@/lib/utils";
@@ -91,13 +95,18 @@ export function NotificationBell() {
                             : "font-medium text-content",
                         )}
                       >
-                        {notification.title}
+                        {formatNotificationTitle(
+                          notification.title,
+                          notification.body,
+                        )}
                       </p>
                       {!notification.is_read && (
                         <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand" />
                       )}
                     </div>
-                    <p className="text-xs text-muted">{notification.body}</p>
+                    <p className="text-xs text-muted">
+                      {formatNotificationBody(notification.body)}
+                    </p>
                     <p className="text-xs text-faint">
                       {formatDate(notification.created_at)}
                     </p>

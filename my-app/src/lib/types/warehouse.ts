@@ -248,6 +248,7 @@ export type PurchaseOrderStatus =
 export type KitchenRequestStatus =
   | "PENDING"
   | "APPROVED"
+  | "PARTIALLY_APPROVED"
   | "DISPATCHED"
   | "RECEIVED";
 

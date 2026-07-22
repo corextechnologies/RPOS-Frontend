@@ -30,6 +30,7 @@ const STATUS_OPTIONS: Array<KitchenRequestStatus | "all"> = [
   "all",
   "PENDING",
   "APPROVED",
+  "PARTIALLY_APPROVED",
   "DISPATCHED",
   "RECEIVED",
 ];
