@@ -83,8 +83,8 @@ export function PoReceiptsEditor({
                   type="number"
                   min={0}
                   max={cap}
-                  step="1"
-                  inputMode="numeric"
+                  step="any"
+                  inputMode="decimal"
                   value={draft.quantity_received}
                   aria-invalid={
                     draft.quantity_received === "" ||

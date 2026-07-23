@@ -28,7 +28,14 @@ import {
   kitchenRequestLineDefaults,
   type CreateKitchenWarehouseRequestForm,
 } from "@/lib/schemas/kitchen-request";
-import type { KitchenWarehouse } from "@/lib/types/kitchen";
+import {
+  normalizeUnitsPerPack,
+  packConversionHint,
+  qtyConversionHint,
+  qtyFromPacks,
+} from "@/lib/pack";
+import { formatStockQty, stockUnitLabel } from "@/lib/stock-unit";
+import type { KitchenProduct, KitchenWarehouse } from "@/lib/types/kitchen";
 import { useKitchenWarehouseProductOptions } from "@/lib/hooks/use-kitchen-inventory";
 
 interface NewWarehouseRequestFormProps {
@@ -66,14 +73,19 @@ export function NewWarehouseRequestForm({
   // kitchen's own inventory — see `useKitchenWarehouseProductOptions`. This is
   // what lets a never-stocked raw material be requested for the first time.
   const selectedWarehouseId = useWatch({ control: form.control, name: "warehouse_id" }) ?? "";
+  const watchedLines = useWatch({ control: form.control, name: "lines" }) ?? [];
   const {
     products,
+    onHandById,
     isLoading: productsLoading,
     isError: productsError,
   } = useKitchenWarehouseProductOptions(selectedWarehouseId);
 
   const hasWarehouse = selectedWarehouseId !== "";
   const productsEmpty = hasWarehouse && !productsLoading && !productsError && products.length === 0;
+
+  const productById = (id: string): KitchenProduct | undefined =>
+    products.find((p) => p.id === id);
 
   return (
     <Form {...form}>
@@ -105,57 +117,82 @@ export function NewWarehouseRequestForm({
         />
 
         <div className="space-y-4">
-          {fields.map((field, index) => (
-            <div
-              key={field.id}
-              className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2/40 px-4 py-4 sm:flex-row sm:items-start"
-            >
-              <FormField
-                control={form.control}
-                name={`lines.${index}.product_id`}
-                render={({ field: productField }) => (
-                  <FormItem className="flex-1">
-                    <FormLabel>Product</FormLabel>
-                    <Select
-                      value={productField.value}
-                      onValueChange={productField.onChange}
-                      disabled={!hasWarehouse || productsLoading || products.length === 0}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              !hasWarehouse
-                                ? "Choose a warehouse first"
-                                : productsLoading
-                                  ? "Loading products…"
-                                  : products.length === 0
-                                    ? "No stock at this warehouse"
-                                    : "Select a product"
-                            }
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {products.map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name}
-                            {product.sku ? ` · ${product.sku}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          {fields.map((field, index) => {
+            const line = watchedLines[index];
+            const selected = line?.product_id
+              ? productById(line.product_id)
+              : undefined;
+            const unitsPerPack = normalizeUnitsPerPack(selected?.units_per_pack);
+            const qtyNum = Number(line?.quantity_requested);
+            const available = selected
+              ? onHandById.get(selected.id)
+              : undefined;
+            const overRequested =
+              available != null &&
+              Number.isFinite(qtyNum) &&
+              qtyNum > available;
+            const unitHint =
+              selected && Number.isFinite(qtyNum) && qtyNum > 0
+                ? unitsPerPack
+                  ? qtyConversionHint(qtyNum, unitsPerPack, selected.stock_unit)
+                  : stockUnitLabel(selected.stock_unit)
+                    ? `${qtyNum} ${stockUnitLabel(selected.stock_unit)}`
+                    : ""
+                : "";
 
-              <FormField
-                control={form.control}
-                name={`lines.${index}.quantity_requested`}
-                render={({ field: qtyField }) => (
-                  <FormItem className="sm:w-32">
-                    <FormLabel>Quantity</FormLabel>
+            return (
+              <div
+                key={field.id}
+                className="flex flex-col gap-3 rounded-xl border border-line bg-surface-2/40 px-4 py-4 sm:flex-row sm:items-start"
+              >
+                <FormField
+                  control={form.control}
+                  name={`lines.${index}.product_id`}
+                  render={({ field: productField }) => (
+                    <FormItem className="flex-1">
+                      <FormLabel>Product</FormLabel>
+                      <Select
+                        value={productField.value}
+                        onValueChange={productField.onChange}
+                        disabled={!hasWarehouse || productsLoading || products.length === 0}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue
+                              placeholder={
+                                !hasWarehouse
+                                  ? "Choose a warehouse first"
+                                  : productsLoading
+                                    ? "Loading products…"
+                                    : products.length === 0
+                                      ? "No stock at this warehouse"
+                                      : "Select a product"
+                              }
+                            />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {products.map((product) => (
+                            <SelectItem key={product.id} value={product.id}>
+                              {product.name}
+                              {product.sku ? ` · ${product.sku}` : ""}
+                              {product.units_per_pack
+                                ? ` · ${product.units_per_pack}/${stockUnitLabel(product.stock_unit) || product.stock_unit.toLowerCase()}/pack`
+                                : stockUnitLabel(product.stock_unit)
+                                  ? ` · ${stockUnitLabel(product.stock_unit)}`
+                                  : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {unitsPerPack && selected && (
+                  <FormItem className="sm:w-28">
+                    <FormLabel>Packs</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -163,28 +200,83 @@ export function NewWarehouseRequestForm({
                         step="1"
                         inputMode="numeric"
                         placeholder="0"
-                        {...qtyField}
+                        onChange={(e) => {
+                          const packs = Number(e.target.value);
+                          if (!Number.isInteger(packs) || packs <= 0) return;
+                          const qty = qtyFromPacks(packs, unitsPerPack);
+                          if (qty == null) return;
+                          form.setValue(
+                            `lines.${index}.quantity_requested`,
+                            String(qty),
+                            { shouldValidate: true },
+                          );
+                        }}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <p className="text-xs text-faint">
+                      {Number.isFinite(qtyNum) && qtyNum > 0
+                        ? packConversionHint(
+                            qtyNum / unitsPerPack,
+                            unitsPerPack,
+                            selected.stock_unit,
+                          )
+                        : `1 pack = ${unitsPerPack} ${stockUnitLabel(selected.stock_unit) || selected.stock_unit.toLowerCase()}`}
+                    </p>
                   </FormItem>
                 )}
-              />
 
-              {fields.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Remove line ${index + 1}`}
-                  className="text-danger sm:mt-8"
-                  onClick={() => remove(index)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          ))}
+                <FormField
+                  control={form.control}
+                  name={`lines.${index}.quantity_requested`}
+                  render={({ field: qtyField }) => (
+                    <FormItem className="sm:w-32">
+                      <FormLabel>Quantity</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="any"
+                          inputMode="decimal"
+                          placeholder="0"
+                          {...qtyField}
+                        />
+                      </FormControl>
+                      {unitHint && (
+                        <p className="text-xs text-faint">{unitHint}</p>
+                      )}
+                      {selected && available != null && (
+                        <p
+                          className={
+                            overRequested
+                              ? "text-xs text-warning"
+                              : "text-xs text-faint"
+                          }
+                        >
+                          {overRequested
+                            ? `Only ${formatStockQty(available, selected.stock_unit)} available`
+                            : `${formatStockQty(available, selected.stock_unit)} available`}
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {fields.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove line ${index + 1}`}
+                    className="text-danger sm:mt-8"
+                    onClick={() => remove(index)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {productsError && (

@@ -124,3 +124,102 @@ export function stockUnitLabel(unit?: StockUnit | null): string {
 export function stockUnitColumnLabel(unit: StockUnit): string {
   return STOCK_UNIT_LABEL[unit] ?? String(unit).toLowerCase();
 }
+
+// ---- Dimensions & conversion ----
+//
+// A recipe measured in grams must be able to draw down flour stocked in
+// kilograms, so units need a notion of what *kind* of measure they are and how
+// to translate between members of the same kind. Two units convert only inside
+// one dimension, and only where a fixed factor is meaningful.
+
+/**
+ * The physical (or logical) quantity a unit measures.
+ *
+ * Only `MASS` and `VOLUME` are freely convertible — a fixed factor relates their
+ * members (1 kg = 1000 g). The rest are their own dimensions with no cross-unit
+ * factor: "2 tbsp" and "1 slice" have no universal size, so a unit there only
+ * ever converts to itself. This is what stops a recipe asking for "100 g of
+ * eggs" from silently succeeding.
+ */
+export type UnitDimension =
+  | "MASS"
+  | "VOLUME"
+  | "COUNT"
+  | "SMALL_MEASURE"
+  | "PORTION"
+  | "PRODUCE";
+
+/** Every stock unit's dimension. A missing entry is a compile error. */
+export const UNIT_DIMENSION: Record<StockUnit, UnitDimension> = {
+  // Count / discrete
+  EACH: "COUNT",
+  DOZEN: "COUNT",
+  PACK: "COUNT",
+  PIECE: "COUNT",
+  // Weight
+  KG: "MASS",
+  GRAM: "MASS",
+  // Volume
+  LITER: "VOLUME",
+  ML: "VOLUME",
+  // Small measure (baking / liquid)
+  TEASPOON: "SMALL_MEASURE",
+  TABLESPOON: "SMALL_MEASURE",
+  CUP: "SMALL_MEASURE",
+  // Portioning (kitchen recipes)
+  SLICE: "PORTION",
+  PORTION: "PORTION",
+  SCOOP: "PORTION",
+  // Produce
+  BUNCH: "PRODUCE",
+  HEAD: "PRODUCE",
+};
+
+/**
+ * Base units per 1 of this unit, within its dimension's canonical base
+ * (GRAM for MASS, ML for VOLUME). Only convertible units appear here; a lookup
+ * miss means "not freely convertible" and callers must require an exact match.
+ */
+export const UNIT_BASE_FACTOR: Partial<Record<StockUnit, number>> = {
+  // MASS — canonical base is GRAM
+  KG: 1000,
+  GRAM: 1,
+  // VOLUME — canonical base is ML
+  LITER: 1000,
+  ML: 1,
+};
+
+/** True for the two dimensions whose members share a fixed conversion factor. */
+export function isConvertibleDimension(dimension: UnitDimension): boolean {
+  return dimension === "MASS" || dimension === "VOLUME";
+}
+
+// ---- Quantity formatting ----
+
+/**
+ * Render a stock quantity as a string, trimming float noise and trailing zeros.
+ *
+ * Stock is no longer strictly whole — a recipe drawing 100 g from kg stock leaves
+ * 0.7 kg behind — so a quantity may be fractional. This keeps up to three
+ * decimals (0.7, 0.25), collapses `0.7000000001` float artifacts, and never
+ * shows a pointless `.0` (95, not 95.0).
+ */
+export function formatQtyNumber(qty: number): string {
+  if (!Number.isFinite(qty)) return String(qty);
+  // Round to 3 dp to kill binary-float drift, then let String() drop trailing
+  // zeros (Number(0.70) === 0.7, so "0.7" falls out for free).
+  const rounded = Math.round(qty * 1000) / 1000;
+  return String(rounded);
+}
+
+/**
+ * A quantity with its unit label appended — "95 kg", "0.7 kg", "19" (EACH is
+ * blanked, as it is next to any quantity). Use for inline amounts; use
+ * {@link stockUnitColumnLabel} where a dedicated Unit column needs "each" spelt
+ * out.
+ */
+export function formatStockQty(qty: number, unit?: StockUnit | null): string {
+  const num = formatQtyNumber(qty);
+  const label = stockUnitLabel(unit);
+  return label ? `${num} ${label}` : num;
+}

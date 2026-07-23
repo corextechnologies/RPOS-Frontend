@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus } from "lucide-react";
 import { AddStaffDialog } from "@/components/warehouse/staff/AddStaffDialog";
 import { StaffTable } from "@/components/warehouse/staff/StaffTable";
+import { WarehouseNoAccess } from "@/components/warehouse/WarehouseNoAccess";
 import { WarehouseUnassigned } from "@/components/warehouse/WarehouseUnassigned";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -35,7 +36,8 @@ export default function WarehouseStaffPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [adding, setAdding] = useState(false);
-  const staff = useWarehouseStaff(page);
+  const allowed = can("staff:read");
+  const staff = useWarehouseStaff(page, allowed);
   const createStaff = useCreateWarehouseStaff();
   const [editing, setEditing] = useState<WarehouseStaff | null>(null);
   const [confirm, setConfirm] = useState<{
@@ -110,7 +112,7 @@ export default function WarehouseStaffPage() {
             Staff you created for your warehouse.
           </p>
         </div>
-        {!unassigned && can("staff:create") && (
+        {!unassigned && allowed && can("staff:create") && (
           <Button type="button" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" />
             Add staff
@@ -118,7 +120,9 @@ export default function WarehouseStaffPage() {
         )}
       </div>
 
-      {unassigned ? (
+      {!allowed ? (
+        <WarehouseNoAccess />
+      ) : unassigned ? (
         <WarehouseUnassigned />
       ) : (
         <>

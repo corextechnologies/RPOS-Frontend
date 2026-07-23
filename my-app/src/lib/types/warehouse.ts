@@ -35,6 +35,11 @@ export interface InventoryProduct {
   kind?: WarehouseProductKind;
   /** Unit of measure, set at product creation. Always present (defaults to EACH). */
   stock_unit: StockUnit;
+  /**
+   * Optional pack helper: 1 pack = N `stock_unit`s (e.g. 5 when flour is KG).
+   * Ledger quantity stays in `stock_unit`; packs are display-only.
+   */
+  units_per_pack?: number | null;
 }
 
 export interface InventoryItem {
@@ -55,7 +60,8 @@ export interface InventoryItem {
  *
  * `GET /warehouse/users` is creator-scoped: it returns only the staff this
  * manager created, never everyone attached to the warehouse. UI copy must not
- * imply otherwise. The API assigns them the WAREHOUSE_MANAGER role.
+ * imply otherwise. The API assigns them the WAREHOUSE_STAFF role (managers are
+ * created by Admin and stay WAREHOUSE_MANAGER).
  */
 export interface WarehouseStaff {
   id: string;
@@ -109,6 +115,10 @@ export interface WarehouseProduct {
   kind?: WarehouseProductKind;
   /** Unit of measure, chosen at creation. Always present (defaults to EACH). */
   stock_unit: StockUnit;
+  /**
+   * Optional pack helper: 1 pack = N `stock_unit`s. Null/omit = no pack display.
+   */
+  units_per_pack?: number | null;
 }
 
 /**
@@ -129,6 +139,11 @@ export interface CreateWarehouseProductInput {
   kind?: WarehouseProductKind;
   /** Unit of measure. Defaults to `EACH` server-side when omitted. */
   stock_unit?: StockUnit;
+  /**
+   * Optional. 1 pack = N stock units. Omit or null = no pack helper.
+   * Integer >= 1.
+   */
+  units_per_pack?: number | null;
 }
 
 export interface WarehouseProductFilters {
@@ -151,6 +166,10 @@ export interface UpdateWarehouseProductInput {
   kind?: WarehouseProductKind;
   /** Unit of measure. Omit to leave unchanged. */
   stock_unit?: StockUnit;
+  /**
+   * Pack helper. Omit = leave unchanged; `null` clears it; integer >= 1 sets it.
+   */
+  units_per_pack?: number | null;
 }
 
 /** Body for `PUT /warehouse/products/{product_id}/reorder-level`. */
@@ -181,7 +200,7 @@ export interface UpdateStockExpiryInput {
 /** Body for `POST /warehouse/stock/receive` — incoming stock. */
 export interface ReceiveStockInput {
   product_id: string;
-  /** Whole units, must be > 0. */
+  /** In `stock_unit`, must be > 0. May be fractional (e.g. 2.5 kg). */
   quantity: number;
   /** Omitted entirely for unbatched stock. */
   batch_code?: string;
@@ -210,7 +229,7 @@ export type StockMovementType = "WASTE" | "EXPIRY";
 /** Body for `POST /warehouse/stock/waste` — write off wasted or expired stock. */
 export interface WasteStockInput {
   product_id: string;
-  /** Whole units, must be > 0. */
+  /** In `stock_unit`, must be > 0. May be fractional. */
   quantity: number;
   /**
    * Optional on this endpoint (required on the kitchen's), but always sent:

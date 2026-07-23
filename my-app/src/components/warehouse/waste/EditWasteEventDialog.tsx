@@ -143,9 +143,9 @@ export function EditWasteEventDialog({
                   <FormControl>
                     <Input
                       type="number"
-                      min={1}
-                      step="1"
-                      inputMode="numeric"
+                      min={0}
+                      step="any"
+                      inputMode="decimal"
                       placeholder="0"
                       {...field}
                     />

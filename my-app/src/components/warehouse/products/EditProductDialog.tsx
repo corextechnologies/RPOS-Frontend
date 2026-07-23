@@ -70,7 +70,13 @@ export function EditProductDialog({
 }: EditProductDialogProps) {
   const form = useForm<UpdateWarehouseProductForm>({
     resolver: zodResolver(updateWarehouseProductSchema),
-    defaultValues: { name: "", sku: "", kind: "RAW_MATERIAL", stock_unit: "EACH" },
+    defaultValues: {
+      name: "",
+      sku: "",
+      kind: "RAW_MATERIAL",
+      stock_unit: "EACH",
+      units_per_pack: "",
+    },
   });
 
   // Reseed only when the dialog opens or a genuinely different product loads —
@@ -88,6 +94,10 @@ export function EditProductDialog({
         kind: product.kind ?? "RAW_MATERIAL",
         // Same for the unit — legacy rows predate it.
         stock_unit: product.stock_unit ?? "EACH",
+        units_per_pack:
+          product.units_per_pack != null && product.units_per_pack > 0
+            ? String(product.units_per_pack)
+            : "",
       });
     }
     // Intentionally keyed on identity, not the `product` object or `form`.
@@ -167,6 +177,31 @@ export function EditProductDialog({
                   </FormControl>
                   <p className="text-xs text-muted">
                     How this product is stocked and counted.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="units_per_pack"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Units per pack (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={1}
+                      step="1"
+                      inputMode="numeric"
+                      placeholder="e.g. 5"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted">
+                    1 pack = this many of the unit above. Clear to hide pack
+                    counts on inventory.
                   </p>
                   <FormMessage />
                 </FormItem>

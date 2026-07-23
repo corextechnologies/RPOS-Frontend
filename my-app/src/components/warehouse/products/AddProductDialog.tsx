@@ -160,6 +160,32 @@ export function AddProductDialog({
 
             <FormField
               control={form.control}
+              name="units_per_pack"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Units per pack (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={1}
+                      step="1"
+                      inputMode="numeric"
+                      placeholder="e.g. 5"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted">
+                    If this item comes in packs or bags: how many of the unit above
+                    are in one pack (e.g. flour in kg with 5 → one 5&nbsp;kg bag).
+                    Leave blank if you only count the unit itself.
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="sku"
               render={({ field }) => (
                 <FormItem>

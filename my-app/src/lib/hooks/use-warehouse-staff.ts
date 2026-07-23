@@ -9,11 +9,16 @@ import { toast } from "sonner";
 
 export const WAREHOUSE_STAFF_PAGE_SIZE = 20;
 
-export function useWarehouseStaff(page = 1) {
+/**
+ * The staff list is manager-only. Pass `enabled: false` for warehouse staff
+ * rather than letting the query fire and 403.
+ */
+export function useWarehouseStaff(page = 1, enabled = true) {
   return useQuery({
     queryKey: queryKeys.warehouseStaff(page),
     queryFn: () =>
       api.listWarehouseUsers({ page, page_size: WAREHOUSE_STAFF_PAGE_SIZE }),
+    enabled,
     retry: (failureCount, error) =>
       !isMissingWarehouseAssignment(error) && failureCount < 3,
   });

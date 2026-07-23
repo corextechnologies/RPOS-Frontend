@@ -4,6 +4,7 @@ export const PORTAL_HOME: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin/dashboard",
   ADMIN: "/admin/dashboard",
   WAREHOUSE_MANAGER: "/warehouse/dashboard",
+  WAREHOUSE_STAFF: "/warehouse/dashboard",
   KITCHEN_MANAGER: "/kitchen/dashboard",
   SUB_CHEF: "/kitchen/dashboard",
   BRANCH_MANAGER: "/branch/dashboard",
@@ -14,6 +15,7 @@ export const PORTAL_PREFIX: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin",
   ADMIN: "/admin",
   WAREHOUSE_MANAGER: "/warehouse",
+  WAREHOUSE_STAFF: "/warehouse",
   KITCHEN_MANAGER: "/kitchen",
   SUB_CHEF: "/kitchen",
   BRANCH_MANAGER: "/branch",
@@ -24,6 +26,7 @@ export const PORTAL_LABEL: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN: "Admin",
   WAREHOUSE_MANAGER: "Warehouse",
+  WAREHOUSE_STAFF: "Warehouse",
   KITCHEN_MANAGER: "Kitchen",
   SUB_CHEF: "Kitchen",
   BRANCH_MANAGER: "Branch",
@@ -32,6 +35,16 @@ export const PORTAL_LABEL: Record<UserRole, string> = {
 
 /** The Branch portal is for managers; staff sell through `/pos`. */
 export const BRANCH_PORTAL_ROLES = ["BRANCH_MANAGER"] as const;
+
+/**
+ * Warehouse managers and warehouse staff share `/warehouse`. Staff provisioning
+ * is gated by AuthAction (`staff:read` / `staff:create`), not by this list.
+ */
+export const WAREHOUSE_PORTAL_ROLES = ["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"] as const;
+
+export function isWarehousePortalRole(role: UserRole | undefined): boolean {
+  return role === "WAREHOUSE_MANAGER" || role === "WAREHOUSE_STAFF";
+}
 
 export function portalPathForRole(role: UserRole): string {
   return PORTAL_HOME[role] ?? "/login";
@@ -52,9 +65,9 @@ export function roleForPortalPath(pathname: string): UserRole | null {
 }
 
 /**
- * A portal admits one role or several. The Kitchen portal is the only one with
- * several today — KITCHEN_MANAGER and SUB_CHEF see the same screens, and which
- * actions are offered is decided per-action by `canPerform`, not here.
+ * A portal admits one role or several. Kitchen (manager + sub-chef) and
+ * Warehouse (manager + staff) share screens; which actions are offered is
+ * decided per-action by `canPerform`, not here.
  */
 export function isRoleAllowed(
   role: UserRole | undefined,

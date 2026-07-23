@@ -84,8 +84,8 @@ export function AdjustStockDialog({
                   <FormControl>
                     <Input
                       type="number"
-                      step="1"
-                      inputMode="numeric"
+                      step="any"
+                      inputMode="decimal"
                       placeholder="e.g. -5"
                       {...field}
                     />

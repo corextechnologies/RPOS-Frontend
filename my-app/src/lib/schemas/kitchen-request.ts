@@ -1,11 +1,9 @@
 import { z } from "zod";
+import { positiveQtyString } from "@/lib/schemas/quantity";
 
 export const kitchenRequestLineSchema = z.object({
   product_id: z.string().min(1, "Select a product"),
-  quantity_requested: z.string().refine((value) => {
-    const n = Number(value);
-    return Number.isInteger(n) && n > 0;
-  }, "Enter a whole quantity greater than 0"),
+  quantity_requested: positiveQtyString(),
 });
 
 export const createKitchenWarehouseRequestSchema = z.object({

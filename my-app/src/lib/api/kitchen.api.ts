@@ -44,6 +44,11 @@ function normalizeInventoryItem(item: KitchenInventoryItem): KitchenInventoryIte
     product: {
       ...item.product,
       id: String(item.product.id),
+      units_per_pack:
+        item.product.units_per_pack == null ||
+        item.product.units_per_pack === undefined
+          ? null
+          : Number(item.product.units_per_pack),
     },
     quantity: Number(item.quantity),
     // The API sends "" for unbatched stock, but null is just as plausible on a
@@ -432,7 +437,12 @@ export const kitchenApi = {
   async createKitchenProduct(body: CreateKitchenProductInput): Promise<KitchenCatalogueItem> {
     const data = await request<KitchenCatalogueItem>("/kitchen/products", {
       method: "POST",
-      body: JSON.stringify({ name: body.name.trim(), sku: optionalText(body.sku) }),
+      body: JSON.stringify({
+        name: body.name.trim(),
+        sku: optionalText(body.sku),
+        // Always send when the form chose one (including EACH).
+        ...(body.stock_unit !== undefined ? { stock_unit: body.stock_unit } : {}),
+      }),
     });
     return { ...data, id: String(data.id), sku: data.sku ?? null };
   },
@@ -462,6 +472,7 @@ export const kitchenApi = {
           components: body.components.map((c) => ({
             component_product_id: c.component_product_id,
             quantity: c.quantity,
+            unit: c.unit,
             wastage_bp: c.wastage_bp ?? 0,
           })),
         }),

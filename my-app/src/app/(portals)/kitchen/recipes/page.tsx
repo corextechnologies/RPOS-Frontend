@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageState } from "@/components/ui/page-state";
+import { StockUnitSelect } from "@/components/warehouse/products/StockUnitSelect";
 import { useAuth } from "@/lib/auth";
 import {
   useCreateKitchenProduct,
@@ -32,7 +33,8 @@ import {
 } from "@/lib/hooks/use-kitchen-recipes";
 import { useKitchenInventory } from "@/lib/hooks/use-kitchen-inventory";
 import { formatBasisPoints } from "@/lib/money";
-import { stockUnitLabel } from "@/lib/stock-unit";
+import { formatStockQty, stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
+import { convertibleUnits, tryConvertQty } from "@/lib/unit-convert";
 import { toast } from "sonner";
 import type { RecipeComponentInput } from "@/lib/types/kitchen";
 
@@ -114,7 +116,15 @@ export default function KitchenRecipesPage() {
                         {recipe && <Badge variant="secondary">v{recipe.version}</Badge>}
                       </CardTitle>
                       <CardDescription>
-                        {recipe ? `Makes ${recipe.yield_qty}` : "No recipe — can't be made yet"}
+                        {recipe
+                          ? `Makes ${recipe.yield_qty}${
+                              stockUnitLabel(item.stock_unit)
+                                ? ` ${stockUnitLabel(item.stock_unit)}`
+                                : ""
+                            }`
+                          : item.stock_unit && item.stock_unit !== "EACH"
+                            ? `No recipe — counted in ${stockUnitLabel(item.stock_unit)}`
+                            : "No recipe — can't be made yet"}
                       </CardDescription>
                     </div>
                     {isManager && (
@@ -139,8 +149,8 @@ export default function KitchenRecipesPage() {
                             </span>
                             <span className="tabular-nums text-muted">
                               {c.quantity}
-                              {stockUnitLabel(c.stock_unit) && (
-                                <span className="text-faint"> {stockUnitLabel(c.stock_unit)}</span>
+                              {stockUnitLabel(c.unit ?? c.stock_unit) && (
+                                <span className="text-faint"> {stockUnitLabel(c.unit ?? c.stock_unit)}</span>
                               )}
                               {c.wastage_bp > 0 && (
                                 <span className="ml-1.5 text-xs text-faint">
@@ -184,6 +194,7 @@ function NewProductDialog({
   const create = useCreateKitchenProduct();
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
+  const [stockUnit, setStockUnit] = useState<StockUnit>("EACH");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -216,6 +227,15 @@ function NewProductDialog({
               onChange={(e) => setSku(e.target.value)}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="kp-unit">Unit</Label>
+            <StockUnitSelect
+              id="kp-unit"
+              value={stockUnit}
+              onValueChange={(v) => setStockUnit(v as StockUnit)}
+            />
+            <p className="text-xs text-muted">How this item is made and counted.</p>
+          </div>
           {/* No kind selector: this endpoint only makes finished goods. Offering
               a choice would imply the kitchen could create flour. */}
           <p className="text-xs text-faint">
@@ -232,12 +252,17 @@ function NewProductDialog({
             disabled={name.trim().length < 2 || create.isPending}
             onClick={() =>
               create.mutate(
-                { name: name.trim(), sku: sku.trim() || undefined },
+                {
+                  name: name.trim(),
+                  sku: sku.trim() || undefined,
+                  stock_unit: stockUnit,
+                },
                 {
                   onSuccess: () => {
                     onOpenChange(false);
                     setName("");
                     setSku("");
+                    setStockUnit("EACH");
                   },
                 },
               )
@@ -275,16 +300,25 @@ function NewRecipeDialog({
   /**
    * Ingredients come from what the kitchen actually holds — and the catalogue
    * (finished goods) is excluded, because a component that is itself made is
-   * `409 nested_recipe_unsupported`.
+   * `409 nested_recipe_unsupported`. Each carries its stock unit so a component
+   * can be entered in a compatible unit (grams of kg-stocked flour) and shown
+   * converted.
    */
   const madeIds = new Set((catalogue.data ?? []).map((p) => p.id));
   const ingredients = Array.from(
     new Map(
       (inventory.data ?? [])
         .filter((i) => !madeIds.has(i.product_id))
-        .map((i) => [i.product_id, i.product.name]),
-    ).entries(),
-  ).map(([id, name]) => ({ id, name }));
+        .map((i) => [i.product_id, i.product] as const),
+    ).values(),
+  ).map((p) => ({ id: p.id, name: p.name, stockUnit: p.stock_unit }));
+
+  // `component_product_id` is numeric on the wire, but product ids are strings
+  // like "prod-001" — the same numeric-portion convention the recipe product id
+  // already uses on save. Resolve both ways through it.
+  const numericId = (v: string) => Number(v.replace(/\D/g, "")) || 0;
+  const ingredientByComponentId = (componentId: number) =>
+    ingredients.find((p) => numericId(p.id) === componentId);
 
   const usable = components.filter((c) => c.component_product_id > 0 && c.quantity > 0);
 
@@ -325,66 +359,99 @@ function NewRecipeDialog({
 
           <div className="space-y-2">
             <Label className="text-xs">Ingredients</Label>
-            {components.map((c, i) => (
-              <div key={i} className="flex items-end gap-2">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <Select
-                    value={c.component_product_id ? String(c.component_product_id) : ""}
-                    onValueChange={(v) => update(i, { component_product_id: Number(v) })}
+            {components.map((c, i) => {
+              const ing = ingredientByComponentId(c.component_product_id);
+              const stockUnit = ing?.stockUnit;
+              const entryUnit = c.unit ?? stockUnit;
+              const unitOptions = stockUnit ? convertibleUnits(stockUnit) : [];
+              // Show the draw-down in the ingredient's stock unit when the chef
+              // entered a different (compatible) one — "100 g = 0.1 kg".
+              const converted =
+                entryUnit && stockUnit && entryUnit !== stockUnit && c.quantity > 0
+                  ? tryConvertQty(c.quantity, entryUnit, stockUnit)
+                  : null;
+              return (
+              <div key={i} className="space-y-1">
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Select
+                      value={ing?.id ?? ""}
+                      onValueChange={(v) => {
+                        const picked = ingredients.find((p) => p.id === v);
+                        // Default the entry unit to how the ingredient is stocked.
+                        update(i, {
+                          component_product_id: numericId(v),
+                          unit: picked?.stockUnit,
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Ingredient…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ingredients.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="w-20 space-y-1">
+                    <Label className="text-xs text-faint">Qty</Label>
+                    <Input
+                      className="h-10"
+                      inputMode="decimal"
+                      value={c.quantity}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        update(i, {
+                          quantity: e.target.value === "" || n < 0 || !Number.isFinite(n) ? 0 : n,
+                        });
+                      }}
+                    />
+                  </div>
+
+                  <div className="w-24 space-y-1">
+                    <Label className="text-xs text-faint">Unit</Label>
+                    <Select
+                      value={entryUnit ?? ""}
+                      onValueChange={(v) => update(i, { unit: v as StockUnit })}
+                      disabled={!stockUnit || unitOptions.length <= 1}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {unitOptions.map((u) => (
+                          <SelectItem key={u} value={u}>
+                            {stockUnitLabel(u) || u.toLowerCase()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-10"
+                    disabled={components.length <= 1}
+                    onClick={() => setComponents((prev) => prev.filter((_, idx) => idx !== i))}
+                    aria-label="Remove ingredient"
                   >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="Ingredient…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ingredients.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Trash2 className="size-4" aria-hidden />
+                  </Button>
                 </div>
-
-                <div className="w-20 space-y-1">
-                  <Label className="text-xs text-faint">Qty</Label>
-                  <Input
-                    className="h-10"
-                    inputMode="numeric"
-                    value={c.quantity}
-                    onChange={(e) =>
-                      update(i, { quantity: Math.max(0, parseInt(e.target.value, 10) || 0) })
-                    }
-                  />
-                </div>
-
-                <div className="w-20 space-y-1">
-                  <Label className="text-xs text-faint">Waste %</Label>
-                  <Input
-                    className="h-10"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={c.wastage_bp ? c.wastage_bp / 100 : ""}
-                    onChange={(e) =>
-                      // Percent in, basis points out. 2.5% -> 250.
-                      update(i, {
-                        wastage_bp: Math.round((parseFloat(e.target.value) || 0) * 100),
-                      })
-                    }
-                  />
-                </div>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-10"
-                  disabled={components.length <= 1}
-                  onClick={() => setComponents((prev) => prev.filter((_, idx) => idx !== i))}
-                  aria-label="Remove ingredient"
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </Button>
+                {converted != null && stockUnit && (
+                  <p className="pl-1 text-xs text-faint">
+                    = {formatStockQty(converted, stockUnit)} drawn from stock
+                  </p>
+                )}
               </div>
-            ))}
+              );
+            })}
 
             <Button
               variant="outline"
@@ -401,8 +468,8 @@ function NewRecipeDialog({
             </Button>
 
             <p className="text-xs text-faint">
-              Quantities are whole units of how the ingredient is stocked — sauce kept in grams
-              means &ldquo;30&rdquo; is 30g. Ingredients can&apos;t be other made items.
+              Enter how much one batch uses. Pick any compatible unit — grams of flour stocked in
+              kg is fine, and production converts it. Ingredients can&apos;t be other made items.
             </p>
           </div>
         </div>

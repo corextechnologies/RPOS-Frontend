@@ -83,6 +83,10 @@ export default function ReceiveStockPage() {
       // created with the manager's chosen kind and unit — not silent defaults.
       kind: values.kind,
       stock_unit: values.stock_unit,
+      units_per_pack:
+        values.units_per_pack && values.units_per_pack !== ""
+          ? Number(values.units_per_pack)
+          : null,
     });
     setAddingProduct(false);
     // Select what was just created: adding a product here is almost always the
@@ -191,9 +195,9 @@ export default function ReceiveStockPage() {
                         <FormControl>
                           <Input
                             type="number"
-                            min={1}
-                            step="1"
-                            inputMode="numeric"
+                            min={0}
+                            step="any"
+                            inputMode="decimal"
                             placeholder="0"
                             {...field}
                           />

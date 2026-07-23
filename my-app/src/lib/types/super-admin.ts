@@ -8,6 +8,10 @@ export type RestaurantStatus = "ACTIVE" | "HALTED";
  * of its own: the screens are identical, the manager-only actions are gated by
  * AuthAction. It is the first role that is not 1:1 with a portal.
  *
+ * WAREHOUSE_STAFF shares the Warehouse portal the same way: inventory, products,
+ * and requests are open; staff provisioning (`/warehouse/users`) is manager-only.
+ * Admin creates managers; warehouse managers create staff (role WAREHOUSE_STAFF).
+ *
  * BRANCH_STAFF lands in `/pos` rather than the Branch Manager portal. The POS
  * gates on the capability list from `/pos/session/bootstrap`, which already
  * folds in position and device profile. Do not gate POS UI on role — see
@@ -17,6 +21,7 @@ export type UserRole =
   | "SUPER_ADMIN"
   | "ADMIN"
   | "WAREHOUSE_MANAGER"
+  | "WAREHOUSE_STAFF"
   | "KITCHEN_MANAGER"
   | "SUB_CHEF"
   | "BRANCH_MANAGER"

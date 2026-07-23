@@ -121,6 +121,7 @@ import {
   TARGET_NOT_EDITABLE,
 } from "@/lib/types/production-target";
 import { POS_ERROR } from "@/lib/api/errors";
+import { tryConvertQty } from "@/lib/unit-convert";
 import type { BranchPosition } from "@/lib/types/super-admin";
 // Mock and live agree on the state machine by sharing the real map, the same way
 // the warehouse mock does.
@@ -200,6 +201,17 @@ import { allowedTransitions } from "@/lib/admin/request-transitions";
 
 const DB_KEY = "ros-super-admin-mock-db";
 const SESSION_KEY = "ros-super-admin-session";
+
+/**
+ * Match a stored string product id ("prod-006") to a numeric wire id (6).
+ *
+ * Recipe/production DTOs carry `product_id`/`component_product_id` as numbers,
+ * but the mock stores products under string ids. Comparing the two directly
+ * (`p.id === String(6)`) never matches, so every recipe lookup went through
+ * this numeric-portion convention — the same one the recipe form uses on save.
+ */
+const matchesProductId = (storedId: string, wireId: number | string): boolean =>
+  Number(String(storedId).replace(/\D/g, "")) === Number(wireId);
 /**
  * Bump this whenever `MockDb`'s SHAPE changes, not just its contents — an
  * existing database in localStorage is reseeded only on a version change, so a
@@ -243,6 +255,11 @@ interface MockProduct extends ProductPricing {
   restaurant_id: string;
   /** Unit of measure, chosen when the product is created. Defaults to EACH. */
   stock_unit?: StockUnit;
+  /**
+   * Optional pack helper: 1 pack = N stock units. Display/request UX only;
+   * ledger quantity stays in stock_unit.
+   */
+  units_per_pack?: number | null;
 }
 
 /**
@@ -507,6 +524,20 @@ function seedUsers(): MockUserAccount[] {
         must_change_password: true,
       },
     },
+    {
+      // Created by the warehouse manager (id 3), not Admin — role is staff.
+      email: "wh-staff@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 8,
+        email: "wh-staff@demo.ros",
+        full_name: "Whitney Staff",
+        role: "WAREHOUSE_STAFF",
+        restaurant_id: 1,
+        created_by_id: 3,
+        is_active: true,
+      },
+    },
   );
 
   return users;
@@ -697,6 +728,18 @@ function seedDb(): MockDb {
       warehouse_id: null,
       created_at: created,
     },
+    {
+      id: "emp-008",
+      restaurant_id: "rest-001",
+      email: "wh-staff@demo.ros",
+      full_name: "Whitney Staff",
+      role: "WAREHOUSE_STAFF",
+      is_active: true,
+      warehouse_id: "wh-001",
+      branch_id: null,
+      kitchen_id: null,
+      created_at: created,
+    },
   ];
 
   const invoices: MockInvoiceRecord[] = [
@@ -744,6 +787,7 @@ function seedDb(): MockDb {
       name: "House Blend Coffee Beans",
       sku: "BN-COF-001",
       stock_unit: "KG",
+      units_per_pack: 5,
       cost_price: "18.50",
       selling_price: null,
       category: null,
@@ -1805,6 +1849,13 @@ function resolveMyRestaurant(db: MockDb, me: MeResponse): Restaurant {
  * employee record instead — `me.restaurant_id` is a number and does not map to
  * `Restaurant.id`, so it cannot be used here either.
  */
+/**
+ * Resolve the warehouse the signed-in user is assigned to.
+ *
+ * Warehouse staff are not restaurant owners, so the assignment lives on the
+ * employee record rather than on `me`. Both a manager and warehouse staff
+ * resolve through the same path.
+ */
 function resolveMyWarehouse(db: MockDb, me: MeResponse): Warehouse {
   const employee = db.employees.find(
     (e) => e.email.toLowerCase() === me.email.toLowerCase(),
@@ -1853,6 +1904,17 @@ function resolveMyKitchen(db: MockDb, me: MeResponse): Kitchen {
  */
 function requireKitchenManager(me: MeResponse) {
   if (me.role !== "KITCHEN_MANAGER") {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+/**
+ * Warehouse staff-provisioning endpoints. The server enforces this independently
+ * of the UI, so the mock does too — warehouse staff reaching these get the same
+ * 403 they would get live.
+ */
+function requireWarehouseManager(me: MeResponse) {
+  if (me.role !== "WAREHOUSE_MANAGER") {
     throw new ApiError("You do not have access to this operation.", 403);
   }
 }
@@ -2078,6 +2140,7 @@ function toPublicInventoryItem(
       ...item.product,
       kind: warehouseKind(product?.kind),
       stock_unit: product?.stock_unit ?? "EACH",
+      units_per_pack: product?.units_per_pack ?? null,
     },
     quantity: item.quantity,
     batch_code: item.batch_code,
@@ -2159,7 +2222,7 @@ function toPublicKitchenInventoryItem(
     product_id: item.product_id,
     // Note the absence of cost_price: procurement cost is Admin-only, and the
     // field is missing from the projection rather than hidden at render time.
-    product: { ...item.product, kind: product?.kind, stock_unit: product?.stock_unit ?? "EACH" },
+    product: { ...item.product, kind: product?.kind, stock_unit: product?.stock_unit ?? "EACH", units_per_pack: product?.units_per_pack ?? null },
     quantity: item.quantity,
     batch_code: item.batch_code,
     expiry_date: item.expiry_date,
@@ -3590,8 +3653,8 @@ export const mockClient: ApiClient = {
       employee.kitchen_id = kitchen.id;
     }
     if (body.warehouse_id !== undefined) {
-      if (employee.role !== "WAREHOUSE_MANAGER") {
-        throw new ApiError("warehouse_id is only valid for a warehouse manager", 409, "conflict");
+      if (employee.role !== "WAREHOUSE_MANAGER" && employee.role !== "WAREHOUSE_STAFF") {
+        throw new ApiError("warehouse_id is only valid for warehouse roles", 409, "conflict");
       }
       const warehouse = db.warehouses.find(
         (w) => w.id === body.warehouse_id && w.restaurant_id === r.id,
@@ -4201,6 +4264,7 @@ export const mockClient: ApiClient = {
         sku: p.sku,
         kind: warehouseKind(p.kind),
         stock_unit: p.stock_unit ?? "EACH",
+        units_per_pack: p.units_per_pack ?? null,
       }));
     return delay(products);
   },
@@ -4255,6 +4319,10 @@ export const mockClient: ApiClient = {
       is_available: true,
       // Unit of measure. Defaults to EACH when the caller omits it.
       stock_unit: body.stock_unit ?? "EACH",
+      units_per_pack:
+        body.units_per_pack != null && body.units_per_pack >= 1
+          ? Math.floor(body.units_per_pack)
+          : null,
     };
     db.products.push(created);
     saveDb(db);
@@ -4265,6 +4333,7 @@ export const mockClient: ApiClient = {
       sku: created.sku,
       kind: warehouseKind(created.kind),
       stock_unit: created.stock_unit ?? "EACH",
+      units_per_pack: created.units_per_pack ?? null,
     };
     return delay(result);
   },
@@ -4324,6 +4393,13 @@ export const mockClient: ApiClient = {
       product.stock_unit = body.stock_unit;
     }
 
+    if (body.units_per_pack !== undefined) {
+      product.units_per_pack =
+        body.units_per_pack != null && body.units_per_pack >= 1
+          ? Math.floor(body.units_per_pack)
+          : null;
+    }
+
     // Quantity is intentionally untouched: inventory rows are a separate store
     // and this endpoint has no access to them.
     saveDb(db);
@@ -4334,6 +4410,7 @@ export const mockClient: ApiClient = {
       sku: product.sku,
       kind: warehouseKind(product.kind),
       stock_unit: product.stock_unit ?? "EACH",
+      units_per_pack: product.units_per_pack ?? null,
     };
     return delay(result);
   },
@@ -4666,6 +4743,7 @@ export const mockClient: ApiClient = {
 
   async listWarehouseUsers(params) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
 
@@ -4708,6 +4786,7 @@ export const mockClient: ApiClient = {
 
   async createWarehouseUser(body: CreateWarehouseStaffInput) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
 
@@ -4733,7 +4812,7 @@ export const mockClient: ApiClient = {
         id: nextId,
         email,
         full_name: fullName,
-        role: "WAREHOUSE_MANAGER",
+        role: "WAREHOUSE_STAFF",
         restaurant_id: me.restaurant_id ?? 1,
         created_by_id: me.id,
         is_active: true,
@@ -4745,7 +4824,7 @@ export const mockClient: ApiClient = {
       restaurant_id: warehouse.restaurant_id,
       email,
       full_name: fullName ?? "",
-      role: "WAREHOUSE_MANAGER",
+      role: "WAREHOUSE_STAFF",
       is_active: true,
       branch_id: null,
       kitchen_id: null,
@@ -4758,7 +4837,7 @@ export const mockClient: ApiClient = {
     const result: CreateWarehouseStaffResult = {
       user_id: String(nextId),
       email,
-      role: "WAREHOUSE_MANAGER",
+      role: "WAREHOUSE_STAFF",
       warehouse_id: warehouse.id,
       credential_email_sent: true,
     };
@@ -4767,6 +4846,7 @@ export const mockClient: ApiClient = {
 
   async revokeWarehouseUser(id: string) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
     const staff = db.users.find(
@@ -4790,6 +4870,7 @@ export const mockClient: ApiClient = {
 
   async restoreWarehouseUser(id: string) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
     const staff = db.users.find(
@@ -4813,6 +4894,7 @@ export const mockClient: ApiClient = {
 
   async deleteWarehouseUser(id: string) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const staff = db.users.find(
       (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
@@ -4826,6 +4908,7 @@ export const mockClient: ApiClient = {
 
   async updateWarehouseUser(id: string, body: UpdateWarehouseStaffInput): Promise<WarehouseStaff> {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
     const staff = db.users.find(
@@ -5816,7 +5899,7 @@ export const mockClient: ApiClient = {
           sku: p.sku ?? null,
           kind: "FINISHED_GOOD" as const,
           has_recipe: db.kitchen_recipes.some(
-            (r) => String(r.product_id) === p.id && r.is_active,
+            (r) => matchesProductId(p.id, r.product_id) && r.is_active,
           ),
           stock_unit: p.stock_unit ?? "EACH",
         })),
@@ -5845,6 +5928,7 @@ export const mockClient: ApiClient = {
       selling_price: null,
       category: null,
       is_available: true,
+      stock_unit: body.stock_unit ?? "EACH",
     };
 
     db.products.push(product);
@@ -5881,7 +5965,7 @@ export const mockClient: ApiClient = {
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
 
-    const product = db.products.find((p) => p.id === String(body.product_id));
+    const product = db.products.find((p) => matchesProductId(p.id, body.product_id));
     if (!product) throw new ApiError("Product not found", 404);
     if (product.kind !== "FINISHED_GOOD") {
       throw new ApiError(
@@ -5893,7 +5977,9 @@ export const mockClient: ApiClient = {
     if (!body.components.length) throw new ApiError("A recipe needs components", 422);
 
     for (const c of body.components) {
-      const component = db.products.find((p) => p.id === String(c.component_product_id));
+      const component = db.products.find((p) =>
+        matchesProductId(p.id, c.component_product_id),
+      );
       if (!component) throw new ApiError("Component not found", 404);
       // A burger made of burgers. The server refuses; so does the mock, or the
       // UI's guard is untested.
@@ -5909,7 +5995,7 @@ export const mockClient: ApiClient = {
     // Versioned, not edited: the previous active recipe for this product is
     // superseded rather than mutated, so a run already made keeps its history.
     const previous = db.kitchen_recipes.filter(
-      (r) => String(r.product_id) === product.id && r.kitchen_id === kitchen.id,
+      (r) => matchesProductId(product.id, r.product_id) && r.kitchen_id === kitchen.id,
     );
     for (const r of previous) r.is_active = false;
 
@@ -5924,11 +6010,19 @@ export const mockClient: ApiClient = {
       yield_qty: body.yield_qty ?? 1,
       note: body.note ?? null,
       components: body.components.map((c) => {
-        const cp = db.products.find((p) => p.id === String(c.component_product_id));
+        // Ids on the wire are numeric; stored ids are strings ("prod-001").
+        const cp = db.products.find((p) =>
+          matchesProductId(p.id, c.component_product_id),
+        );
+        const stockUnit = cp?.stock_unit ?? "EACH";
         return {
           component_product_id: c.component_product_id,
           component_name: cp?.name,
           quantity: c.quantity,
+          stock_unit: stockUnit,
+          // The unit the chef typed in; defaults to how the ingredient is
+          // stocked. Consumption converts from this to `stock_unit`.
+          unit: c.unit ?? stockUnit,
           wastage_bp: c.wastage_bp ?? 0,
         };
       }),
@@ -5968,14 +6062,14 @@ export const mockClient: ApiClient = {
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
 
-    const product = db.products.find((p) => p.id === String(body.product_id));
+    const product = db.products.find((p) => matchesProductId(p.id, body.product_id));
     if (!product) throw new ApiError("Product not found", 404);
     if (product.kind !== "FINISHED_GOOD") {
       throw new ApiError("Only kitchen-made items can be produced.", 409, POS_ERROR.NOT_A_FINISHED_GOOD);
     }
 
     const recipe = db.kitchen_recipes.find(
-      (r) => String(r.product_id) === product.id.replace(/\D/g, "") && r.is_active,
+      (r) => matchesProductId(product.id, r.product_id) && r.is_active,
     ) ?? db.kitchen_recipes.find((r) => r.product_name === product.name && r.is_active);
     if (!recipe) {
       throw new ApiError("This item has no recipe yet.", 409, POS_ERROR.NO_ACTIVE_RECIPE);
@@ -5983,16 +6077,25 @@ export const mockClient: ApiClient = {
 
     const batches = Math.ceil(body.quantity / (recipe.yield_qty || 1));
 
+    // How much of a component one batch consumes, in the component's stock
+    // unit. A recipe written in grams ("100") against flour stocked in kg is
+    // converted here (100 g → 0.1 kg); same-unit recipes pass through unchanged.
+    const perBatch = (c: (typeof recipe.components)[number]): number => {
+      const from = c.unit ?? c.stock_unit ?? "EACH";
+      const to = c.stock_unit ?? from;
+      return tryConvertQty(c.quantity, from, to) ?? c.quantity;
+    };
+
     // Check every component BEFORE moving any of it. Components are consumed
     // before the output is credited, so a shortfall can never mint stock.
     for (const c of recipe.components) {
-      const needed = c.quantity * batches;
+      const needed = perBatch(c) * batches;
       const onHand = db.inventory
         .filter(
           (i) =>
             i.location_type === "KITCHEN" &&
             i.location_id === kitchen.id &&
-            i.product_id === String(c.component_product_id),
+            matchesProductId(i.product_id, c.component_product_id),
         )
         .reduce((sum, i) => sum + i.quantity, 0);
       if (onHand < needed) {
@@ -6005,13 +6108,13 @@ export const mockClient: ApiClient = {
     }
 
     for (const c of recipe.components) {
-      let remaining = c.quantity * batches;
+      let remaining = perBatch(c) * batches;
       for (const item of db.inventory) {
         if (remaining <= 0) break;
         if (
           item.location_type !== "KITCHEN" ||
           item.location_id !== kitchen.id ||
-          item.product_id !== String(c.component_product_id)
+          !matchesProductId(item.product_id, c.component_product_id)
         ) {
           continue;
         }
@@ -6057,7 +6160,8 @@ export const mockClient: ApiClient = {
           product_id: String(c.component_product_id),
           product_name: c.component_name,
           role: "INPUT" as const,
-          quantity: c.quantity * batches,
+          // What was actually drawn from stock, in the component's stock unit.
+          quantity: perBatch(c) * batches,
         })),
         {
           id: `kline-${Date.now()}-out`,

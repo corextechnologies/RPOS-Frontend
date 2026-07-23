@@ -1,15 +1,11 @@
 import { z } from "zod";
 import { wasteReasonSchema } from "@/lib/stock/waste-reason";
 import { STOCK_UNITS } from "@/lib/stock-unit";
+import { nonZeroQtyString, positiveQtyString } from "@/lib/schemas/quantity";
 
 export const receiveStockSchema = z.object({
   product_id: z.string().min(1, "Select a product"),
-  quantity: z
-    .string()
-    .refine((value) => {
-      const n = Number(value);
-      return Number.isInteger(n) && n > 0;
-    }, "Enter a whole quantity greater than 0"),
+  quantity: positiveQtyString(),
   batch_code: z
     .string()
     .max(100, "Batch code must be 100 characters or fewer")
@@ -60,6 +56,18 @@ export const createWarehouseProductSchema = z.object({
   kind: z.enum(["RAW_MATERIAL", "RESALE"]),
   /** Unit of measure the product is stocked and counted in. */
   stock_unit: z.enum(STOCK_UNITS),
+  /**
+   * Optional pack helper: blank = none; otherwise integer >= 1 meaning
+   * "1 pack = N stock units".
+   */
+  units_per_pack: z
+    .string()
+    .refine((value) => {
+      if (value === "") return true;
+      const n = Number(value);
+      return Number.isInteger(n) && n >= 1;
+    }, "Enter a whole number of 1 or more, or leave blank")
+    .optional(),
 });
 
 export type CreateWarehouseProductForm = z.infer<
@@ -73,6 +81,7 @@ export const createWarehouseProductDefaults: CreateWarehouseProductForm = {
   kind: "RAW_MATERIAL",
   // Discrete items are the common case; measures are chosen explicitly.
   stock_unit: "EACH",
+  units_per_pack: "",
 };
 
 /**
@@ -97,6 +106,17 @@ export const updateWarehouseProductSchema = z.object({
   kind: z.enum(["RAW_MATERIAL", "RESALE"]),
   /** Unit of measure the product is stocked and counted in. */
   stock_unit: z.enum(STOCK_UNITS),
+  /**
+   * Optional pack helper. Blank clears it; otherwise integer >= 1.
+   */
+  units_per_pack: z
+    .string()
+    .refine((value) => {
+      if (value === "") return true;
+      const n = Number(value);
+      return Number.isInteger(n) && n >= 1;
+    }, "Enter a whole number of 1 or more, or leave blank")
+    .optional(),
 });
 
 export type UpdateWarehouseProductForm = z.infer<
@@ -119,12 +139,7 @@ export const updateStockExpirySchema = z.object({
 export type UpdateStockExpiryForm = z.infer<typeof updateStockExpirySchema>;
 
 export const adjustStockSchema = z.object({
-  quantity_delta: z
-    .string()
-    .refine((value) => {
-      const n = Number(value);
-      return Number.isInteger(n) && n !== 0;
-    }, "Enter a whole number other than 0"),
+  quantity_delta: nonZeroQtyString(),
   notes: z.string().max(500, "Notes must be 500 characters or fewer").optional(),
 });
 
@@ -136,12 +151,7 @@ export const adjustStockDefaults: AdjustStockForm = {
 };
 
 export const wasteStockSchema = z.object({
-  quantity: z
-    .string()
-    .refine((value) => {
-      const n = Number(value);
-      return Number.isInteger(n) && n > 0;
-    }, "Enter a whole quantity greater than 0"),
+  quantity: positiveQtyString(),
   /**
    * Optional on this endpoint, unlike the kitchen's — but required here anyway.
    * Waste-rate analytics aggregates on it, and a write-off logged without a

@@ -135,10 +135,10 @@ export function WasteStockDialog({
                   <FormControl>
                     <Input
                       type="number"
-                      min={1}
+                      min={0}
                       max={item?.quantity}
-                      step="1"
-                      inputMode="numeric"
+                      step="any"
+                      inputMode="decimal"
                       placeholder="0"
                       {...field}
                     />

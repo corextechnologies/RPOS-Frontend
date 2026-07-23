@@ -1,5 +1,6 @@
 import type { UserRole } from "@/lib/types/super-admin";
 import type { AppNotification } from "@/lib/types/notification";
+import { isWarehousePortalRole } from "@/lib/auth/roles";
 
 /**
  * Where a notification deep-links to, or null when it links nowhere.
@@ -30,7 +31,7 @@ export function notificationLink(
       // The low-stock alert. There is no per-product stock page, so this lands
       // on the stock list that the limit is measured against — the warehouse's
       // own inventory. Point it at a product page if one is ever built.
-      return role === "WAREHOUSE_MANAGER" ? "/warehouse/inventory" : null;
+      return isWarehousePortalRole(role) ? "/warehouse/inventory" : null;
     case "production_target":
       // Admin is told when a kitchen acknowledges or completes; the kitchen
       // manager is told when Admin creates one. Each lands on its own detail
@@ -62,6 +63,7 @@ function requestLink(id: string, role: UserRole): string | null {
     case "ADMIN":
       return `/admin/requests/${id}`;
     case "WAREHOUSE_MANAGER":
+    case "WAREHOUSE_STAFF":
       return `/warehouse/requests/${id}`;
     case "KITCHEN_MANAGER":
     case "SUB_CHEF":
