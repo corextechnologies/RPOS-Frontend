@@ -504,6 +504,20 @@ function seedUsers(): MockUserAccount[] {
         must_change_password: true,
       },
     },
+    {
+      // Created by the warehouse manager (id 3), not Admin — role is staff.
+      email: "wh-staff@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 8,
+        email: "wh-staff@demo.ros",
+        full_name: "Whitney Staff",
+        role: "WAREHOUSE_STAFF",
+        restaurant_id: 1,
+        created_by_id: 3,
+        is_active: true,
+      },
+    },
   );
 
   return users;
@@ -692,6 +706,18 @@ function seedDb(): MockDb {
       branch_id: "br-001",
       kitchen_id: null,
       warehouse_id: null,
+      created_at: created,
+    },
+    {
+      id: "emp-008",
+      restaurant_id: "rest-001",
+      email: "wh-staff@demo.ros",
+      full_name: "Whitney Staff",
+      role: "WAREHOUSE_STAFF",
+      is_active: true,
+      warehouse_id: "wh-001",
+      branch_id: null,
+      kitchen_id: null,
       created_at: created,
     },
   ];
@@ -1670,6 +1696,13 @@ function resolveMyRestaurant(db: MockDb, me: MeResponse): Restaurant {
  * employee record instead — `me.restaurant_id` is a number and does not map to
  * `Restaurant.id`, so it cannot be used here either.
  */
+/**
+ * Resolve the warehouse the signed-in user is assigned to.
+ *
+ * Warehouse staff are not restaurant owners, so the assignment lives on the
+ * employee record rather than on `me`. Both a manager and warehouse staff
+ * resolve through the same path.
+ */
 function resolveMyWarehouse(db: MockDb, me: MeResponse): Warehouse {
   const employee = db.employees.find(
     (e) => e.email.toLowerCase() === me.email.toLowerCase(),
@@ -1718,6 +1751,17 @@ function resolveMyKitchen(db: MockDb, me: MeResponse): Kitchen {
  */
 function requireKitchenManager(me: MeResponse) {
   if (me.role !== "KITCHEN_MANAGER") {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+/**
+ * Warehouse staff-provisioning endpoints. The server enforces this independently
+ * of the UI, so the mock does too — warehouse staff reaching these get the same
+ * 403 they would get live.
+ */
+function requireWarehouseManager(me: MeResponse) {
+  if (me.role !== "WAREHOUSE_MANAGER") {
     throw new ApiError("You do not have access to this operation.", 403);
   }
 }
@@ -3370,8 +3414,8 @@ export const mockClient: ApiClient = {
       employee.kitchen_id = kitchen.id;
     }
     if (body.warehouse_id !== undefined) {
-      if (employee.role !== "WAREHOUSE_MANAGER") {
-        throw new ApiError("warehouse_id is only valid for a warehouse manager", 409, "conflict");
+      if (employee.role !== "WAREHOUSE_MANAGER" && employee.role !== "WAREHOUSE_STAFF") {
+        throw new ApiError("warehouse_id is only valid for warehouse roles", 409, "conflict");
       }
       const warehouse = db.warehouses.find(
         (w) => w.id === body.warehouse_id && w.restaurant_id === r.id,
@@ -4446,6 +4490,7 @@ export const mockClient: ApiClient = {
 
   async listWarehouseUsers(params) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
 
@@ -4488,6 +4533,7 @@ export const mockClient: ApiClient = {
 
   async createWarehouseUser(body: CreateWarehouseStaffInput) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
 
@@ -4513,7 +4559,7 @@ export const mockClient: ApiClient = {
         id: nextId,
         email,
         full_name: fullName,
-        role: "WAREHOUSE_MANAGER",
+        role: "WAREHOUSE_STAFF",
         restaurant_id: me.restaurant_id ?? 1,
         created_by_id: me.id,
         is_active: true,
@@ -4525,7 +4571,7 @@ export const mockClient: ApiClient = {
       restaurant_id: warehouse.restaurant_id,
       email,
       full_name: fullName ?? "",
-      role: "WAREHOUSE_MANAGER",
+      role: "WAREHOUSE_STAFF",
       is_active: true,
       branch_id: null,
       kitchen_id: null,
@@ -4538,7 +4584,7 @@ export const mockClient: ApiClient = {
     const result: CreateWarehouseStaffResult = {
       user_id: String(nextId),
       email,
-      role: "WAREHOUSE_MANAGER",
+      role: "WAREHOUSE_STAFF",
       warehouse_id: warehouse.id,
       credential_email_sent: true,
     };
@@ -4547,6 +4593,7 @@ export const mockClient: ApiClient = {
 
   async revokeWarehouseUser(id: string) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
     const staff = db.users.find(
@@ -4570,6 +4617,7 @@ export const mockClient: ApiClient = {
 
   async restoreWarehouseUser(id: string) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
     const staff = db.users.find(
@@ -4593,6 +4641,7 @@ export const mockClient: ApiClient = {
 
   async deleteWarehouseUser(id: string) {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const staff = db.users.find(
       (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
@@ -4606,6 +4655,7 @@ export const mockClient: ApiClient = {
 
   async updateWarehouseUser(id: string, body: UpdateWarehouseStaffInput): Promise<WarehouseStaff> {
     const me = requireAuth();
+    requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
     const staff = db.users.find(
@@ -5625,6 +5675,7 @@ export const mockClient: ApiClient = {
       selling_price: null,
       category: null,
       is_available: true,
+      stock_unit: body.stock_unit ?? "EACH",
     };
 
     db.products.push(product);

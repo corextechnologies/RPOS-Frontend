@@ -432,7 +432,12 @@ export const kitchenApi = {
   async createKitchenProduct(body: CreateKitchenProductInput): Promise<KitchenCatalogueItem> {
     const data = await request<KitchenCatalogueItem>("/kitchen/products", {
       method: "POST",
-      body: JSON.stringify({ name: body.name.trim(), sku: optionalText(body.sku) }),
+      body: JSON.stringify({
+        name: body.name.trim(),
+        sku: optionalText(body.sku),
+        // Always send when the form chose one (including EACH).
+        ...(body.stock_unit !== undefined ? { stock_unit: body.stock_unit } : {}),
+      }),
     });
     return { ...data, id: String(data.id), sku: data.sku ?? null };
   },

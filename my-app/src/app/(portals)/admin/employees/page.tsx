@@ -7,6 +7,13 @@ import { Plus } from "lucide-react";
 import { EmployeeList } from "@/components/admin/employees/EmployeeList";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 import {
   useDeleteEmployee,
@@ -15,12 +22,29 @@ import {
   useRevokeEmployee,
 } from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
-import type { Employee } from "@/lib/types/admin";
+import { titleCase } from "@/lib/utils";
+import type { AdminLocationType, Employee } from "@/lib/types/admin";
+
+/** Which location an employee is attached to, derived from whichever id is set. */
+function employeeLocationType(employee: Employee): AdminLocationType | null {
+  if (employee.branch_id) return "BRANCH";
+  if (employee.kitchen_id) return "KITCHEN";
+  if (employee.warehouse_id) return "WAREHOUSE";
+  return null;
+}
+
+function employeeLocationId(employee: Employee): string | null {
+  return employee.branch_id ?? employee.kitchen_id ?? employee.warehouse_id ?? null;
+}
+
+const SUB_STAFF_LOCATION_TYPES: AdminLocationType[] = ["BRANCH", "KITCHEN", "WAREHOUSE"];
 
 export default function AdminEmployeesPage() {
   const router = useRouter();
   const { can } = useAuth();
   const [page, setPage] = useState(1);
+  const [subLocationType, setSubLocationType] = useState<AdminLocationType | "all">("all");
+  const [subLocationId, setSubLocationId] = useState<string>("all");
   const employees = useEmployees(page);
   const branches = useBranches();
   const kitchens = useKitchens();
@@ -62,6 +86,27 @@ export default function AdminEmployeesPage() {
     () => (employees.data?.items ?? []).filter((e) => !MANAGER_ROLES.includes(e.role)),
     [employees.data?.items],
   );
+
+  // Sub staff span branches, kitchens, and warehouses — the same location axis
+  // the Inventory page filters on. Filter client-side off each employee's
+  // branch/kitchen/warehouse id so the dropdown mirrors that page's behavior.
+  const subStaffLocations =
+    subLocationType === "BRANCH"
+      ? branches.data
+      : subLocationType === "KITCHEN"
+        ? kitchens.data
+        : subLocationType === "WAREHOUSE"
+          ? warehouses.data
+          : undefined;
+
+  const filteredSubStaff = useMemo(() => {
+    if (subLocationType === "all") return subStaff;
+    return subStaff.filter((e) => {
+      if (employeeLocationType(e) !== subLocationType) return false;
+      if (subLocationId !== "all") return employeeLocationId(e) === subLocationId;
+      return true;
+    });
+  }, [subStaff, subLocationType, subLocationId]);
 
   const total = employees.data?.total ?? 0;
   const pageSize = employees.data?.page_size ?? 20;
@@ -123,9 +168,50 @@ export default function AdminEmployeesPage() {
         emptyDescription="Branch, kitchen, and warehouse managers will appear here."
       />
 
-      <h2 className="font-display text-lg font-semibold text-content">Sub Staff</h2>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="font-display text-lg font-semibold text-content">Sub Staff</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Select
+            value={subLocationType}
+            onValueChange={(v) => {
+              setSubLocationType(v as AdminLocationType | "all");
+              // A location belongs to one type, so the previous specific
+              // selection is meaningless once the type changes.
+              setSubLocationId("all");
+            }}
+          >
+            <SelectTrigger className="sm:w-48">
+              <SelectValue placeholder="Location type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All locations</SelectItem>
+              {SUB_STAFF_LOCATION_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {titleCase(type.toLowerCase())}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {subLocationType !== "all" && (
+            <Select value={subLocationId} onValueChange={setSubLocationId}>
+              <SelectTrigger className="sm:w-48">
+                <SelectValue placeholder="Location" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All {subLocationType.toLowerCase()}s</SelectItem>
+                {subStaffLocations?.map((loc) => (
+                  <SelectItem key={loc.id} value={loc.id}>
+                    {loc.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </div>
       <EmployeeList
-        items={subStaff}
+        items={filteredSubStaff}
         isLoading={employees.isLoading}
         isError={employees.isError}
         onRetry={() => employees.refetch()}

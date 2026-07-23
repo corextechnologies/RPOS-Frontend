@@ -55,7 +55,8 @@ export interface InventoryItem {
  *
  * `GET /warehouse/users` is creator-scoped: it returns only the staff this
  * manager created, never everyone attached to the warehouse. UI copy must not
- * imply otherwise. The API assigns them the WAREHOUSE_MANAGER role.
+ * imply otherwise. The API assigns them the WAREHOUSE_STAFF role (managers are
+ * created by Admin and stay WAREHOUSE_MANAGER).
  */
 export interface WarehouseStaff {
   id: string;

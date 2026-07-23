@@ -149,6 +149,21 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     // Same operation name as Admin's, scoped by this role's own transition map.
     "requests:update",
   ],
+  /**
+   * Same warehouse operations as the manager, minus staff provisioning.
+   * `POST /warehouse/users` answers 403 for this role; nav hides Staff via
+   * `staff:read`, and the staff page also gates on that action.
+   */
+  WAREHOUSE_STAFF: [
+    "inventory:read",
+    "stock:receive",
+    "stock:adjust",
+    "stock:waste",
+    "po:read",
+    "po:create",
+    "kitchen-requests:read",
+    "requests:update",
+  ],
   KITCHEN_MANAGER: [
     "kitchen-inventory:read",
     "kitchen-labels:read",

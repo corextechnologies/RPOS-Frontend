@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageState } from "@/components/ui/page-state";
+import { StockUnitSelect } from "@/components/warehouse/products/StockUnitSelect";
 import { useAuth } from "@/lib/auth";
 import {
   useCreateKitchenProduct,
@@ -32,7 +33,7 @@ import {
 } from "@/lib/hooks/use-kitchen-recipes";
 import { useKitchenInventory } from "@/lib/hooks/use-kitchen-inventory";
 import { formatBasisPoints } from "@/lib/money";
-import { stockUnitLabel } from "@/lib/stock-unit";
+import { stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
 import { toast } from "sonner";
 import type { RecipeComponentInput } from "@/lib/types/kitchen";
 
@@ -114,7 +115,15 @@ export default function KitchenRecipesPage() {
                         {recipe && <Badge variant="secondary">v{recipe.version}</Badge>}
                       </CardTitle>
                       <CardDescription>
-                        {recipe ? `Makes ${recipe.yield_qty}` : "No recipe — can't be made yet"}
+                        {recipe
+                          ? `Makes ${recipe.yield_qty}${
+                              stockUnitLabel(item.stock_unit)
+                                ? ` ${stockUnitLabel(item.stock_unit)}`
+                                : ""
+                            }`
+                          : item.stock_unit && item.stock_unit !== "EACH"
+                            ? `No recipe — counted in ${stockUnitLabel(item.stock_unit)}`
+                            : "No recipe — can't be made yet"}
                       </CardDescription>
                     </div>
                     {isManager && (
@@ -184,6 +193,7 @@ function NewProductDialog({
   const create = useCreateKitchenProduct();
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
+  const [stockUnit, setStockUnit] = useState<StockUnit>("EACH");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -216,6 +226,15 @@ function NewProductDialog({
               onChange={(e) => setSku(e.target.value)}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="kp-unit">Unit</Label>
+            <StockUnitSelect
+              id="kp-unit"
+              value={stockUnit}
+              onValueChange={(v) => setStockUnit(v as StockUnit)}
+            />
+            <p className="text-xs text-muted">How this item is made and counted.</p>
+          </div>
           {/* No kind selector: this endpoint only makes finished goods. Offering
               a choice would imply the kitchen could create flour. */}
           <p className="text-xs text-faint">
@@ -232,12 +251,17 @@ function NewProductDialog({
             disabled={name.trim().length < 2 || create.isPending}
             onClick={() =>
               create.mutate(
-                { name: name.trim(), sku: sku.trim() || undefined },
+                {
+                  name: name.trim(),
+                  sku: sku.trim() || undefined,
+                  stock_unit: stockUnit,
+                },
                 {
                   onSuccess: () => {
                     onOpenChange(false);
                     setName("");
                     setSku("");
+                    setStockUnit("EACH");
                   },
                 },
               )

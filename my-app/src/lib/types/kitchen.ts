@@ -386,6 +386,8 @@ export type { StockUnit };
 export interface CreateKitchenProductInput {
   name: string;
   sku?: string;
+  /** Unit of measure. Omitted means EACH server-side. */
+  stock_unit?: StockUnit;
 }
 
 /**
