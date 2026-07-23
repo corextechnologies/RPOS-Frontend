@@ -23,7 +23,7 @@ import { BranchWasteDialog } from "@/components/branch/BranchWasteDialog";
 import { WasteEventsTable } from "@/components/waste/WasteEventsTable";
 import { WasteEventDetailDialog } from "@/components/waste/WasteEventDetailDialog";
 import { formatDate } from "@/lib/utils";
-import { stockUnitLabel } from "@/lib/stock-unit";
+import { stockUnitColumnLabel } from "@/lib/stock-unit";
 import type { WasteStockForm } from "@/lib/schemas/warehouse-stock";
 import type { BranchInventoryItem } from "@/lib/types/branch";
 import type { WasteEvent } from "@/lib/types/waste";
@@ -89,6 +89,7 @@ export default function BranchInventoryPage() {
                   <TableHead>Product</TableHead>
                   <TableHead>Batch</TableHead>
                   <TableHead className="text-right">On hand</TableHead>
+                  <TableHead>Unit</TableHead>
                   <TableHead>Expires</TableHead>
                   {canWaste && <TableHead className="w-[120px]" />}
                 </TableRow>
@@ -111,13 +112,11 @@ export default function BranchInventoryPage() {
                       ) : (
                         <span className="tabular-nums text-content">
                           {item.quantity}
-                          {stockUnitLabel(item.stock_unit) && (
-                            <span className="ml-1 text-xs text-faint">
-                              {stockUnitLabel(item.stock_unit)}
-                            </span>
-                          )}
                         </span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-muted">
+                      {stockUnitColumnLabel(item.stock_unit)}
                     </TableCell>
                     <TableCell className="text-muted">
                       {item.expiry_date ? formatDate(item.expiry_date) : "-"}

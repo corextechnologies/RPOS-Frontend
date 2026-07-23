@@ -21,15 +21,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { STOCK_UNITS, STOCK_UNIT_LABEL } from "@/lib/stock-unit";
+import { StockUnitSelect } from "./StockUnitSelect";
 import {
   updateWarehouseProductSchema,
   type UpdateWarehouseProductForm,
@@ -80,7 +73,12 @@ export function EditProductDialog({
     defaultValues: { name: "", sku: "", kind: "RAW_MATERIAL", stock_unit: "EACH" },
   });
 
-  // Reseed whenever a different product is opened.
+  // Reseed only when the dialog opens or a genuinely different product loads —
+  // keyed on `product.id`, NOT the object reference. The parent passes a fresh
+  // object literal every render, so depending on `product` itself would re-run
+  // this on every re-render (e.g. when `isPending` flips on save, or a
+  // background inventory refetch lands) and wipe the user's in-progress edits —
+  // notably snapping the unit back to its seed the instant "Save" is clicked.
   useEffect(() => {
     if (open && product) {
       form.reset({
@@ -92,7 +90,9 @@ export function EditProductDialog({
         stock_unit: product.stock_unit ?? "EACH",
       });
     }
-  }, [open, product, form]);
+    // Intentionally keyed on identity, not the `product` object or `form`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, product?.id]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -159,20 +159,12 @@ export function EditProductDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Unit</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a unit" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {STOCK_UNITS.map((unit) => (
-                        <SelectItem key={unit} value={unit}>
-                          {STOCK_UNIT_LABEL[unit]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <StockUnitSelect
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    />
+                  </FormControl>
                   <p className="text-xs text-muted">
                     How this product is stocked and counted.
                   </p>

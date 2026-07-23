@@ -226,8 +226,8 @@ export interface AdminInventoryProduct {
    * legacy rows that predate the field.
    */
   kind?: ProductKind;
-  /** Unit of measure the product is stocked in. Undefined on legacy rows. */
-  stock_unit?: StockUnit;
+  /** Unit of measure the product is stocked in. Always present (defaults to EACH). */
+  stock_unit: StockUnit;
 }
 
 export interface AdminInventoryItem {

@@ -270,8 +270,14 @@ interface MockStockRequest extends Omit<StockRequest, "type" | "status"> {
   target_location_id?: string | null;
 }
 
-interface MockInventoryItem extends InventoryItem {
+interface MockInventoryItem extends Omit<InventoryItem, "product"> {
   restaurant_id: string;
+  /**
+   * A stored row keeps only product identity; `kind` and `stock_unit` are
+   * resolved from the catalog (`db.products`) when serialized to the public
+   * shape, so they are omitted here rather than duplicated (and left to drift).
+   */
+  product: { id: string; name: string; sku?: string | null };
 }
 
 interface MockWasteEvent extends WasteEvent {
@@ -1936,7 +1942,7 @@ function toPublicInventoryItem(
     product: {
       ...item.product,
       kind: warehouseKind(product?.kind),
-      stock_unit: product?.stock_unit,
+      stock_unit: product?.stock_unit ?? "EACH",
     },
     quantity: item.quantity,
     batch_code: item.batch_code,
@@ -2018,7 +2024,7 @@ function toPublicKitchenInventoryItem(
     product_id: item.product_id,
     // Note the absence of cost_price: procurement cost is Admin-only, and the
     // field is missing from the projection rather than hidden at render time.
-    product: { ...item.product, kind: product?.kind, stock_unit: product?.stock_unit },
+    product: { ...item.product, kind: product?.kind, stock_unit: product?.stock_unit ?? "EACH" },
     quantity: item.quantity,
     batch_code: item.batch_code,
     expiry_date: item.expiry_date,
@@ -3708,7 +3714,7 @@ export const mockClient: ApiClient = {
             sku: item.product.sku,
             cost_price: product?.cost_price ?? null,
             kind: product?.kind,
-            stock_unit: product?.stock_unit,
+            stock_unit: product?.stock_unit ?? "EACH",
           },
           quantity: item.quantity,
           batch_code: item.batch_code,
@@ -3974,7 +3980,7 @@ export const mockClient: ApiClient = {
         name: p.name,
         sku: p.sku,
         kind: warehouseKind(p.kind),
-        stock_unit: p.stock_unit,
+        stock_unit: p.stock_unit ?? "EACH",
       }));
     return delay(products);
   },
@@ -4038,7 +4044,7 @@ export const mockClient: ApiClient = {
       name: created.name,
       sku: created.sku,
       kind: warehouseKind(created.kind),
-      stock_unit: created.stock_unit,
+      stock_unit: created.stock_unit ?? "EACH",
     };
     return delay(result);
   },
@@ -4107,7 +4113,7 @@ export const mockClient: ApiClient = {
       name: product.name,
       sku: product.sku,
       kind: warehouseKind(product.kind),
-      stock_unit: product.stock_unit,
+      stock_unit: product.stock_unit ?? "EACH",
     };
     return delay(result);
   },
@@ -5592,6 +5598,7 @@ export const mockClient: ApiClient = {
           has_recipe: db.kitchen_recipes.some(
             (r) => String(r.product_id) === p.id && r.is_active,
           ),
+          stock_unit: p.stock_unit ?? "EACH",
         })),
     );
   },
@@ -5628,6 +5635,7 @@ export const mockClient: ApiClient = {
       sku: product.sku ?? null,
       kind: "FINISHED_GOOD",
       has_recipe: false,
+      stock_unit: product.stock_unit ?? "EACH",
     });
   },
 
@@ -6449,7 +6457,7 @@ export const mockClient: ApiClient = {
           batch_code: i.batch_code ?? "",
           expiry_date: i.expiry_date ?? null,
           // Resolved from the catalog so the branch table can show the unit.
-          stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit,
+          stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit ?? "EACH",
           location_id: i.location_id,
           // No cost_price. Structurally absent, not nulled — the branch has no
           // business seeing it and `pricing-leak.test.ts` guards the type.
@@ -6527,6 +6535,8 @@ export const mockClient: ApiClient = {
       quantity: item.quantity,
       batch_code: item.batch_code ?? "",
       expiry_date: item.expiry_date ?? null,
+      stock_unit:
+        db.products.find((p) => p.id === item.product_id)?.stock_unit ?? "EACH",
       location_id: item.location_id,
     };
     return delay(result);

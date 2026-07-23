@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/state";
+import { stockUnitLabel } from "@/lib/stock-unit";
 import type { InventoryItem } from "@/lib/types/warehouse";
 
 interface NearExpiryListProps {
@@ -100,7 +101,12 @@ export function NearExpiryList({
                       ) : (
                         <Badge variant="secondary">Unbatched</Badge>
                       )}
-                      <span>{item.quantity} on hand</span>
+                      <span>
+                        {item.quantity}
+                        {stockUnitLabel(item.product.stock_unit) &&
+                          ` ${stockUnitLabel(item.product.stock_unit)}`}{" "}
+                        on hand
+                      </span>
                       <span>{item.expiry_date}</span>
                     </div>
                   </div>

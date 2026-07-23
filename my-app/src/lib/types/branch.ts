@@ -198,8 +198,8 @@ export interface BranchInventoryItem {
   batch_code: string;
   /** Plain calendar date, `YYYY-MM-DD`. Named to match `InventoryItem`. */
   expiry_date?: string | null;
-  /** Unit of measure the product is stocked in. Undefined on legacy rows. */
-  stock_unit?: StockUnit;
+  /** Unit of measure the product is stocked in. Always present (defaults to EACH). */
+  stock_unit: StockUnit;
   location_id: string;
 }
 

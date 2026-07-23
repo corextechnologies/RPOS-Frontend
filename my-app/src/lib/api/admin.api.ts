@@ -40,10 +40,7 @@ import type {
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import type { BillingOut, BillingSummary } from "@/lib/types/super-admin";
 import { billingFromApi } from "./adapters";
-import { apiConfig } from "./config";
-import { request } from "./client";
-import { parseApiError } from "./envelope";
-import { tokens } from "./tokens";
+import { request, requestEnvelope } from "./client";
 
 function normalizeEmployee(e: Employee): Employee {
   return {
@@ -175,32 +172,18 @@ function toPaginatedRequests(
   return toPaginated(data, normalizeStockRequest, meta, fallbackPage, fallbackPageSize);
 }
 
-/** Fetches envelope with meta so pagination can live in data or meta. */
+/**
+ * Fetches envelope with meta so pagination can live in data or meta.
+ *
+ * Delegates to the shared {@link requestEnvelope} so admin GET lists inherit the
+ * same 401 → token-refresh → retry behavior as the rest of the client. Without
+ * that, an expired access token failed these panels outright (e.g. "Failed to
+ * load employees") while portal pages using `request()` recovered silently.
+ */
 async function adminGetEnvelope<T>(
   path: string,
 ): Promise<{ data: T; meta?: Record<string, unknown> }> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (apiConfig.isNgrok) {
-    headers["ngrok-skip-browser-warning"] = "true";
-  }
-  const access = tokens.access;
-  if (access) {
-    headers.Authorization = `Bearer ${access}`;
-  }
-
-  const res = await fetch(`${apiConfig.baseUrl}${path}`, { headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw parseApiError(body, res.status);
-  }
-  const json = await res.json();
-  if (json !== null && typeof json === "object" && "data" in json) {
-    const env = json as { data: T; meta?: Record<string, unknown> };
-    return { data: env.data, meta: env.meta };
-  }
-  return { data: json as T };
+  return requestEnvelope<T>(path);
 }
 
 function requestListQuery(filters?: RequestFilters): string {

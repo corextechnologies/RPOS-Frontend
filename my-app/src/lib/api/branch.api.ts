@@ -45,7 +45,8 @@ function normalizeBranchInventory(i: RawBranchInventoryItem): BranchInventoryIte
     batch_code: i.batch_code ?? "",
     expiry_date: i.expiry_date ?? null,
     // The serializer may put the unit top-level or nested under `product`.
-    stock_unit: i.stock_unit ?? i.product?.stock_unit,
+    // Always present from the API (defaults to EACH); fall back defensively.
+    stock_unit: i.stock_unit ?? i.product?.stock_unit ?? "EACH",
     location_id: String(i.location_id),
   };
 }

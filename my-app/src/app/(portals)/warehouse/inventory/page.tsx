@@ -124,6 +124,9 @@ export default function WarehouseInventoryPage() {
                 name: editing.product.name,
                 sku: editing.product.sku,
                 kind: editing.product.kind,
+                // Seed the real unit, or the dialog defaults it to EACH and a
+                // save with the unit untouched silently overwrites it.
+                stock_unit: editing.product.stock_unit,
               }
             : null
         }

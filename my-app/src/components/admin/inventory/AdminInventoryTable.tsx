@@ -19,7 +19,7 @@ import {
   PRODUCT_KIND_LABEL,
   productKindBadgeVariant,
 } from "@/lib/product-kind";
-import { stockUnitLabel } from "@/lib/stock-unit";
+import { stockUnitColumnLabel } from "@/lib/stock-unit";
 
 interface AdminInventoryTableProps {
   items?: AdminInventoryItem[];
@@ -114,6 +114,7 @@ export function AdminInventoryTable({
               <TableHead>Batch</TableHead>
               <TableHead>Expiry</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
+              <TableHead>Unit</TableHead>
               <TableHead className="text-right">Cost price</TableHead>
             </TableRow>
           </TableHeader>
@@ -151,11 +152,9 @@ export function AdminInventoryTable({
                 <TableCell className="text-muted">{item.expiry_date || "-"}</TableCell>
                 <TableCell className="text-right font-medium text-content">
                   {item.quantity}
-                  {stockUnitLabel(item.product.stock_unit) && (
-                    <span className="ml-1 text-xs font-normal text-faint">
-                      {stockUnitLabel(item.product.stock_unit)}
-                    </span>
-                  )}
+                </TableCell>
+                <TableCell className="text-muted">
+                  {stockUnitColumnLabel(item.product.stock_unit)}
                 </TableCell>
                 <TableCell className="text-right font-medium text-content">
                   {/* Rendered verbatim: it is a decimal money string, and parsing

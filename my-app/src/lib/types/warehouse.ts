@@ -33,8 +33,8 @@ export interface InventoryProduct {
    * predate the field).
    */
   kind?: WarehouseProductKind;
-  /** Unit of measure, set at product creation. Undefined on legacy rows. */
-  stock_unit?: StockUnit;
+  /** Unit of measure, set at product creation. Always present (defaults to EACH). */
+  stock_unit: StockUnit;
 }
 
 export interface InventoryItem {
@@ -107,8 +107,8 @@ export interface WarehouseProduct {
   sku?: string | null;
   /** Only ever `RAW_MATERIAL` or `RESALE` here — the warehouse buys, it doesn't cook. */
   kind?: WarehouseProductKind;
-  /** Unit of measure, chosen at creation. Undefined on legacy rows. */
-  stock_unit?: StockUnit;
+  /** Unit of measure, chosen at creation. Always present (defaults to EACH). */
+  stock_unit: StockUnit;
 }
 
 /**

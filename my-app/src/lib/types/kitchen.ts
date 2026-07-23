@@ -37,8 +37,8 @@ export interface KitchenProduct {
    * the field.
    */
   kind?: ProductKind;
-  /** Unit of measure the product is stocked in. Undefined on legacy rows. */
-  stock_unit?: StockUnit;
+  /** Unit of measure the product is stocked in. Always present (defaults to EACH). */
+  stock_unit: StockUnit;
 }
 
 /**
@@ -403,7 +403,8 @@ export interface KitchenCatalogueItem {
   kind?: "FINISHED_GOOD";
   /** False means it's on the catalogue but the kitchen can't yet produce it. */
   has_recipe?: boolean;
-  stock_unit?: StockUnit;
+  /** Unit of measure the product is made and counted in. Always present (defaults to EACH). */
+  stock_unit: StockUnit;
 }
 
 export interface RecipeComponentInput {

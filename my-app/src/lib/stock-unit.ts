@@ -111,3 +111,16 @@ export function stockUnitLabel(unit?: StockUnit | null): string {
   if (!unit || unit === "EACH") return "";
   return STOCK_UNIT_LABEL[unit] ?? String(unit).toLowerCase();
 }
+
+/**
+ * The unit label for a dedicated Unit column, where every row shows its unit.
+ *
+ * Unlike {@link stockUnitLabel} — which blanks `EACH` because "3 each" is noise
+ * next to a quantity — a column reads as broken with empty cells, so `EACH`
+ * renders as "each" here. Every product has a unit (the backend defaults it to
+ * `EACH` and never returns null), so a cell is never blank. An unknown value
+ * still degrades to a lowercased form rather than a raw SCREAMING_CASE token.
+ */
+export function stockUnitColumnLabel(unit: StockUnit): string {
+  return STOCK_UNIT_LABEL[unit] ?? String(unit).toLowerCase();
+}

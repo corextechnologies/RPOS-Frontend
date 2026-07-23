@@ -21,15 +21,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { STOCK_UNITS, STOCK_UNIT_LABEL } from "@/lib/stock-unit";
+import { StockUnitSelect } from "./StockUnitSelect";
 import {
   createWarehouseProductDefaults,
   createWarehouseProductSchema,
@@ -145,20 +138,12 @@ export function AddProductDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Unit</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a unit" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {STOCK_UNITS.map((unit) => (
-                        <SelectItem key={unit} value={unit}>
-                          {STOCK_UNIT_LABEL[unit]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormControl>
+                    <StockUnitSelect
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    />
+                  </FormControl>
                   <p className="text-xs text-muted">
                     How this product is stocked and counted — each, kg, litre, and
                     so on.
