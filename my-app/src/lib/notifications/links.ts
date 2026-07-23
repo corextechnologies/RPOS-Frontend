@@ -49,6 +49,10 @@ function productionTargetLink(id: string, role: UserRole): string | null {
       return `/admin/production-targets/${id}`;
     case "KITCHEN_MANAGER":
       return `/kitchen/production-targets/${id}`;
+    // A branch has no production-target screen — it receives the dispatch on its
+    // Incoming list, so that is where its notification lands.
+    case "BRANCH_MANAGER":
+      return "/branch/deliveries";
     default:
       return null;
   }

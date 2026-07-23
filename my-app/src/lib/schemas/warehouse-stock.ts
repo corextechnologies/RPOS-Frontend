@@ -42,7 +42,12 @@ export const createWarehouseProductSchema = z.object({
     .string()
     .min(1, "Name is required")
     .max(255, "Name must be 255 characters or fewer"),
-  sku: z.string().max(100, "SKU must be 100 characters or fewer").optional(),
+  // Required on create: every product is introduced with its own unique code, so
+  // the add form insists on one up front rather than leaving it to be backfilled.
+  sku: z
+    .string()
+    .min(1, "SKU is required")
+    .max(100, "SKU must be 100 characters or fewer"),
   /**
    * Only the two the warehouse may create. `FINISHED_GOOD` is absent because
    * the kitchen makes those — sending one is a 422, and a form that can't offer

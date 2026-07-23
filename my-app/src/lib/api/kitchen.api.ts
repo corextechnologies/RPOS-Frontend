@@ -537,10 +537,40 @@ export const kitchenApi = {
     return normalizeProductionTarget(data);
   },
 
-  /** ACKNOWLEDGED → COMPLETED. 409 `invalid_target_status` on any other state. */
+  /** ACKNOWLEDGED → IN_PRODUCTION. 409 `invalid_target_status` otherwise. */
+  async startProductionTarget(id: string): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(
+      `/kitchen/production-targets/${id}/start`,
+      { method: "POST" },
+    );
+    return normalizeProductionTarget(data);
+  },
+
+  /** Mark one line ready (made, or resale set aside). Only while IN_PRODUCTION. */
+  async markProductionTargetLineProduced(
+    id: string,
+    lineId: string,
+  ): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(
+      `/kitchen/production-targets/${id}/lines/${lineId}/produced`,
+      { method: "POST" },
+    );
+    return normalizeProductionTarget(data);
+  },
+
+  /** IN_PRODUCTION → COMPLETED. Every line must be ready. Notifies Admin. */
   async completeProductionTarget(id: string): Promise<ProductionTarget> {
     const data = await request<ProductionTarget>(
       `/kitchen/production-targets/${id}/complete`,
+      { method: "POST" },
+    );
+    return normalizeProductionTarget(data);
+  },
+
+  /** ALLOCATED → DISPATCHED. Ships the allocated quantities to the branches. */
+  async dispatchProductionTarget(id: string): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(
+      `/kitchen/production-targets/${id}/dispatch`,
       { method: "POST" },
     );
     return normalizeProductionTarget(data);

@@ -33,6 +33,7 @@ import type {
 } from "@/lib/types/admin";
 import type {
   AdminProductionTargetFilters,
+  AllocateProductionTargetInput,
   CreateProductionTargetInput,
   ProductionTarget,
   UpdateProductionTargetInput,
@@ -241,7 +242,21 @@ export function normalizeProductionTarget(t: ProductionTarget): ProductionTarget
       id: String(line.id),
       product_id: String(line.product_id),
       quantity: Number(line.quantity),
+      // Defaulted for tolerance until the backend sends them (see the wiring note
+      // to the backend team). A line with no kind is treated as a made item.
+      kind: line.kind ?? "FINISHED_GOOD",
+      produced: Boolean(line.produced),
     })),
+    allocations: t.allocations
+      ? t.allocations.map((a) => ({
+          ...a,
+          id: String(a.id),
+          line_item_id: String(a.line_item_id),
+          product_id: a.product_id != null ? String(a.product_id) : undefined,
+          branch_id: String(a.branch_id),
+          quantity: Number(a.quantity),
+        }))
+      : undefined,
   };
 }
 
@@ -329,6 +344,28 @@ export const adminApi = {
     await request<{ detail: string }>(`/admin/production-targets/${id}`, {
       method: "DELETE",
     });
+  },
+
+  /** COMPLETED → ALLOCATED. Splits the produced quantities across branches. */
+  async allocateProductionTarget(
+    id: string,
+    body: AllocateProductionTargetInput,
+  ): Promise<ProductionTarget> {
+    const data = await request<ProductionTarget>(
+      `/admin/production-targets/${id}/allocate`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          note: body.note?.trim() ? body.note.trim() : undefined,
+          allocations: body.allocations.map((a) => ({
+            line_id: a.line_id,
+            branch_id: a.branch_id,
+            quantity: a.quantity,
+          })),
+        }),
+      },
+    );
+    return normalizeProductionTarget(data);
   },
 
   async getMyBilling(): Promise<BillingSummary> {

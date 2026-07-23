@@ -47,8 +47,8 @@ export default function KitchenProductionTargetsPage() {
           Production targets
         </h1>
         <p className="mt-1 text-sm text-muted">
-          What Admin has asked this kitchen to make. Acknowledge a target, then mark
-          it complete once made.
+          What Admin has asked this kitchen to make. Acknowledge one, produce it,
+          complete it, then dispatch once Admin has allocated it to branches.
         </p>
       </div>
 

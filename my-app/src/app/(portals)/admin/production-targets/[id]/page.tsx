@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ProductionTargetAllocationPanel } from "@/components/production-targets/ProductionTargetAllocationPanel";
 import { ProductionTargetDetail } from "@/components/production-targets/ProductionTargetDetail";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +16,25 @@ import {
   useDeleteProductionTarget,
   useProductionTarget,
 } from "@/lib/hooks/use-production-targets";
+import type { ProductionTargetStatus } from "@/lib/types/production-target";
+
+/** What Admin is waiting on, once a target has left PENDING but isn't allocatable. */
+function allocationHint(status: ProductionTargetStatus): string {
+  switch (status) {
+    case "ACKNOWLEDGED":
+      return "The kitchen has acknowledged this target and will start production.";
+    case "IN_PRODUCTION":
+      return "The kitchen is producing this target. Allocate it across branches once it's complete.";
+    case "ALLOCATED":
+      return "Allocated across branches. The kitchen dispatches next.";
+    case "DISPATCHED":
+      return "Dispatched to the branches. They confirm receipt on their Incoming screen.";
+    case "RECEIVED":
+      return "Every branch has received this target. It's complete.";
+    default:
+      return "This target can no longer be edited or deleted.";
+  }
+}
 
 export default function AdminProductionTargetDetailPage() {
   const params = useParams<{ id: string }>();
@@ -79,10 +99,14 @@ export default function AdminProductionTargetDetailPage() {
       ) : (
         <>
           <ProductionTargetDetail target={data} />
-          {!editable && (
+
+          {data.status === "COMPLETED" && can("production-targets:update") && (
+            <ProductionTargetAllocationPanel target={data} />
+          )}
+
+          {!editable && data.status !== "COMPLETED" && (
             <p className="text-sm text-muted">
-              This target has been {data.status.toLowerCase()} by the kitchen and can
-              no longer be edited or deleted.
+              {allocationHint(data.status)}
             </p>
           )}
         </>
