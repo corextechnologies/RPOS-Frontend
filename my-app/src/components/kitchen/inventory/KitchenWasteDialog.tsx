@@ -131,12 +131,12 @@ export function KitchenWasteDialog({
                   <FormControl>
                     <Input
                       type="number"
-                      min={1}
+                      min={0}
                       // A soft bound only: the server is the authority, and
                       // answers `insufficient_stock` if this is beaten.
                       max={item?.quantity}
-                      step="1"
-                      inputMode="numeric"
+                      step="any"
+                      inputMode="decimal"
                       placeholder="0"
                       {...field}
                     />

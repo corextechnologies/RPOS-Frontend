@@ -126,8 +126,20 @@ export function useKitchenWarehouseProductOptions(warehouseId: string) {
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [inventory.data]);
 
+  // On-hand at the warehouse, summed across batches, so the request form can
+  // show "95 kg available" and the kitchen can size the ask against it. The
+  // warehouse ledger is the authority — this is a hint, not a hard cap.
+  const onHandById = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const item of inventory.data ?? []) {
+      totals.set(item.product_id, (totals.get(item.product_id) ?? 0) + item.quantity);
+    }
+    return totals;
+  }, [inventory.data]);
+
   return {
     products,
+    onHandById,
     isLoading: inventory.isLoading,
     isFetching: inventory.isFetching,
     isError: inventory.isError,

@@ -54,6 +54,11 @@ function normalizeInventoryItem(item: InventoryItem): InventoryItem {
     product: {
       ...item.product,
       id: String(item.product.id),
+      units_per_pack:
+        item.product.units_per_pack == null ||
+        item.product.units_per_pack === undefined
+          ? null
+          : Number(item.product.units_per_pack),
     },
     quantity: Number(item.quantity),
     batch_code: item.batch_code ?? "",
@@ -62,7 +67,14 @@ function normalizeInventoryItem(item: InventoryItem): InventoryItem {
 }
 
 function normalizeProduct(product: WarehouseProduct): WarehouseProduct {
-  return { ...product, id: String(product.id) };
+  return {
+    ...product,
+    id: String(product.id),
+    units_per_pack:
+      product.units_per_pack == null || product.units_per_pack === undefined
+        ? null
+        : Number(product.units_per_pack),
+  };
 }
 
 function normalizeStaff(staff: WarehouseStaff): WarehouseStaff {
@@ -168,6 +180,9 @@ export const warehouseApi = {
         ...(body.kind ? { kind: body.kind } : {}),
         // Omitted means EACH server-side.
         ...(body.stock_unit ? { stock_unit: body.stock_unit } : {}),
+        ...(body.units_per_pack != null && body.units_per_pack !== undefined
+          ? { units_per_pack: body.units_per_pack }
+          : {}),
       }),
     });
     return normalizeProduct(data);
@@ -186,6 +201,7 @@ export const warehouseApi = {
     if (body.sku !== undefined) payload.sku = optionalText(body.sku ?? undefined) ?? null;
     if (body.kind !== undefined) payload.kind = body.kind;
     if (body.stock_unit !== undefined) payload.stock_unit = body.stock_unit;
+    if (body.units_per_pack !== undefined) payload.units_per_pack = body.units_per_pack;
     const data = await request<WarehouseProduct>(
       `/warehouse/products/${productId}`,
       {

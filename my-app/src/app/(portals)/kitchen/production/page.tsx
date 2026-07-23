@@ -26,11 +26,14 @@ import { useAuth } from "@/lib/auth";
 import {
   useKitchenCatalogue,
   useKitchenProduction,
+  useKitchenRecipes,
   useProduceKitchenProduct,
 } from "@/lib/hooks/use-kitchen-recipes";
 import { useKitchenInventory } from "@/lib/hooks/use-kitchen-inventory";
 import { useCreateDispatchNotification } from "@/lib/hooks/use-kitchen-requests";
 import { formatDate } from "@/lib/utils";
+import { formatStockQty } from "@/lib/stock-unit";
+import { tryConvertQty } from "@/lib/unit-convert";
 import { toast } from "sonner";
 import type { ProductionLineRole } from "@/lib/types/branch";
 
@@ -337,6 +340,8 @@ function ProduceDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const catalogue = useKitchenCatalogue();
+  const recipes = useKitchenRecipes();
+  const inventory = useKitchenInventory();
   const produce = useProduceKitchenProduct();
 
   const [productId, setProductId] = useState("");
@@ -348,6 +353,46 @@ function ProduceDialog({
   // before they hit the button beats an error toast afterwards.
   const noRecipe = picked && picked.has_recipe === false;
   const valid = !!productId && Number(quantity) > 0 && !noRecipe;
+
+  // What producing this many will draw from stock — one line per component,
+  // converted into the ingredient's stock unit and multiplied by the batch
+  // count, so the chef sees "10 buns → 1 kg flour" before committing.
+  const qtyNum = Number(quantity);
+  const activeRecipe = picked
+    ? (recipes.data ?? []).find((r) => r.is_active && r.product_name === picked.name)
+    : undefined;
+  // Keyed by the numeric portion of the product id ("prod-001" → 1), because a
+  // recipe component references it as a number while inventory rows carry the
+  // string id.
+  const onHandById = useMemo(() => {
+    const totals = new Map<number, number>();
+    for (const item of inventory.data ?? []) {
+      const key = Number(item.product_id.replace(/\D/g, "")) || 0;
+      totals.set(key, (totals.get(key) ?? 0) + item.quantity);
+    }
+    return totals;
+  }, [inventory.data]);
+  const projection =
+    activeRecipe && Number.isFinite(qtyNum) && qtyNum > 0
+      ? (() => {
+          const batches = Math.ceil(qtyNum / (activeRecipe.yield_qty || 1));
+          return activeRecipe.components.map((c) => {
+            const from = c.unit ?? c.stock_unit ?? "EACH";
+            const to = c.stock_unit ?? from;
+            const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
+            const needed = perBatch * batches;
+            const onHand = onHandById.get(c.component_product_id);
+            return {
+              id: c.component_product_id,
+              name: c.component_name ?? `#${c.component_product_id}`,
+              needed,
+              unit: to,
+              onHand,
+              short: onHand != null && onHand < needed,
+            };
+          });
+        })()
+      : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -396,6 +441,42 @@ function ProduceDialog({
               onChange={(e) => setQuantity(e.target.value.replace(/\D/g, "") || "0")}
             />
           </div>
+
+          {projection.length > 0 && (
+            <div className="space-y-1.5 rounded-lg border border-line bg-surface-2/50 px-3 py-2.5">
+              <p className="text-xs font-medium uppercase tracking-wide text-faint">
+                Will use
+              </p>
+              <ul className="space-y-1">
+                {projection.map((p) => (
+                  <li key={p.id} className="flex justify-between gap-2 text-sm">
+                    <span className="truncate text-content">{p.name}</span>
+                    <span
+                      className={
+                        p.short
+                          ? "shrink-0 tabular-nums text-warning"
+                          : "shrink-0 tabular-nums text-muted"
+                      }
+                    >
+                      {formatStockQty(p.needed, p.unit)}
+                      {p.onHand != null && (
+                        <span className="text-faint">
+                          {" "}
+                          / {formatStockQty(p.onHand, p.unit)}
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {projection.some((p) => p.short) && (
+                <p className="flex items-start gap-1.5 text-xs text-warning">
+                  <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
+                  Not enough stock for this many.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label className="text-xs" htmlFor="prod-batch">

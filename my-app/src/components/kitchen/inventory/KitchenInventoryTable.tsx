@@ -12,7 +12,8 @@ import {
   PRODUCT_KIND_LABEL,
   productKindBadgeVariant,
 } from "@/lib/product-kind";
-import { stockUnitColumnLabel } from "@/lib/stock-unit";
+import { formatQtyNumber, stockUnitColumnLabel } from "@/lib/stock-unit";
+import { packCountLabel } from "@/lib/pack";
 import {
   Table,
   TableBody,
@@ -116,11 +117,17 @@ export function KitchenInventoryTable({
               <TableHead>Expiry</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
               <TableHead>Unit</TableHead>
+              <TableHead className="text-right">Packs</TableHead>
               {onWaste && <TableHead className="w-[120px]" />}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((item) => (
+            {filtered.map((item) => {
+              const packs = packCountLabel(
+                item.quantity,
+                item.product.units_per_pack,
+              );
+              return (
               <TableRow key={item.id}>
                 <TableCell>
                   <p className="font-medium text-content">{item.product.name}</p>
@@ -146,10 +153,19 @@ export function KitchenInventoryTable({
                 </TableCell>
                 <TableCell className="text-muted">{item.expiry_date || "-"}</TableCell>
                 <TableCell className="text-right font-medium text-content">
-                  {item.quantity}
+                  {formatQtyNumber(item.quantity)}
                 </TableCell>
                 <TableCell className="text-muted">
                   {stockUnitColumnLabel(item.product.stock_unit)}
+                  {item.product.units_per_pack != null &&
+                    item.product.units_per_pack > 0 && (
+                      <span className="mt-0.5 block text-xs text-faint">
+                        {item.product.units_per_pack}/pack
+                      </span>
+                    )}
+                </TableCell>
+                <TableCell className="text-right text-muted">
+                  {packs || "-"}
                 </TableCell>
                 {onWaste && (
                   <TableCell className="text-right">
@@ -164,7 +180,8 @@ export function KitchenInventoryTable({
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>

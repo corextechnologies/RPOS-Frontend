@@ -41,7 +41,7 @@ export function seedReceiptDrafts(
 }
 
 export interface ReceiptValidation {
-  /** Rows whose quantity is not a whole number within 0..cap. */
+  /** Rows whose quantity is not a number within 0..cap (fractions allowed). */
   invalid: ReceiptDraft[];
   /** True when any quantity is short, or any issue note was written. */
   differs: boolean;
@@ -61,8 +61,8 @@ export function validateReceipts(
     const cap = lineCap(line);
     const value = Number(draft.quantity_received);
     const ok =
-      draft.quantity_received !== "" &&
-      Number.isInteger(value) &&
+      draft.quantity_received.trim() !== "" &&
+      Number.isFinite(value) &&
       value >= 0 &&
       value <= cap;
     if (!ok) invalid.push(draft);

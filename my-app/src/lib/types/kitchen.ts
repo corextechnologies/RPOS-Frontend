@@ -39,6 +39,11 @@ export interface KitchenProduct {
   kind?: ProductKind;
   /** Unit of measure the product is stocked in. Always present (defaults to EACH). */
   stock_unit: StockUnit;
+  /**
+   * Optional pack helper: 1 pack = N `stock_unit`s. Used when requesting stock
+   * so the kitchen can enter packs and see the ledger quantity.
+   */
+  units_per_pack?: number | null;
 }
 
 /**
@@ -90,7 +95,7 @@ export interface KitchenLabelFilters {
  */
 export interface KitchenWasteInput {
   product_id: string;
-  /** Whole units, always > 0. The server subtracts; never send a negative. */
+  /** In `stock_unit`, always > 0 (may be fractional). The server subtracts; never send a negative. */
   quantity: number;
   waste_reason: WasteReason;
   /** Defaults to "WASTE" server-side. */
@@ -411,8 +416,16 @@ export interface KitchenCatalogueItem {
 
 export interface RecipeComponentInput {
   component_product_id: number;
-  /** Whole units of the component's `stock_unit`. */
+  /** Amount consumed per batch, expressed in `unit`. May be fractional (0.1). */
   quantity: number;
+  /**
+   * The unit `quantity` is written in. Omit to use the component's own
+   * `stock_unit`. This is what lets a recipe be written in grams ("100") while
+   * the ingredient is stocked in kilograms — production converts on consumption
+   * (see `convertQty`). Must share a dimension with the stock unit; a
+   * cross-dimension unit (grams of eggs) is rejected.
+   */
+  unit?: StockUnit;
   /** Basis points of expected loss. 250 = 2.5%. */
   wastage_bp?: number;
 }
@@ -436,7 +449,13 @@ export interface KitchenRecipeComponent {
   component_name?: string;
   quantity: number;
   wastage_bp: number;
+  /** The component's own stocking unit (e.g. KG). */
   stock_unit?: StockUnit;
+  /**
+   * The unit `quantity` was entered in (e.g. GRAM). Absent means it equals
+   * `stock_unit`. Consumption converts from `unit` to `stock_unit`.
+   */
+  unit?: StockUnit;
 }
 
 export interface KitchenRecipe {

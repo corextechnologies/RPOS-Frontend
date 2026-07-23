@@ -37,37 +37,56 @@ export default function WarehouseInventoryPage() {
 
   const handleAdjust = async (values: AdjustStockForm) => {
     if (!adjusting) return;
-    await adjustStock.mutateAsync({
-      product_id: adjusting.product_id,
-      quantity_delta: Number(values.quantity_delta),
-      batch_code: adjusting.batch_code || undefined,
-      notes: values.notes || undefined,
-    });
-    setAdjusting(null);
+    try {
+      await adjustStock.mutateAsync({
+        product_id: adjusting.product_id,
+        quantity_delta: Number(values.quantity_delta),
+        batch_code: adjusting.batch_code || undefined,
+        notes: values.notes || undefined,
+      });
+      setAdjusting(null);
+    } catch {
+      // onError toasts; keep the dialog open and don't leak an unhandled rejection.
+    }
   };
 
   const handleEdit = async (values: UpdateWarehouseProductForm) => {
     if (!editing) return;
     // Only catalog fields — quantity is never part of this payload.
-    await updateProduct.mutateAsync({
-      productId: editing.product_id,
-      body: {
-        name: values.name,
-        sku: values.sku ?? "",
-        kind: values.kind,
-        stock_unit: values.stock_unit,
-      },
-    });
-    setEditing(null);
+    try {
+      await updateProduct.mutateAsync({
+        productId: editing.product_id,
+        body: {
+          name: values.name,
+          sku: values.sku ?? "",
+          kind: values.kind,
+          stock_unit: values.stock_unit,
+          // Blank clears the pack helper; a number sets it.
+          units_per_pack:
+            values.units_per_pack && values.units_per_pack !== ""
+              ? Number(values.units_per_pack)
+              : null,
+        },
+      });
+      setEditing(null);
+    } catch {
+      // onError toasts; keep the dialog open and don't leak an unhandled rejection.
+    }
   };
 
   const handleEditExpiry = async (values: UpdateStockExpiryForm) => {
     if (!editingExpiry) return;
-    await updateExpiry.mutateAsync({
-      itemId: editingExpiry.id,
-      body: { expiry_date: values.expiry_date ? values.expiry_date : null },
-    });
-    setEditingExpiry(null);
+    try {
+      await updateExpiry.mutateAsync({
+        itemId: editingExpiry.id,
+        body: { expiry_date: values.expiry_date ? values.expiry_date : null },
+      });
+      setEditingExpiry(null);
+    } catch {
+      // The mutation's onError already surfaces a toast; swallow the rejection
+      // so it doesn't bubble as an unhandled rejection, and leave the dialog
+      // open so the user can retry or cancel.
+    }
   };
 
   return (
@@ -127,6 +146,7 @@ export default function WarehouseInventoryPage() {
                 // Seed the real unit, or the dialog defaults it to EACH and a
                 // save with the unit untouched silently overwrites it.
                 stock_unit: editing.product.stock_unit,
+                units_per_pack: editing.product.units_per_pack ?? null,
               }
             : null
         }
