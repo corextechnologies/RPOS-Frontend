@@ -106,14 +106,17 @@ import type {
 import { INVALID_PRODUCTION_RUN, MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
 import type {
   AdminProductionTargetFilters,
+  AllocateProductionTargetInput,
   CreateProductionTargetInput,
   KitchenProductionTargetFilters,
   ProductionTarget,
+  ProductionTargetAllocation,
   UpdateProductionTargetInput,
 } from "@/lib/types/production-target";
 import {
   DUPLICATE_TARGET,
   INVALID_TARGET_STATUS,
+  TARGET_ALLOCATION_EXCEEDS_PRODUCED,
   TARGET_NOT_DELETABLE,
   TARGET_NOT_EDITABLE,
 } from "@/lib/types/production-target";
@@ -207,7 +210,7 @@ const SESSION_KEY = "ros-super-admin-session";
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 23;
+const SEED_VERSION = 24;
 
 interface MockInvoiceRecord {
   id: number;
@@ -1419,7 +1422,10 @@ function seedProductionTargets(): MockProductionTarget[] {
       note: "Weekend rush — extra mains",
       created_at: isoDaysAgo(0),
       lines: [
-        { id: "ptgt-001-l1", product_id: "prod-006", product_name: "Classic Burger", quantity: 80 },
+        // A made item (produced) plus a resale item (added for dispatch), so the
+        // whole flow — including the resale half — has something to exercise.
+        { id: "ptgt-001-l1", product_id: "prod-006", product_name: "Classic Burger", kind: "FINISHED_GOOD", produced: false, quantity: 80 },
+        { id: "ptgt-001-l2", product_id: "prod-005", product_name: "Bottled Cola", kind: "RESALE", produced: false, quantity: 40 },
       ],
     },
     {
@@ -1432,7 +1438,7 @@ function seedProductionTargets(): MockProductionTarget[] {
       note: null,
       created_at: isoDaysAgo(1),
       lines: [
-        { id: "ptgt-002-l1", product_id: "prod-006", product_name: "Classic Burger", quantity: 60 },
+        { id: "ptgt-002-l1", product_id: "prod-006", product_name: "Classic Burger", kind: "FINISHED_GOOD", produced: true, quantity: 60 },
       ],
     },
   ];
@@ -1449,6 +1455,7 @@ function toPublicTarget(t: MockProductionTarget): ProductionTarget {
     note: t.note,
     created_at: t.created_at,
     lines: t.lines.map((l) => ({ ...l })),
+    allocations: t.allocations ? t.allocations.map((a) => ({ ...a })) : undefined,
   };
 }
 
@@ -1466,13 +1473,19 @@ function buildTargetLines(
   targetId: string,
   lines: { product_id: string; quantity: number }[],
 ): ProductionTarget["lines"] {
-  return lines.map((line, i) => ({
-    id: `${targetId}-l${i + 1}`,
-    product_id: line.product_id,
-    product_name:
-      db.products.find((p) => p.id === line.product_id)?.name ?? "Unknown product",
-    quantity: line.quantity,
-  }));
+  return lines.map((line, i) => {
+    const product = db.products.find((p) => p.id === line.product_id);
+    return {
+      id: `${targetId}-l${i + 1}`,
+      product_id: line.product_id,
+      product_name: product?.name ?? "Unknown product",
+      // A target lists sellable output; a raw material here is a mistake, but the
+      // mock mirrors what the product actually is rather than inventing a kind.
+      kind: product?.kind ?? "FINISHED_GOOD",
+      produced: false,
+      quantity: line.quantity,
+    };
+  });
 }
 
 function validateTargetLines(lines: { quantity: number }[]) {
@@ -1484,6 +1497,128 @@ function validateTargetLines(lines: { quantity: number }[]) {
       throw new ApiError("Quantity must be greater than 0.", 422);
     }
   }
+}
+
+/** Find a target owned by this kitchen, or 404. Shared by every kitchen move. */
+function requireMyTarget(
+  db: MockDb,
+  kitchen: Kitchen,
+  id: string,
+): MockProductionTarget {
+  const found = db.production_targets.find(
+    (t) => t.id === id && t.kitchen_id === kitchen.id,
+  );
+  if (!found) throw new ApiError("Production target not found", 404);
+  return found;
+}
+
+/**
+ * A branch confirming a production-target delivery. Returns the delivery row on
+ * success, or null when `deliveryId` is not a target allocation (so the caller
+ * falls through to the dispatch-request path). Status-only: no stock is moved —
+ * the real backend credits the branch here. Mutates `db` but does not save; the
+ * caller saves once.
+ */
+function receiveTargetDelivery(
+  db: MockDb,
+  branch: Branch,
+  deliveryId: string,
+): BranchDelivery | null {
+  let owner: MockProductionTarget | undefined;
+  let alloc: ProductionTargetAllocation | undefined;
+  for (const target of db.production_targets) {
+    if (target.restaurant_id !== branch.restaurant_id) continue;
+    const match = (target.allocations ?? []).find(
+      (a) => a.id === deliveryId && a.branch_id === branch.id,
+    );
+    if (match) {
+      owner = target;
+      alloc = match;
+      break;
+    }
+  }
+  if (!owner || !alloc) return null;
+  if (alloc.status !== "DISPATCHED") {
+    throw new ApiError(
+      `This delivery is ${alloc.status.toLowerCase()}, not awaiting receipt.`,
+      409,
+    );
+  }
+
+  alloc.status = "RECEIVED";
+  // The target is fully received only once every branch has confirmed.
+  if ((owner.allocations ?? []).every((a) => a.status === "RECEIVED")) {
+    owner.status = "RECEIVED";
+    notifyRole(
+      db,
+      { restaurantId: owner.restaurant_id, role: "KITCHEN_MANAGER", kitchenId: owner.kitchen_id },
+      {
+        title: "Production target received",
+        body: `All branches confirmed the ${owner.target_date} target.`,
+        entityType: "production_target",
+        entityId: owner.id,
+      },
+    );
+  }
+
+  return {
+    id: alloc.id,
+    request_id: owner.id,
+    from_label: owner.kitchen_name,
+    product_id: alloc.product_id ?? "",
+    product_name: alloc.product_name,
+    quantity: alloc.quantity,
+    status: "RECEIVED",
+    created_at: owner.created_at,
+  };
+}
+
+/**
+ * Drop a notification into the inbox of whichever user holds `role` in this
+ * restaurant. Best-effort: the production-target flow drives it at each hand-off,
+ * but a missing recipient must never fail the transition, so this returns
+ * silently rather than throwing. The owner-admin is matched on the restaurant
+ * record; everyone else on their employee record.
+ */
+function notifyRole(
+  db: MockDb,
+  opts: {
+    restaurantId: string;
+    role: UserRole;
+    kitchenId?: string;
+    branchId?: string;
+  },
+  message: { title: string; body: string; entityType: string; entityId: string },
+): void {
+  let email: string | undefined;
+  if (opts.role === "ADMIN") {
+    email = db.restaurants.find((r) => r.id === opts.restaurantId)?.admin.email;
+  } else {
+    const emp = db.employees.find(
+      (e) =>
+        e.restaurant_id === opts.restaurantId &&
+        e.role === opts.role &&
+        (opts.kitchenId ? e.kitchen_id === opts.kitchenId : true) &&
+        (opts.branchId ? e.branch_id === opts.branchId : true),
+    );
+    email = emp?.email;
+  }
+  if (!email) return;
+  const account = db.users.find(
+    (u) => u.email.toLowerCase() === email!.toLowerCase(),
+  );
+  if (!account) return;
+  db.notifications.push({
+    id: `ntf-${Date.now()}-${db.notifications.length + 1}`,
+    restaurant_id: opts.restaurantId,
+    user_id: String(account.me.id),
+    title: message.title,
+    body: message.body,
+    entity_type: message.entityType,
+    entity_id: message.entityId,
+    is_read: false,
+    created_at: now(),
+  });
 }
 
 /**
@@ -3227,6 +3362,91 @@ export const mockClient: ApiClient = {
     db.production_targets = db.production_targets.filter((t) => t.id !== id);
     saveDb(db);
     return delay(undefined);
+  },
+
+  /**
+   * COMPLETED → ALLOCATED. Admin splits each ready line across branches. Validates
+   * the whole body before mutating so a bad branch or an over-allocated line can
+   * never leave a half-recorded split. No stock moves — dispatch (the kitchen's
+   * move) is what the real backend debits against.
+   */
+  async allocateProductionTarget(
+    id: string,
+    body: AllocateProductionTargetInput,
+  ): Promise<ProductionTarget> {
+    const me = requireAuth();
+    const db = loadDb();
+    const r = resolveMyRestaurant(db, me);
+    const found = db.production_targets.find(
+      (t) => t.id === id && t.restaurant_id === r.id,
+    );
+    if (!found) throw new ApiError("Production target not found", 404);
+    if (found.status !== "COMPLETED") {
+      throw new ApiError(
+        `Cannot allocate a ${found.status.toLowerCase()} target.`,
+        409,
+        INVALID_TARGET_STATUS,
+      );
+    }
+
+    const allocations = body.allocations ?? [];
+    if (allocations.length === 0) {
+      throw new ApiError("At least one branch allocation is required.", 422);
+    }
+
+    const perLine = new Map<string, number>();
+    const resolved: ProductionTargetAllocation[] = [];
+    for (const a of allocations) {
+      const line = found.lines.find((l) => l.id === a.line_id);
+      if (!line) throw new ApiError(`Line ${a.line_id} not found`, 400);
+      const branch = db.branches.find(
+        (b) => b.id === a.branch_id && b.restaurant_id === r.id,
+      );
+      // A branch from another restaurant is a 404, not a 403 — scope leaks nothing.
+      if (!branch) throw new ApiError("Branch not found", 404);
+      if (!Number.isInteger(a.quantity) || a.quantity <= 0) {
+        throw new ApiError("Quantity must be greater than 0.", 409, INVALID_QUANTITY);
+      }
+      perLine.set(a.line_id, (perLine.get(a.line_id) ?? 0) + a.quantity);
+      resolved.push({
+        id: `${found.id}-a${resolved.length + 1}`,
+        line_item_id: line.id,
+        product_id: line.product_id,
+        product_name: line.product_name,
+        branch_id: branch.id,
+        branch_name: branch.name,
+        quantity: a.quantity,
+        status: "ALLOCATED",
+      });
+    }
+
+    // No line may be allocated beyond what the kitchen produced.
+    for (const line of found.lines) {
+      const allocated = perLine.get(line.id) ?? 0;
+      if (allocated > line.quantity) {
+        throw new ApiError(
+          `Allocated ${allocated} of ${line.product_name}, but only ${line.quantity} were produced.`,
+          409,
+          TARGET_ALLOCATION_EXCEEDS_PRODUCED,
+        );
+      }
+    }
+
+    found.allocations = resolved;
+    found.status = "ALLOCATED";
+    if (body.note !== undefined) found.note = body.note.trim() || found.note;
+    notifyRole(
+      db,
+      { restaurantId: found.restaurant_id, role: "KITCHEN_MANAGER", kitchenId: found.kitchen_id },
+      {
+        title: "Production target allocated",
+        body: `Admin allocated the ${found.target_date} target across branches. Dispatch when ready.`,
+        entityType: "production_target",
+        entityId: found.id,
+      },
+    );
+    saveDb(db);
+    return delay(toPublicTarget(found));
   },
 
   async listEmployees(params) {
@@ -5888,10 +6108,7 @@ export const mockClient: ApiClient = {
     requireKitchenManager(me);
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
-    const found = db.production_targets.find(
-      (t) => t.id === id && t.kitchen_id === kitchen.id,
-    );
-    if (!found) throw new ApiError("Production target not found", 404);
+    const found = requireMyTarget(db, kitchen, id);
     if (found.status !== "PENDING") {
       throw new ApiError(
         `Cannot acknowledge a ${found.status.toLowerCase()} target.`,
@@ -5900,27 +6117,139 @@ export const mockClient: ApiClient = {
       );
     }
     found.status = "ACKNOWLEDGED";
+    notifyRole(
+      db,
+      { restaurantId: found.restaurant_id, role: "ADMIN" },
+      {
+        title: "Production target acknowledged",
+        body: `${kitchen.name} acknowledged the target for ${found.target_date}.`,
+        entityType: "production_target",
+        entityId: found.id,
+      },
+    );
     saveDb(db);
     return delay(toPublicTarget(found));
   },
 
+  /** ACKNOWLEDGED → IN_PRODUCTION. The kitchen has started making the target. */
+  async startProductionTarget(id: string): Promise<ProductionTarget> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = requireMyTarget(db, kitchen, id);
+    if (found.status !== "ACKNOWLEDGED") {
+      throw new ApiError(
+        `Cannot start a ${found.status.toLowerCase()} target.`,
+        409,
+        INVALID_TARGET_STATUS,
+      );
+    }
+    found.status = "IN_PRODUCTION";
+    saveDb(db);
+    return delay(toPublicTarget(found));
+  },
+
+  /**
+   * Mark one line ready — a made item produced, or a resale item set aside.
+   * Only while IN_PRODUCTION. Status-only here: crediting finished-goods stock
+   * is the real backend's job (see the wiring note handed to that team).
+   */
+  async markProductionTargetLineProduced(
+    id: string,
+    lineId: string,
+  ): Promise<ProductionTarget> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = requireMyTarget(db, kitchen, id);
+    if (found.status !== "IN_PRODUCTION") {
+      throw new ApiError(
+        `Lines can only be marked while a target is in production.`,
+        409,
+        INVALID_TARGET_STATUS,
+      );
+    }
+    const line = found.lines.find((l) => l.id === lineId);
+    if (!line) throw new ApiError("Line not found", 404);
+    line.produced = true;
+    saveDb(db);
+    return delay(toPublicTarget(found));
+  },
+
+  /** IN_PRODUCTION → COMPLETED. Every line must be ready first; Admin is told. */
   async completeProductionTarget(id: string): Promise<ProductionTarget> {
     const me = requireAuth();
     requireKitchenManager(me);
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
-    const found = db.production_targets.find(
-      (t) => t.id === id && t.kitchen_id === kitchen.id,
-    );
-    if (!found) throw new ApiError("Production target not found", 404);
-    if (found.status !== "ACKNOWLEDGED") {
+    const found = requireMyTarget(db, kitchen, id);
+    if (found.status !== "IN_PRODUCTION") {
       throw new ApiError(
         `Cannot complete a ${found.status.toLowerCase()} target.`,
         409,
         INVALID_TARGET_STATUS,
       );
     }
+    if (!found.lines.every((l) => l.produced)) {
+      throw new ApiError(
+        "Every product must be marked ready before completing.",
+        409,
+        INVALID_TARGET_STATUS,
+      );
+    }
     found.status = "COMPLETED";
+    notifyRole(
+      db,
+      { restaurantId: found.restaurant_id, role: "ADMIN" },
+      {
+        title: "Production target ready to allocate",
+        body: `${kitchen.name} completed the target for ${found.target_date}. Allocate it across branches.`,
+        entityType: "production_target",
+        entityId: found.id,
+      },
+    );
+    saveDb(db);
+    return delay(toPublicTarget(found));
+  },
+
+  /**
+   * ALLOCATED → DISPATCHED. Ships the allocated quantities; every allocation row
+   * flips to DISPATCHED so it surfaces on the branches' Incoming screens.
+   * Status-only in the mock — debiting kitchen stock is the real backend's job.
+   */
+  async dispatchProductionTarget(id: string): Promise<ProductionTarget> {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = requireMyTarget(db, kitchen, id);
+    if (found.status !== "ALLOCATED") {
+      throw new ApiError(
+        `Cannot dispatch a ${found.status.toLowerCase()} target.`,
+        409,
+        INVALID_TARGET_STATUS,
+      );
+    }
+    found.status = "DISPATCHED";
+    found.allocations = (found.allocations ?? []).map((a) => ({
+      ...a,
+      status: "DISPATCHED" as const,
+    }));
+    // Tell each branch that has goods coming.
+    for (const branchId of new Set((found.allocations ?? []).map((a) => a.branch_id))) {
+      notifyRole(
+        db,
+        { restaurantId: found.restaurant_id, role: "BRANCH_MANAGER", branchId },
+        {
+          title: "Goods dispatched to your branch",
+          body: `${kitchen.name} dispatched a production target. Confirm receipt on Incoming.`,
+          entityType: "production_target",
+          entityId: found.id,
+        },
+      );
+    }
     saveDb(db);
     return delay(toPublicTarget(found));
   },
@@ -6390,6 +6719,28 @@ export const mockClient: ApiClient = {
         });
       }
     }
+
+    // Production targets dispatched to this branch land on the same screen — a
+    // delivery is a delivery, whatever raised it. Their allocation ids are
+    // `<target>-a<n>`, distinct from the request flow's `alloc-*`, so the
+    // receive handler can tell them apart.
+    for (const target of db.production_targets) {
+      if (target.restaurant_id !== branch.restaurant_id) continue;
+      for (const a of target.allocations ?? []) {
+        if (a.branch_id !== branch.id) continue;
+        if (a.status !== "DISPATCHED" && a.status !== "RECEIVED") continue;
+        deliveries.push({
+          id: a.id,
+          request_id: target.id,
+          from_label: target.kitchen_name,
+          product_id: a.product_id ?? "",
+          product_name: a.product_name,
+          quantity: a.quantity,
+          status: a.status,
+          created_at: target.created_at,
+        });
+      }
+    }
     return delay(deliveries);
   },
 
@@ -6397,6 +6748,14 @@ export const mockClient: ApiClient = {
     const me = requireAuth();
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
+
+    // A production-target allocation? (id shape `<target>-a<n>`.) These are
+    // status-only in the mock — the real backend credits branch stock here.
+    const targetDelivery = receiveTargetDelivery(db, branch, deliveryId);
+    if (targetDelivery) {
+      saveDb(db);
+      return delay(targetDelivery);
+    }
 
     // Find the allocation this delivery id points at, scoped to this branch.
     let owner: MockStockRequest | undefined;

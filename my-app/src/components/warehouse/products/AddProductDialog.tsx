@@ -64,7 +64,12 @@ export function AddProductDialog({
   const form = useForm<CreateWarehouseProductForm>({
     resolver: zodResolver(createWarehouseProductSchema),
     defaultValues: createWarehouseProductDefaults,
+    // Validate as the user types so the submit button can stay disabled until
+    // every required field is filled, rather than only complaining on submit.
+    mode: "onChange",
   });
+
+  const canSubmit = form.formState.isValid && !isSubmitting;
 
   useEffect(() => {
     if (open) form.reset(createWarehouseProductDefaults);
@@ -163,7 +168,7 @@ export function AddProductDialog({
                     <Input placeholder="FL-001" {...field} />
                   </FormControl>
                   <p className="text-xs text-muted">
-                    Optional, but must be unique across your restaurant.
+                    Must be unique across your restaurant.
                   </p>
                   <FormMessage />
                 </FormItem>
@@ -179,7 +184,7 @@ export function AddProductDialog({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={!canSubmit}>
                 {isSubmitting ? "Adding…" : "Add product"}
               </Button>
             </DialogFooter>
