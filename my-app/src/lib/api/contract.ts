@@ -1,5 +1,6 @@
 import type {
   AdminProductionTargetFilters,
+  AllocateProductionTargetInput,
   CreateProductionTargetInput,
   KitchenProductionTargetFilters,
   ProductionTarget,
@@ -357,7 +358,20 @@ export interface ApiClient {
   ): Promise<ProductionTarget[]>;
   getKitchenProductionTarget(id: string): Promise<ProductionTarget>;
   acknowledgeProductionTarget(id: string): Promise<ProductionTarget>;
+  // Kitchen drives the middle of the lifecycle: start production, mark each line
+  // ready, complete (notifies Admin), then dispatch once Admin has allocated.
+  startProductionTarget(id: string): Promise<ProductionTarget>;
+  markProductionTargetLineProduced(
+    id: string,
+    lineId: string,
+  ): Promise<ProductionTarget>;
   completeProductionTarget(id: string): Promise<ProductionTarget>;
+  dispatchProductionTarget(id: string): Promise<ProductionTarget>;
+  // Admin splits a COMPLETED target's ready quantities across branches.
+  allocateProductionTarget(
+    id: string,
+    body: AllocateProductionTargetInput,
+  ): Promise<ProductionTarget>;
 
   getKitchenRequest(requestId: string): Promise<KitchenRequest>;
   updateKitchenRequestStatus(

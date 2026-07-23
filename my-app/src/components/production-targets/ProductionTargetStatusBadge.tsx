@@ -11,10 +11,18 @@ const STATUS_VARIANT: Record<
 > = {
   // Waiting on the kitchen to pick it up.
   PENDING: "warning",
-  // Seen and owned by the kitchen, not yet made.
+  // Seen and owned by the kitchen, not yet started.
   ACKNOWLEDGED: "secondary",
-  // Made.
+  // Being made / gathered right now.
+  IN_PRODUCTION: "default",
+  // Made — waiting on Admin to allocate across branches.
   COMPLETED: "success",
+  // Split across branches, waiting on the kitchen to ship.
+  ALLOCATED: "secondary",
+  // Shipped — in transit to the branches.
+  DISPATCHED: "warning",
+  // Every branch has confirmed receipt. Done.
+  RECEIVED: "success",
 };
 
 export function ProductionTargetStatusBadge({
