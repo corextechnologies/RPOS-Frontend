@@ -117,11 +117,9 @@ export default function KitchenRecipesPage() {
                       </CardTitle>
                       <CardDescription>
                         {recipe
-                          ? `Makes ${recipe.yield_qty}${
-                              stockUnitLabel(item.stock_unit)
-                                ? ` ${stockUnitLabel(item.stock_unit)}`
-                                : ""
-                            }`
+                          ? stockUnitLabel(item.stock_unit)
+                            ? `Recipe set — counted in ${stockUnitLabel(item.stock_unit)}`
+                            : "Recipe set"
                           : item.stock_unit && item.stock_unit !== "EACH"
                             ? `No recipe — counted in ${stockUnitLabel(item.stock_unit)}`
                             : "No recipe — can't be made yet"}
@@ -289,7 +287,6 @@ function NewRecipeDialog({
   const inventory = useKitchenInventory();
   const create = useCreateKitchenRecipe();
 
-  const [yieldQty, setYieldQty] = useState("1");
   const [components, setComponents] = useState<RecipeComponentInput[]>([
     { component_product_id: 0, quantity: 1, wastage_bp: 0 },
   ]);
@@ -347,16 +344,6 @@ function NewRecipeDialog({
         )}
 
         <div className="space-y-4">
-          <div className="w-28 space-y-1.5">
-            <Label className="text-xs">Makes</Label>
-            <Input
-              className="h-10"
-              inputMode="numeric"
-              value={yieldQty}
-              onChange={(e) => setYieldQty(e.target.value.replace(/\D/g, "") || "1")}
-            />
-          </div>
-
           <div className="space-y-2">
             <Label className="text-xs">Ingredients</Label>
             {components.map((c, i) => {
@@ -489,13 +476,14 @@ function NewRecipeDialog({
               create.mutate(
                 {
                   product_id: numericId,
-                  yield_qty: Number(yieldQty) || 1,
+                  // A recipe describes one product; the batch size is chosen at
+                  // production time ("Make something"), not here.
+                  yield_qty: 1,
                   components: usable,
                 },
                 {
                   onSuccess: () => {
                     onOpenChange(false);
-                    setYieldQty("1");
                     setComponents([{ component_product_id: 0, quantity: 1, wastage_bp: 0 }]);
                   },
                 },
