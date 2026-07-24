@@ -449,8 +449,11 @@ export interface KitchenRecipeComponent {
   component_name?: string;
   quantity: number;
   wastage_bp: number;
-  /** The component's own stocking unit (e.g. KG). */
-  stock_unit?: StockUnit;
+  /**
+   * How the ingredient is stocked (e.g. KG). Required for converting recipe
+   * `unit` (e.g. GRAM) against on-hand. Always present on live API responses.
+   */
+  stock_unit: StockUnit;
   /**
    * The unit `quantity` was entered in (e.g. GRAM). Absent means it equals
    * `stock_unit`. Consumption converts from `unit` to `stock_unit`.

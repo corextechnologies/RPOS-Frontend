@@ -32,7 +32,7 @@ import {
 import { useKitchenInventory } from "@/lib/hooks/use-kitchen-inventory";
 import { useCreateDispatchNotification } from "@/lib/hooks/use-kitchen-requests";
 import { formatDate } from "@/lib/utils";
-import { formatStockQty } from "@/lib/stock-unit";
+import { formatStockQty, type StockUnit } from "@/lib/stock-unit";
 import { tryConvertQty } from "@/lib/unit-convert";
 import { toast } from "sonner";
 import type { ProductionLineRole } from "@/lib/types/branch";
@@ -363,14 +363,17 @@ function ProduceDialog({
     : undefined;
   // Keyed by the numeric portion of the product id ("prod-001" → 1), because a
   // recipe component references it as a number while inventory rows carry the
-  // string id.
+  // string id. Also remember each product's stock_unit so a recipe response that
+  // omits it (or an older cached row) still converts kg↔g correctly.
   const onHandById = useMemo(() => {
     const totals = new Map<number, number>();
+    const units = new Map<number, StockUnit>();
     for (const item of inventory.data ?? []) {
       const key = Number(item.product_id.replace(/\D/g, "")) || 0;
       totals.set(key, (totals.get(key) ?? 0) + item.quantity);
+      if (item.product.stock_unit) units.set(key, item.product.stock_unit);
     }
-    return totals;
+    return { totals, units };
   }, [inventory.data]);
   const projection =
     activeRecipe && Number.isFinite(qtyNum) && qtyNum > 0
@@ -378,10 +381,14 @@ function ProduceDialog({
           const batches = Math.ceil(qtyNum / (activeRecipe.yield_qty || 1));
           return activeRecipe.components.map((c) => {
             const from = c.unit ?? c.stock_unit ?? "EACH";
-            const to = c.stock_unit ?? from;
+            // Prefer recipe.stock_unit, then inventory product, then entry unit.
+            const to =
+              c.stock_unit ??
+              onHandById.units.get(c.component_product_id) ??
+              from;
             const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
             const needed = perBatch * batches;
-            const onHand = onHandById.get(c.component_product_id);
+            const onHand = onHandById.totals.get(c.component_product_id);
             return {
               id: c.component_product_id,
               name: c.component_name ?? `#${c.component_product_id}`,
