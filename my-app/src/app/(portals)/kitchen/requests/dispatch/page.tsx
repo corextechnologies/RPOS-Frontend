@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { KitchenRequestList } from "@/components/kitchen/requests/KitchenRequestList";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
+import { ProductionTargetStatusBadge } from "@/components/production-targets/ProductionTargetStatusBadge";
 import { Button } from "@/components/ui/button";
+import { PageState } from "@/components/ui/page-state";
 import {
   Select,
   SelectContent,
@@ -12,13 +15,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   KITCHEN_REQUESTS_PAGE_SIZE,
   useKitchenDispatchRequests,
 } from "@/lib/hooks/use-kitchen-requests";
+import { useCompletedKitchenProductionTargets } from "@/lib/hooks/use-production-targets";
 import type { KitchenRequestFilters, KitchenRequestStatus } from "@/lib/types/kitchen";
 import { isMissingKitchenAssignment } from "@/lib/types/kitchen";
 
-/** The statuses a kitchen's own dispatch notification passes through. */
 const STATUS_OPTIONS: Array<KitchenRequestStatus | "all"> = [
   "all",
   "PENDING",
@@ -28,12 +39,8 @@ const STATUS_OPTIONS: Array<KitchenRequestStatus | "all"> = [
   "REJECTED",
 ];
 
-/**
- * The kitchen's own dispatch notifications to Admin — what it offered, and
- * whether Admin has allocated it across branches yet. Raising one happens from
- * the Production screen ("Notify Admin").
- */
 export default function KitchenDispatchRequestsPage() {
+  const router = useRouter();
   const [status, setStatus] = useState<KitchenRequestStatus | "all">("all");
   const [page, setPage] = useState(1);
 
@@ -43,6 +50,7 @@ export default function KitchenDispatchRequestsPage() {
   );
 
   const requests = useKitchenDispatchRequests(filters);
+  const completedTargets = useCompletedKitchenProductionTargets();
   const unassigned = isMissingKitchenAssignment(requests.error);
 
   const total = requests.data?.total ?? 0;
@@ -92,8 +100,69 @@ export default function KitchenDispatchRequestsPage() {
             onRetry={() => requests.refetch()}
             basePath="/kitchen/requests/dispatch"
             emptyTitle="No dispatch notifications"
-            emptyDescription="Raise one from Production with “Notify Admin” once you have goods ready to send out."
+            emptyDescription="Raise one from Production once you have goods ready to send out."
           />
+
+          <div className="space-y-4">
+            <div>
+              <h2 className="font-display text-lg font-semibold text-content">
+                Completed production targets
+              </h2>
+              <p className="text-sm text-muted">
+                Targets you completed &mdash; waiting on Admin to allocate, then dispatch
+                to branches.
+              </p>
+            </div>
+            <PageState
+              isLoading={completedTargets.isLoading}
+              isError={completedTargets.isError}
+              data={completedTargets.data}
+              isEmpty={(rows) => rows.length === 0}
+              errorTitle="Couldn't load targets"
+              onRetry={() => completedTargets.refetch()}
+              emptyTitle="No completed targets"
+              emptyDescription="Targets move here once you complete production and notify Admin."
+            >
+              {(rows) => (
+                <div className="rounded-2xl border border-line bg-surface">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Products</TableHead>
+                        <TableHead>Note</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {rows.map((t) => (
+                        <TableRow
+                          key={t.id}
+                          className="cursor-pointer"
+                          onClick={() =>
+                            router.push(`/kitchen/requests/dispatch/target/${t.id}`)
+                          }
+                        >
+                          <TableCell className="font-medium tabular-nums text-content">
+                            {t.target_date}
+                          </TableCell>
+                          <TableCell>
+                            <ProductionTargetStatusBadge status={t.status} />
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-muted">
+                            {t.lines.length}
+                          </TableCell>
+                          <TableCell className="max-w-xs truncate text-muted">
+                            {t.note ?? "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </PageState>
+          </div>
 
           {total > pageSize && (
             <div className="flex items-center justify-end gap-3">

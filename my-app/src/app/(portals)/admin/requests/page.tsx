@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { CompletedTargetsList } from "@/components/admin/requests/CompletedTargetsList";
 import { RequestList } from "@/components/admin/requests/RequestList";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,14 +14,14 @@ import {
 } from "@/components/ui/select";
 import { useWarehouses } from "@/lib/hooks/use-locations";
 import {
-  useDispatchRequests,
   useDistributionRequests,
   useProductRequests,
 } from "@/lib/hooks/use-requests";
+import { useAcknowledgedProductionTargets } from "@/lib/hooks/use-production-targets";
 import type { RequestFilters, RequestStatus } from "@/lib/types/admin";
 import { cn } from "@/lib/utils";
 
-type InboxTab = "products" | "Dispatch" | "Distribution";
+type InboxTab = "products" | "Distribution" | "Dispatch";
 
 const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
   "all",
@@ -53,12 +54,14 @@ export default function AdminRequestsPage() {
   );
 
   const products = useProductRequests(filters);
-  const Distribution = useDistributionRequests(filters);
-  const Dispatch = useDispatchRequests(filters);
-  // Distribution POs arrive without a `from_label`; resolve the warehouse name.
+  // Warehouse POs (WAREHOUSE_TO_ADMIN_PO) — surfaced under the Dispatch tab.
+  const warehouseRequests = useDistributionRequests(filters);
+  const acknowledgedTargets = useAcknowledgedProductionTargets();
+  // Warehouse POs arrive without a `from_label`; resolve the warehouse name.
   const warehouses = useWarehouses();
-  const active =
-    tab === "products" ? products : tab === "Distribution" ? Dispatch : Distribution;
+
+  // The Distribution tab is production-targets only; the other two list requests.
+  const active = tab === "products" ? products : warehouseRequests;
 
   const total = active.data?.total ?? 0;
   const pageSize = active.data?.page_size ?? 20;
@@ -71,7 +74,7 @@ export default function AdminRequestsPage() {
           Requests
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Incoming product and warehouse Distribution requests awaiting Admin action.
+          Branch product requests, production target distribution, and warehouse dispatch.
         </p>
       </div>
 
@@ -117,70 +120,87 @@ export default function AdminRequestsPage() {
           </Button>
         </div>
 
-        <Select
-          value={status}
-          onValueChange={(v) => {
-            setStatus(v as RequestStatus | "all");
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="sm:w-56">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {opt === "all" ? "All statuses" : opt.replaceAll("_", " ")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {tab !== "Distribution" && (
+          <Select
+            value={status}
+            onValueChange={(v) => {
+              setStatus(v as RequestStatus | "all");
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="sm:w-56">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_OPTIONS.map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt === "all" ? "All statuses" : opt.replaceAll("_", " ")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
-      <RequestList
-        items={active.data?.items}
-        isLoading={active.isLoading}
-        isError={active.isError}
-        onRetry={() => active.refetch()}
-        warehouses={warehouses.data}
-        emptyTitle={
-          tab === "products"
-            ? "No product requests"
-            : tab === "Distribution"
-              ? "No Distribution requests"
-              : "No Dispatch requests"
-        }
-        emptyDescription={
-          tab === "products"
-            ? "Branch product requests will appear here."
-            : tab === "Distribution"
-              ? "Warehouse PO / Distribution requests will appear here."
-              : "Kitchen Dispatch notifications will appear here, ready to allocate across branches."
-        }
-      />
-
-      {total > pageSize && (
-        <div className="flex items-center justify-end gap-3">
-          <p className="text-sm text-muted">
-            Page {page} of {totalPages}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={page <= 1 || active.isFetching}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Previous
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={page >= totalPages || active.isFetching}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Next
-          </Button>
+      {tab === "Distribution" ? (
+        <div className="space-y-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-content">
+              Production targets
+            </h2>
+            <p className="text-sm text-muted">
+              Targets acknowledged by the kitchen — track progress and allocate once complete.
+            </p>
+          </div>
+          <CompletedTargetsList
+            targets={acknowledgedTargets.data}
+            isLoading={acknowledgedTargets.isLoading}
+            isError={acknowledgedTargets.isError}
+            onRetry={() => acknowledgedTargets.refetch()}
+          />
         </div>
+      ) : (
+        <>
+          <RequestList
+            items={active.data?.items}
+            isLoading={active.isLoading}
+            isError={active.isError}
+            onRetry={() => active.refetch()}
+            warehouses={warehouses.data}
+            emptyTitle={
+              tab === "products" ? "No product requests" : "No warehouse requests"
+            }
+            emptyDescription={
+              tab === "products"
+                ? "Branch product requests will appear here."
+                : "Warehouse dispatch requests will appear here."
+            }
+          />
+
+          {total > pageSize && (
+            <div className="flex items-center justify-end gap-3">
+              <p className="text-sm text-muted">
+                Page {page} of {totalPages}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page <= 1 || active.isFetching}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={page >= totalPages || active.isFetching}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

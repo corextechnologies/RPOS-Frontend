@@ -45,7 +45,7 @@ export default function AdminProductionTargetsPage() {
   }, [kitchenId, date]);
 
   const { data, isLoading, isError, error, refetch } = useProductionTargets(filters);
-  const targets = data ?? [];
+  const targets = (data ?? []).filter((t) => t.status === "PENDING");
   const filtering = kitchenId !== ALL_KITCHENS || !!date;
 
   return (

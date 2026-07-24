@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { PackageCheck, Plus, Trash2 } from "lucide-react";
 import {
   useBranchInventory,
   useBranchKitchens,
   useBranchRequests,
   useCreateBranchRequest,
+  useReceiveBranchRequest,
 } from "@/lib/hooks/use-branch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,13 +37,17 @@ import type { CreateBranchRequestLineInput } from "@/lib/types/branch";
 
 const REQUESTS_PAGE_SIZE = 20;
 
-/** The states a branch's own outgoing request can be in before it leaves Admin. */
 const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
   "all",
   "PENDING",
-  "PARTIALLY_APPROVED",
   "APPROVED",
+  "PARTIALLY_APPROVED",
   "REJECTED",
+  "FORWARDED_TO_KITCHEN",
+  "IN_PRODUCTION",
+  "PRODUCED",
+  "DISPATCHED",
+  "RECEIVED",
 ];
 
 /**
@@ -62,6 +67,7 @@ export default function BranchRequestsPage() {
   );
 
   const { data, isLoading, error, isFetching } = useBranchRequests(filters);
+  const receiveRequest = useReceiveBranchRequest();
 
   const total = data?.total ?? 0;
   const pageSize = data?.page_size ?? REQUESTS_PAGE_SIZE;
@@ -131,7 +137,19 @@ export default function BranchRequestsPage() {
                       <p className="mt-0.5 text-xs italic text-faint">{req.notes}</p>
                     )}
                   </div>
-                  <RequestStatusBadge status={req.status} />
+                  <div className="flex items-center gap-2">
+                    <RequestStatusBadge status={req.status} />
+                    {req.status === "DISPATCHED" && (
+                      <Button
+                        size="sm"
+                        disabled={receiveRequest.isPending}
+                        onClick={() => receiveRequest.mutate(req.id)}
+                      >
+                        <PackageCheck className="mr-1.5 size-4" aria-hidden />
+                        Mark received
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <ul className="mt-3 divide-y divide-line rounded-xl bg-surface-2 px-3">
                   {req.line_items.map((line) => (

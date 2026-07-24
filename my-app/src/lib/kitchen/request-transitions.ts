@@ -26,7 +26,7 @@ export const KITCHEN_REQUEST_TRANSITIONS: Record<
   BRANCH_TO_ADMIN: {
     FORWARDED_TO_KITCHEN: ["IN_PRODUCTION"],
     IN_PRODUCTION: ["PRODUCED"],
-    PRODUCED: ["ALLOCATED"],
+    PRODUCED: ["DISPATCHED"],
   },
   /**
    * Empty by construction: the kitchen raises a dispatch notification but never
@@ -49,8 +49,8 @@ export function kitchenActionLabel(toStatus: KitchenRequestStatus): string {
       return "Start production";
     case "PRODUCED":
       return "Mark produced";
-    case "ALLOCATED":
-      return "Allocate to branch";
+    case "DISPATCHED":
+      return "Dispatch to branch";
     case "RECEIVED":
       return "Mark received";
     default:
@@ -66,8 +66,8 @@ export function kitchenActionHint(
   type: KitchenRequestType,
   toStatus: KitchenRequestStatus,
 ): string | null {
-  if (type === "BRANCH_TO_ADMIN" && toStatus === "ALLOCATED") {
-    return "Allocating removes these quantities from your on-hand stock. The branch confirms receipt on their side.";
+  if (type === "BRANCH_TO_ADMIN" && toStatus === "DISPATCHED") {
+    return "Dispatching removes these quantities from your on-hand stock and sends them to the requesting branch.";
   }
   if (type === "KITCHEN_TO_WAREHOUSE" && toStatus === "RECEIVED") {
     return "This adds the dispatched quantities to your on-hand stock.";
@@ -83,7 +83,7 @@ export function kitchenActionHint(
 export function kitchenTransitionNeedsConfirm(
   toStatus: KitchenRequestStatus,
 ): boolean {
-  return toStatus === "ALLOCATED";
+  return toStatus === "DISPATCHED";
 }
 
 /** Copy for the read-only case, so an empty panel still says whose turn it is. */
@@ -97,8 +97,8 @@ export function kitchenWaitingCopy(
     // has decremented and the kitchen is not credited yet.
     return "The warehouse has this request. You can act once it is dispatched.";
   }
-  if (status === "ALLOCATED") {
-    return "Allocated. The branch confirms receipt on their side.";
+  if (status === "DISPATCHED" && type === "BRANCH_TO_ADMIN") {
+    return "Dispatched to the branch. They confirm receipt on their side.";
   }
   if (status === "RECEIVED") return "This request is closed.";
   if (status === "REJECTED") return "Admin rejected this request.";

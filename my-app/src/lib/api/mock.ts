@@ -5862,10 +5862,10 @@ export const mockClient: ApiClient = {
       );
     }
 
-    // ALLOCATED is the only kitchen move that touches stock. IN_PRODUCTION and
-    // PRODUCED are markers: there is no recipe/BOM yet, so producing consumes
-    // nothing. If stock is short the status must not move.
-    if (body.to_status === "ALLOCATED") {
+    // DISPATCHED (branch refill) is the kitchen move that touches stock.
+    // IN_PRODUCTION and PRODUCED are markers: there is no recipe/BOM yet,
+    // so producing consumes nothing. If stock is short the status must not move.
+    if (body.to_status === "DISPATCHED" && found.type === "BRANCH_TO_ADMIN") {
       applyAllocationToKitchenStock(db, kitchen, found);
     }
 
@@ -6793,6 +6793,56 @@ export const mockClient: ApiClient = {
 
     saveDb(db);
     return delay(toPublicRequest(created));
+  },
+
+  async receiveBranchRequest(requestId: string): Promise<StockRequest> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const req = db.requests.find(
+      (r) =>
+        r.id === requestId &&
+        r.type === "BRANCH_TO_ADMIN" &&
+        r.source_location_id === branch.id,
+    );
+    if (!req) throw new ApiError("Request not found", 404);
+    if (req.status !== "DISPATCHED") {
+      throw new ApiError("Request is not dispatched", 409, "invalid_status");
+    }
+
+    req.status = "RECEIVED";
+    req.updated_at = now();
+
+    for (const line of req.line_items) {
+      const pid = line.product_id ?? "";
+      const qty = line.quantity_approved ?? line.quantity_requested;
+      const product = db.products.find((p) => p.id === pid);
+      const existing = db.inventory.find(
+        (inv) =>
+          inv.product_id === pid &&
+          inv.location_id === branch.id &&
+          inv.location_type === "BRANCH",
+      );
+      if (existing) {
+        existing.quantity += qty;
+      } else {
+        db.inventory.push({
+          id: `binv-${Date.now()}-${line.id}`,
+          restaurant_id: branch.restaurant_id,
+          product_id: pid,
+          product: { id: pid, name: product?.name ?? line.product_name ?? "Unknown", sku: product?.sku ?? null },
+          quantity: qty,
+          batch_code: "",
+          expiry_date: null,
+          location_type: "BRANCH",
+          location_id: branch.id,
+        });
+      }
+    }
+
+    saveDb(db);
+    return delay(toPublicRequest(req));
   },
 
   async listBranchDeliveries(): Promise<BranchDelivery[]> {

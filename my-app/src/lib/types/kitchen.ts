@@ -243,12 +243,13 @@ export type KitchenBranchRequestStatus =
   | "FORWARDED_TO_KITCHEN"
   | "IN_PRODUCTION"
   | "PRODUCED"
-  | "ALLOCATED"
+  | "DISPATCHED"
   | "RECEIVED";
 
 export type KitchenRequestStatus =
   | KitchenWarehouseRequestStatus
-  | KitchenBranchRequestStatus;
+  | KitchenBranchRequestStatus
+  | "ALLOCATED";
 
 export interface KitchenRequestLineItem {
   id: string;
