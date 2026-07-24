@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { KitchenInventoryTable } from "@/components/kitchen/inventory/KitchenInventoryTable";
 import { KitchenWasteDialog } from "@/components/kitchen/inventory/KitchenWasteDialog";
 import { KitchenNearExpiryList } from "@/components/kitchen/waste/KitchenNearExpiryList";
@@ -41,6 +41,20 @@ export default function KitchenWastePage() {
   const inventory = useKitchenInventory();
   const wasteEvents = useKitchenWasteEvents();
   const wasteStock = useWasteKitchenStock();
+
+  // Split on-hand stock by what the item is: goods the kitchen makes, resale
+  // goods that pass through from the warehouse, and the raw materials consumed
+  // to make the kitchen's items. Legacy rows without a kind are grouped under
+  // "Other" so no stock is ever hidden.
+  const stockGroups = useMemo(() => {
+    const all = inventory.data ?? [];
+    return {
+      kitchen: all.filter((i) => i.product.kind === "FINISHED_GOOD"),
+      resale: all.filter((i) => i.product.kind === "RESALE"),
+      raw: all.filter((i) => i.product.kind === "RAW_MATERIAL"),
+      other: all.filter((i) => i.product.kind == null),
+    };
+  }, [inventory.data]);
 
   const unassigned =
     isMissingKitchenAssignment(nearExpiry.error) ||
@@ -125,19 +139,80 @@ export default function KitchenWastePage() {
             />
           </div>
           <div className="space-y-3">
-            <h2 className="font-display text-lg font-semibold tracking-tight text-content">
-              All stock
-            </h2>
+            <div>
+              <h2 className="font-display text-lg font-semibold tracking-tight text-content">
+                Kitchen items
+              </h2>
+              <p className="text-sm text-muted">Finished goods your kitchen produces.</p>
+            </div>
             <KitchenInventoryTable
-              items={inventory.data}
+              items={stockGroups.kitchen}
               isLoading={inventory.isLoading}
               isError={inventory.isError}
               onRetry={() => inventory.refetch()}
               onWaste={(item) => openWasteDialog(item, "WASTE")}
+              emptyTitle="No kitchen items on hand"
+              emptyDescription="Items your kitchen produces appear here once made."
             />
           </div>
 
+          <div className="space-y-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold tracking-tight text-content">
+                For resale
+              </h2>
+              <p className="text-sm text-muted">
+                Resale goods received from the warehouse.
+              </p>
+            </div>
+            <KitchenInventoryTable
+              items={stockGroups.resale}
+              isLoading={inventory.isLoading}
+              isError={inventory.isError}
+              onRetry={() => inventory.refetch()}
+              onWaste={(item) => openWasteDialog(item, "WASTE")}
+              emptyTitle="No resale stock on hand"
+              emptyDescription="Resale goods from the warehouse appear here once received."
+            />
+          </div>
 
+          <div className="space-y-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold tracking-tight text-content">
+                Raw materials
+              </h2>
+              <p className="text-sm text-muted">
+                Ingredients from the warehouse used to make your kitchen items.
+              </p>
+            </div>
+            <KitchenInventoryTable
+              items={stockGroups.raw}
+              isLoading={inventory.isLoading}
+              isError={inventory.isError}
+              onRetry={() => inventory.refetch()}
+              onWaste={(item) => openWasteDialog(item, "WASTE")}
+              emptyTitle="No raw materials on hand"
+              emptyDescription="Ingredients from the warehouse appear here once received."
+            />
+          </div>
+
+          {stockGroups.other.length > 0 && (
+            <div className="space-y-3">
+              <div>
+                <h2 className="font-display text-lg font-semibold tracking-tight text-content">
+                  Other
+                </h2>
+                <p className="text-sm text-muted">Stock with no category set.</p>
+              </div>
+              <KitchenInventoryTable
+                items={stockGroups.other}
+                isLoading={inventory.isLoading}
+                isError={inventory.isError}
+                onRetry={() => inventory.refetch()}
+                onWaste={(item) => openWasteDialog(item, "WASTE")}
+              />
+            </div>
+          )}
         </>
       )}
 
