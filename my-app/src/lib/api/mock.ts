@@ -6124,12 +6124,16 @@ export const mockClient: ApiClient = {
       }
     }
 
+    const expiryDate = body.expiry_date || null;
+    // Merge only when batch AND expiry match — two runs sharing a batch code but
+    // carrying different shelf-lives must stay separate rows so near-expiry is right.
     const existing = db.inventory.find(
       (i) =>
         i.location_type === "KITCHEN" &&
         i.location_id === kitchen.id &&
         i.product_id === product.id &&
-        (i.batch_code || "") === (body.batch_code || ""),
+        (i.batch_code || "") === (body.batch_code || "") &&
+        (i.expiry_date || null) === expiryDate,
     );
     if (existing) {
       existing.quantity += body.quantity;
@@ -6141,7 +6145,7 @@ export const mockClient: ApiClient = {
         product: { id: product.id, name: product.name, sku: product.sku ?? null },
         quantity: body.quantity,
         batch_code: body.batch_code || "",
-        expiry_date: null,
+        expiry_date: expiryDate,
         location_type: "KITCHEN",
         location_id: kitchen.id,
       });

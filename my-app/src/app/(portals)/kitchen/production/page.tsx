@@ -347,12 +347,20 @@ function ProduceDialog({
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [batchCode, setBatchCode] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
 
   const picked = (catalogue.data ?? []).find((p) => p.id === productId);
   // Producing something with no recipe is 409 `no_active_recipe`. Saying so
   // before they hit the button beats an error toast afterwards.
   const noRecipe = picked && picked.has_recipe === false;
-  const valid = !!productId && Number(quantity) > 0 && !noRecipe;
+  // Batch code and expiry are both required — a kitchen-made batch needs both to
+  // be traceable and to flow into near-expiry/waste tracking.
+  const valid =
+    !!productId &&
+    Number(quantity) > 0 &&
+    !noRecipe &&
+    batchCode.trim().length > 0 &&
+    !!expiryDate;
 
   // What producing this many will draw from stock — one line per component,
   // converted into the ingredient's stock unit and multiplied by the batch
@@ -492,9 +500,22 @@ function ProduceDialog({
             <Input
               id="prod-batch"
               className="h-10"
-              placeholder="Optional"
+              placeholder="e.g. BUN-0724"
               value={batchCode}
               onChange={(e) => setBatchCode(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="prod-expiry">
+              Expiry date
+            </Label>
+            <Input
+              id="prod-expiry"
+              type="date"
+              className="h-10"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
             />
           </div>
         </div>
@@ -515,7 +536,8 @@ function ProduceDialog({
                 {
                   product_id: numericId,
                   quantity: Number(quantity),
-                  batch_code: batchCode.trim() || null,
+                  batch_code: batchCode.trim(),
+                  expiry_date: expiryDate || null,
                 },
                 {
                   onSuccess: () => {
@@ -523,6 +545,7 @@ function ProduceDialog({
                     setProductId("");
                     setQuantity("1");
                     setBatchCode("");
+                    setExpiryDate("");
                   },
                 },
               );

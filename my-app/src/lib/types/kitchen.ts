@@ -485,5 +485,11 @@ export interface KitchenProduceInput {
   product_id: number;
   quantity: number;
   batch_code?: string | null;
+  /**
+   * Shelf-life of the produced batch, a plain calendar date `YYYY-MM-DD`. Stamped
+   * onto the credited inventory row so kitchen-made stock flows into near-expiry
+   * and waste tracking, the same as warehouse-received stock.
+   */
+  expiry_date?: string | null;
   note?: string | null;
 }
