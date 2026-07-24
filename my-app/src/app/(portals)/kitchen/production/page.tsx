@@ -1,11 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Factory, Plus, Send, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Factory, Plus, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +29,6 @@ import {
   useProduceKitchenProduct,
 } from "@/lib/hooks/use-kitchen-recipes";
 import { useKitchenInventory } from "@/lib/hooks/use-kitchen-inventory";
-import { useCreateDispatchNotification } from "@/lib/hooks/use-kitchen-requests";
 import { formatDate } from "@/lib/utils";
 import { formatStockQty, type StockUnit } from "@/lib/stock-unit";
 import { tryConvertQty } from "@/lib/unit-convert";
@@ -53,7 +51,6 @@ export default function KitchenProductionPage() {
   const { can } = useAuth();
   const runs = useKitchenProduction();
   const [open, setOpen] = useState(false);
-  const [notifyOpen, setNotifyOpen] = useState(false);
 
   const isManager = can("kitchen-staff:create");
 
@@ -69,16 +66,10 @@ export default function KitchenProductionPage() {
           </p>
         </div>
         {isManager && (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setNotifyOpen(true)}>
-              <Send className="mr-1.5 size-4" aria-hidden />
-              Notify Admin
-            </Button>
-            <Button onClick={() => setOpen(true)}>
-              <Plus className="mr-1.5 size-4" aria-hidden />
-              Make something
-            </Button>
-          </div>
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="mr-1.5 size-4" aria-hidden />
+            Make something
+          </Button>
         )}
       </div>
 
@@ -117,188 +108,7 @@ export default function KitchenProductionPage() {
       </PageState>
 
       <ProduceDialog open={open} onOpenChange={setOpen} />
-      <NotifyAdminDialog open={notifyOpen} onOpenChange={setNotifyOpen} />
     </div>
-  );
-}
-
-type NotifyLine = { product_id: string; product_name: string; on_hand: number; quantity: string };
-
-/**
- * Tells Admin which produced goods are ready to dispatch. Auto-filled from what
- * the kitchen holds (one line per product, summed across batches); the chef
- * trims quantities or drops lines before sending. Admin then splits each line
- * across branches.
- */
-function NotifyAdminDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const inventory = useKitchenInventory();
-  // "What we make" — finished goods only. Dispatch is about sending produced
-  // items to branches, not the raw components (chicken, buns…) the kitchen holds
-  // to cook with, so those are excluded here.
-  const catalogue = useKitchenCatalogue();
-  const notify = useCreateDispatchNotification();
-  const [lines, setLines] = useState<NotifyLine[] | null>(null);
-  const [notes, setNotes] = useState("");
-
-  const finishedIds = useMemo(
-    () => new Set((catalogue.data ?? []).map((c) => c.id)),
-    [catalogue.data],
-  );
-
-  // Seed the lines from finished-goods stock the first time the dialog has data,
-  // then leave the chef's edits alone. Aggregate batches so it reads one row per
-  // product.
-  const seeded = useMemo<NotifyLine[]>(() => {
-    const byProduct = new Map<string, NotifyLine>();
-    for (const item of inventory.data ?? []) {
-      if (!finishedIds.has(item.product_id)) continue;
-      const existing = byProduct.get(item.product_id);
-      if (existing) {
-        existing.on_hand += item.quantity;
-        existing.quantity = String(existing.on_hand);
-      } else {
-        byProduct.set(item.product_id, {
-          product_id: item.product_id,
-          product_name: item.product.name,
-          on_hand: item.quantity,
-          quantity: String(item.quantity),
-        });
-      }
-    }
-    return [...byProduct.values()].filter((l) => l.on_hand > 0);
-  }, [inventory.data, finishedIds]);
-
-  const rows = lines ?? seeded;
-
-  function update(productId: string, patch: Partial<NotifyLine>) {
-    setLines(rows.map((l) => (l.product_id === productId ? { ...l, ...patch } : l)));
-  }
-
-  function reset() {
-    setLines(null);
-    setNotes("");
-  }
-
-  const usable = rows.filter((l) => Number(l.quantity) > 0);
-  const overCommitted = rows.find((l) => Number(l.quantity) > l.on_hand);
-  const valid = usable.length > 0 && !overCommitted;
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Notify Admin</DialogTitle>
-          <DialogDescription>
-            Produced goods ready to dispatch. Admin allocates these across branches.
-          </DialogDescription>
-        </DialogHeader>
-
-        {inventory.isLoading || catalogue.isLoading ? (
-          <p className="py-6 text-center text-sm text-muted">Loading stock…</p>
-        ) : rows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">
-            No finished goods on hand to dispatch. Make something first.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {rows.map((line) => (
-              <div key={line.product_id} className="flex items-end gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-content">
-                    {line.product_name}
-                  </p>
-                  <p className="text-xs text-muted">{line.on_hand} on hand</p>
-                </div>
-                <div className="w-24 space-y-1">
-                  <Label className="text-xs">Dispatch</Label>
-                  <Input
-                    className="h-10"
-                    inputMode="numeric"
-                    value={line.quantity}
-                    onChange={(e) =>
-                      update(line.product_id, {
-                        quantity: e.target.value.replace(/\D/g, "") || "0",
-                      })
-                    }
-                  />
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-10"
-                  onClick={() =>
-                    setLines(rows.filter((l) => l.product_id !== line.product_id))
-                  }
-                  aria-label={`Remove ${line.product_name}`}
-                >
-                  <Trash2 className="size-4" aria-hidden />
-                </Button>
-              </div>
-            ))}
-
-            <div className="space-y-1.5">
-              <Label htmlFor="notify-notes" className="text-xs">
-                Notes
-              </Label>
-              <Textarea
-                id="notify-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Anything Admin should know…"
-              />
-            </div>
-
-            {overCommitted && (
-              <p className="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
-                <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
-                {overCommitted.product_name}: only {overCommitted.on_hand} on hand.
-              </p>
-            )}
-          </div>
-        )}
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!valid || notify.isPending}
-            onClick={() =>
-              notify.mutate(
-                {
-                  notes: notes.trim() || undefined,
-                  lines: usable.map((l) => ({
-                    product_id: l.product_id,
-                    quantity: Number(l.quantity),
-                  })),
-                },
-                {
-                  onSuccess: () => {
-                    onOpenChange(false);
-                    reset();
-                  },
-                },
-              )
-            }
-          >
-            <Send className="mr-1.5 size-4" aria-hidden />
-            Notify Admin
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

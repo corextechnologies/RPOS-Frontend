@@ -131,7 +131,7 @@ export default function KitchenRecipesPage() {
                         size="sm"
                         onClick={() => setAddRecipeFor(item.id)}
                       >
-                        {recipe ? "New version" : "Add recipe"}
+                        {recipe ? "Update recipe" : "Add recipe"}
                       </Button>
                     )}
                   </CardHeader>
