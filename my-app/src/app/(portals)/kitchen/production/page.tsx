@@ -453,7 +453,7 @@ function ProduceDialog({
               className="h-12 text-center text-xl tabular-nums"
               inputMode="numeric"
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value.replace(/\D/g, "") || "0")}
+              onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ""))}
             />
           </div>
 

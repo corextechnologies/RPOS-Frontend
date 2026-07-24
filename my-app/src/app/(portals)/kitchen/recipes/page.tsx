@@ -329,9 +329,10 @@ function NewRecipeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Recipe — {product.name}</DialogTitle>
+          <DialogTitle>Recipe for one {product.name}</DialogTitle>
           <DialogDescription>
-            What one batch consumes from kitchen stock.
+            What making a single {product.name} consumes from kitchen stock. Choose
+            how many to make later, in Production.
           </DialogDescription>
         </DialogHeader>
 
@@ -455,8 +456,9 @@ function NewRecipeDialog({
             </Button>
 
             <p className="text-xs text-faint">
-              Enter how much one batch uses. Pick any compatible unit — grams of flour stocked in
-              kg is fine, and production converts it. Ingredients can&apos;t be other made items.
+              Enter how much a single {product.name} uses. Pick any compatible unit — grams of flour
+              stocked in kg is fine, and production converts it. Ingredients can&apos;t be other made
+              items.
             </p>
           </div>
         </div>
