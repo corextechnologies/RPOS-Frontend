@@ -22,7 +22,7 @@ import {
   useRevokeEmployee,
 } from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
-import { titleCase } from "@/lib/utils";
+import { pluralize, titleCase } from "@/lib/utils";
 import type { AdminLocationType, Employee } from "@/lib/types/admin";
 
 /** Which location an employee is attached to, derived from whichever id is set. */
@@ -199,7 +199,7 @@ export default function AdminEmployeesPage() {
                 <SelectValue placeholder="Location" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All {subLocationType.toLowerCase()}s</SelectItem>
+                <SelectItem value="all">All {pluralize(subLocationType.toLowerCase())}</SelectItem>
                 {subStaffLocations?.map((loc) => (
                   <SelectItem key={loc.id} value={loc.id}>
                     {loc.name}

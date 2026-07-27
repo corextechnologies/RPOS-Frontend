@@ -20,6 +20,18 @@ export function titleCase(s: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * Naive English pluralizer, good enough for the location nouns this app shows:
+ * branch → branches, kitchen → kitchens, warehouse → warehouses. Handles the
+ * -s/-x/-z/-ch/-sh → -es and consonant-y → -ies rules; everything else takes -s.
+ * A plain `${word}s` gives the wrong "branchs", which is what this exists to fix.
+ */
+export function pluralize(word: string): string {
+  if (/(?:s|x|z|ch|sh)$/i.test(word)) return `${word}es`;
+  if (/[^aeiou]y$/i.test(word)) return `${word.slice(0, -1)}ies`;
+  return `${word}s`;
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "-";
   const d = new Date(iso);

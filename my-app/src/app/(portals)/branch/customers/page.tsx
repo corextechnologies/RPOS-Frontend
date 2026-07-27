@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Trash2, Pencil } from "lucide-react";
+import { Search, Trash2, Pencil } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
   useBranchCustomers,
@@ -43,7 +43,6 @@ export default function BranchCustomersPage() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [editing, setEditing] = useState<BranchCustomer | null>(null);
-  const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<BranchCustomer | null>(null);
 
   const { data, isLoading, error } = useBranchCustomers(
@@ -73,12 +72,6 @@ export default function BranchCustomersPage() {
           </h1>
           <p className="mt-1 text-sm text-muted">Customers of this branch.</p>
         </div>
-        {can("branch-customers:create") && (
-          <Button onClick={() => setCreating(true)}>
-            <Plus className="mr-1.5 size-4" aria-hidden />
-            Add customer
-          </Button>
-        )}
       </div>
 
       <div className="relative max-w-sm">
@@ -157,7 +150,6 @@ export default function BranchCustomersPage() {
         )}
       </PageState>
 
-      <CustomerDialog open={creating} onOpenChange={setCreating} />
       <CustomerDialog
         open={editing !== null}
         onOpenChange={(open) => !open && setEditing(null)}
