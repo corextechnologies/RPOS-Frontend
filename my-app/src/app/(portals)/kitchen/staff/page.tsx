@@ -109,7 +109,7 @@ export default function KitchenStaffPage() {
             Sub-chefs
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Sub-chefs you created for your kitchen.
+            Everyone in your kitchen.
           </p>
         </div>
         {allowed && !unassigned && can("kitchen-staff:create") && (

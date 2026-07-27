@@ -11,6 +11,8 @@ export const createAdminUserSchema = z
   .object({
     full_name: z.string().min(2, "Name must be at least 2 characters"),
     email: z.string().email("Enter a valid email"),
+    phone_number: z.string().optional(),
+    image_url: z.string().optional(),
     role: z.enum(adminCreatableRoles),
     branch_id: z.string().optional(),
     kitchen_id: z.string().optional(),
@@ -45,6 +47,8 @@ export type CreateAdminUserForm = z.infer<typeof createAdminUserSchema>;
 export const createAdminUserDefaults: CreateAdminUserForm = {
   full_name: "",
   email: "",
+  phone_number: "",
+  image_url: "",
   role: "BRANCH_MANAGER",
   branch_id: "",
   kitchen_id: "",
@@ -54,6 +58,9 @@ export const createAdminUserDefaults: CreateAdminUserForm = {
 export const updateAdminUserSchema = z
   .object({
     full_name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Enter a valid email"),
+    phone_number: z.string().optional(),
+    image_url: z.string().optional(),
     is_active: z.boolean(),
     role: z.enum(adminCreatableRoles),
     branch_id: z.string().optional(),

@@ -66,7 +66,7 @@ export function StaffTable({ items, isLoading, isError, onRetry, onEdit, onRevok
         <CardContent className="p-0">
           <EmptyState
             title="No staff yet"
-            description="Staff you add will appear here. You only ever see the accounts you created."
+            description="Staff you add will appear here, alongside anyone else assigned to your warehouse."
           />
         </CardContent>
       </Card>

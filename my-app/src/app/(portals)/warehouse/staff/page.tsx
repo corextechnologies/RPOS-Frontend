@@ -109,7 +109,7 @@ export default function WarehouseStaffPage() {
             Staff
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Staff you created for your warehouse.
+            Everyone working at your warehouse.
           </p>
         </div>
         {!unassigned && allowed && can("staff:create") && (
