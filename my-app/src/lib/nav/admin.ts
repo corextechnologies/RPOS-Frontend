@@ -9,6 +9,7 @@ import {
   Package,
   Receipt,
   Settings,
+  Store,
   Tag,
   Target,
   TicketPercent,
@@ -27,6 +28,13 @@ export const ADMIN_NAV: NavSection[] = [
         label: "Dashboard",
         href: "/admin/dashboard",
         icon: LayoutDashboard,
+        match: "exact",
+      },
+      {
+        label: "Restaurant",
+        href: "/admin/restaurant",
+        icon: Store,
+        action: "restaurant:read",
         match: "exact",
       },
       {

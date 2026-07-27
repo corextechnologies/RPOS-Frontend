@@ -54,6 +54,10 @@ export interface Restaurant {
   plan_amount?: string | null;
   next_billing_date?: string | null;
   admin: RestaurantAdmin;
+  /** Street/mailing address. Optional — older payloads omit it. */
+  address?: string | null;
+  /** Absolute or server-relative URL to the restaurant logo (Phase 2). */
+  logo_url?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -70,6 +74,8 @@ export interface RestaurantOut {
   plan_amount: string | null;
   branch_limit: number | null;
   next_billing_date: string | null;
+  address?: string | null;
+  logo_url?: string | null;
 }
 
 export interface RestaurantCreateResult {
@@ -166,6 +172,21 @@ export interface UpdateRestaurantInput {
   owner_name?: string;
   owner_email?: string;
   owner_phone?: string;
+}
+
+/**
+ * Profile-only patch an ADMIN may apply to their OWN restaurant. Deliberately
+ * excludes the commercial levers (`plan_tier`, `plan_amount`, `branch_limit`,
+ * `next_billing_date`) — those stay Super-Admin-only so an admin cannot change
+ * their own billing terms. Plan changes go through the upgrade-request flow.
+ */
+export interface UpdateAdminRestaurantInput {
+  name?: string;
+  owner_name?: string;
+  owner_email?: string;
+  owner_phone?: string;
+  address?: string;
+  logo_url?: string;
 }
 
 export interface CreateRestaurantResult {

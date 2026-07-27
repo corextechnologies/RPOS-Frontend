@@ -10,6 +10,8 @@ export type AuthAction =
   | "billing:read"
   | "billing:share"
   // Admin (Phase 2)
+  | "restaurant:read"
+  | "restaurant:update"
   | "branches:read"
   | "branches:create"
   | "kitchens:read"
@@ -109,6 +111,8 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
   ],
   ADMIN: [
     "billing:read",
+    "restaurant:read",
+    "restaurant:update",
     "branches:read",
     "branches:create",
     "kitchens:read",

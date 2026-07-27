@@ -39,8 +39,14 @@ import type {
   UpdateProductionTargetInput,
 } from "@/lib/types/production-target";
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
-import type { BillingOut, BillingSummary } from "@/lib/types/super-admin";
-import { billingFromApi } from "./adapters";
+import type {
+  BillingOut,
+  BillingSummary,
+  Restaurant,
+  RestaurantOut,
+  UpdateAdminRestaurantInput,
+} from "@/lib/types/super-admin";
+import { adminRestaurantUpdateToApi, billingFromApi, restaurantFromApi } from "./adapters";
 import { request, requestEnvelope } from "./client";
 
 function normalizeEmployee(e: Employee): Employee {
@@ -371,6 +377,32 @@ export const adminApi = {
   async getMyBilling(): Promise<BillingSummary> {
     const data = await request<BillingOut>("/admin/billing");
     return billingFromApi(data);
+  },
+
+  /**
+   * The caller's OWN restaurant, resolved server-side from the JWT — no id in
+   * the path. Read-write for profile fields only; see {@link updateMyRestaurant}.
+   */
+  async getMyRestaurant(): Promise<Restaurant> {
+    const data = await request<RestaurantOut>("/admin/restaurant");
+    return restaurantFromApi(data);
+  },
+
+  /**
+   * Profile-only PATCH of the caller's own restaurant. The adapter strips any
+   * plan/billing fields, and the server independently rejects them, so an admin
+   * cannot change commercial terms here.
+   */
+  async updateMyRestaurant(body: UpdateAdminRestaurantInput): Promise<Restaurant> {
+    const patch = adminRestaurantUpdateToApi(body);
+    if (Object.keys(patch).length === 0) {
+      return this.getMyRestaurant();
+    }
+    const data = await request<RestaurantOut>("/admin/restaurant", {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+    return restaurantFromApi(data);
   },
 
   async listBranches(): Promise<Branch[]> {
