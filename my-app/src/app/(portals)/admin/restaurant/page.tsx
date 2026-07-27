@@ -180,10 +180,10 @@ export default function AdminRestaurantPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-surface-2 text-muted">
+        <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-surface-2 text-muted">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+            <img src={logoUrl} alt="" className="h-full w-full object-contain" />
           ) : (
             <Store className="h-5 w-5" />
           )}
@@ -209,8 +209,8 @@ export default function AdminRestaurantPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-              <div className="space-y-1.5">
-                <FormLabel>Logo</FormLabel>
+              <div className="space-y-1.5 font-bold">
+                {/* <FormLabel className="text-[2vw]">Logo</FormLabel> */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -220,24 +220,14 @@ export default function AdminRestaurantPage() {
                 />
                 <div className="flex items-center gap-4">
                   <div className="relative">
-                    <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-xl border border-line bg-surface-2 text-muted">
+                    <div className="grid h-20 w-20 place-items-center overflow-hidden rounded-full border border-line bg-surface-2 text-muted">
                       {logoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={logoUrl} alt="Logo preview" className="h-full w-full object-cover" />
+                        <img src={logoUrl} alt="Logo preview" className="h-full w-full object-contain" />
                       ) : (
                         <Store className="h-6 w-6" />
                       )}
                     </div>
-                    {logoUrl && canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => form.setValue("logo_url", "", { shouldDirty: true })}
-                        className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-danger text-white shadow-soft"
-                        aria-label="Remove logo"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    )}
                   </div>
                   {canEdit && (
                     <Button
@@ -260,7 +250,7 @@ export default function AdminRestaurantPage() {
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-faint">PNG, JPG, WEBP, or SVG. Max 2 MB.</p>
+                <p className="text-xs text-faint"> <strong>Accepted formats are:</strong> PNG, JPG, WEBP, or SVG. Max 2 MB.</p>
               </div>
 
               <FormField
