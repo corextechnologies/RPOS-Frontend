@@ -160,6 +160,7 @@ export interface ApiClient {
   getMyBilling(): Promise<BillingSummary>;
   getMyRestaurant(): Promise<Restaurant>;
   updateMyRestaurant(body: UpdateAdminRestaurantInput): Promise<Restaurant>;
+  uploadRestaurantLogo(file: File): Promise<string>;
   runBillingCycle(): Promise<BillingCycleResult>;
   recordRestaurantPayment(restaurantId: string): Promise<BillingSummary>;
   updateInvoice(

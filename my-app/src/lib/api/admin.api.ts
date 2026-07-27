@@ -47,7 +47,8 @@ import type {
   UpdateAdminRestaurantInput,
 } from "@/lib/types/super-admin";
 import { adminRestaurantUpdateToApi, billingFromApi, restaurantFromApi } from "./adapters";
-import { request, requestEnvelope } from "./client";
+import { request, requestEnvelope, requestUpload } from "./client";
+import { apiConfig } from "./config";
 
 function normalizeEmployee(e: Employee): Employee {
   return {
@@ -403,6 +404,23 @@ export const adminApi = {
       body: JSON.stringify(patch),
     });
     return restaurantFromApi(data);
+  },
+
+  /**
+   * Uploads a logo and returns its URL — the caller then persists it via
+   * {@link updateMyRestaurant}. Mirrors {@link posAdminApi.uploadMenuImage}:
+   * server-relative paths are resolved against the API origin.
+   */
+  async uploadRestaurantLogo(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    const data = await requestUpload<{ url: string }>("/admin/upload/image", form);
+    const url = data.url;
+    if (url.startsWith("/")) {
+      const origin = apiConfig.baseUrl.replace(/\/v1$/, "");
+      return `${origin}${url}`;
+    }
+    return url;
   },
 
   async listBranches(): Promise<Branch[]> {

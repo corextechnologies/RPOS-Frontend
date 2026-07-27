@@ -3027,6 +3027,19 @@ export const mockClient: ApiClient = {
     return delay(restaurant);
   },
 
+  async uploadRestaurantLogo(file: File) {
+    requireAuth();
+    // No object storage in the mock — inline the image as a data URL so the
+    // preview and persisted logo_url round-trip without a backend.
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new ApiError("Could not read file", 400));
+      reader.readAsDataURL(file);
+    });
+    return delay(dataUrl);
+  },
+
   async runBillingCycle() {
     requireAuth();
     const db = loadDb();
