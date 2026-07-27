@@ -141,6 +141,7 @@ import {
   type RestaurantFilters,
   type RestaurantStats,
   type TokenResponse,
+  type UpdateAdminRestaurantInput,
   type UserRole,
 } from "@/lib/types/super-admin";
 import type {
@@ -222,7 +223,7 @@ const matchesProductId = (storedId: string, wireId: number | string): boolean =>
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 24;
+const SEED_VERSION = 25;
 
 interface MockInvoiceRecord {
   id: number;
@@ -590,6 +591,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2001",
       access_status: "active",
     },
+    public_slug: "demo-restaurant-group",
     created_at: localCreatedAt(),
     updated_at: now(),
   };
@@ -2844,6 +2846,7 @@ export const mockClient: ApiClient = {
         phone: body.owner_phone ?? "",
         access_status: "active",
       },
+      public_slug: slug,
       created_at: localCreatedAt(),
       updated_at: now(),
     };
@@ -2988,6 +2991,55 @@ export const mockClient: ApiClient = {
     const restaurant = db.restaurants.find((r) => r.admin.email === me.email);
     if (!restaurant) throw new ApiError("Restaurant not found", 404);
     return delay(billingSummaryForRestaurant(db, restaurant));
+  },
+
+  async getMyRestaurant() {
+    const me = requireAuth();
+    const db = loadDb();
+    const restaurant = db.restaurants.find((r) => r.admin.email === me.email);
+    if (!restaurant) throw new ApiError("Restaurant not found", 404);
+    return delay(restaurant);
+  },
+
+  async updateMyRestaurant(body: UpdateAdminRestaurantInput) {
+    const me = requireAuth();
+    const db = loadDb();
+    const restaurant = db.restaurants.find((r) => r.admin.email === me.email);
+    if (!restaurant) throw new ApiError("Restaurant not found", 404);
+
+    if (body.name !== undefined) restaurant.name = body.name.trim();
+    if (body.owner_name !== undefined) restaurant.admin.name = body.owner_name.trim();
+    if (body.owner_phone !== undefined) restaurant.admin.phone = body.owner_phone;
+    if (body.address !== undefined) restaurant.address = body.address || null;
+    if (body.logo_url !== undefined) restaurant.logo_url = body.logo_url || null;
+
+    // Changing the contact email would orphan the email-based lookup above, so
+    // keep the account + session in sync — mirrors updateAdminSettings.
+    if (body.owner_email !== undefined && body.owner_email !== restaurant.admin.email) {
+      const account = findUser(db, me.email);
+      restaurant.admin.email = body.owner_email;
+      if (account) {
+        account.me = { ...account.me, email: body.owner_email };
+        setSession(account.me);
+      }
+    }
+
+    restaurant.updated_at = now();
+    saveDb(db);
+    return delay(restaurant);
+  },
+
+  async uploadRestaurantLogo(file: File) {
+    requireAuth();
+    // No object storage in the mock — inline the image as a data URL so the
+    // preview and persisted logo_url round-trip without a backend.
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new ApiError("Could not read file", 400));
+      reader.readAsDataURL(file);
+    });
+    return delay(dataUrl);
   },
 
   async runBillingCycle() {

@@ -10,6 +10,7 @@ import type {
   Restaurant,
   RestaurantOut,
   RestaurantCreateResult,
+  UpdateAdminRestaurantInput,
   UpdateRestaurantInput,
 } from "@/lib/types/super-admin";
 
@@ -45,6 +46,9 @@ export function restaurantFromApi(r: RestaurantOut): Restaurant {
       phone: r.owner_contact_number ?? "",
       access_status: "active",
     },
+    address: r.address ?? null,
+    logo_url: r.logo_url ?? null,
+    public_slug: r.public_slug ?? null,
   };
 }
 
@@ -71,6 +75,22 @@ export function updateInputToApi(body: UpdateRestaurantInput) {
   if (body.plan_amount !== undefined) patch.plan_amount = body.plan_amount;
   if (body.branch_limit !== undefined) patch.branch_limit = body.branch_limit;
   if (body.next_billing_date !== undefined) patch.next_billing_date = body.next_billing_date;
+  return patch;
+}
+
+/**
+ * Profile-only patch for the Admin's own restaurant. Maps the app's field names
+ * to the backend's `owner_contact_*` / `admin_full_name` wire shape. Never emits
+ * plan/billing keys — those are Super-Admin-only by contract.
+ */
+export function adminRestaurantUpdateToApi(body: UpdateAdminRestaurantInput) {
+  const patch: Record<string, unknown> = {};
+  if (body.name !== undefined) patch.name = body.name;
+  if (body.owner_name !== undefined) patch.admin_full_name = body.owner_name;
+  if (body.owner_email !== undefined) patch.owner_contact_email = body.owner_email;
+  if (body.owner_phone !== undefined) patch.owner_contact_number = body.owner_phone;
+  if (body.address !== undefined) patch.address = body.address;
+  if (body.logo_url !== undefined) patch.logo_url = body.logo_url;
   return patch;
 }
 
