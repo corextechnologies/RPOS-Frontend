@@ -26,6 +26,7 @@ export const queryKeys = {
   restaurantStats: ["restaurant-stats"] as const,
   billing: (id: string) => ["billing", id] as const,
   adminBilling: ["admin-billing"] as const,
+  adminRestaurant: ["admin-restaurant"] as const,
   invoices: (id: string) => ["invoices", id] as const,
   branches: ["admin-branches"] as const,
   incomeSummary: (filter: IncomePeriodFilter) => ["income-summary", filter] as const,
