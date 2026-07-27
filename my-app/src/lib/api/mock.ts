@@ -223,7 +223,7 @@ const matchesProductId = (storedId: string, wireId: number | string): boolean =>
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 24;
+const SEED_VERSION = 25;
 
 interface MockInvoiceRecord {
   id: number;
@@ -591,6 +591,7 @@ function seedDb(): MockDb {
       phone: "+1 555 010 2001",
       access_status: "active",
     },
+    public_slug: "demo-restaurant-group",
     created_at: localCreatedAt(),
     updated_at: now(),
   };
@@ -2845,6 +2846,7 @@ export const mockClient: ApiClient = {
         phone: body.owner_phone ?? "",
         access_status: "active",
       },
+      public_slug: slug,
       created_at: localCreatedAt(),
       updated_at: now(),
     };

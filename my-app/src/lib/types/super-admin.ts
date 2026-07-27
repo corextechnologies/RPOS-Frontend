@@ -58,6 +58,8 @@ export interface Restaurant {
   address?: string | null;
   /** Absolute or server-relative URL to the restaurant logo (Phase 2). */
   logo_url?: string | null;
+  /** Stable public identifier for the QR live-menu URL, e.g. `demo-bistro`. */
+  public_slug?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -76,6 +78,7 @@ export interface RestaurantOut {
   next_billing_date: string | null;
   address?: string | null;
   logo_url?: string | null;
+  public_slug?: string | null;
 }
 
 export interface RestaurantCreateResult {
