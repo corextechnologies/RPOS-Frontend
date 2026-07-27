@@ -1,10 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useAuth } from "@/lib/auth";
 import { useBranchOrders } from "@/lib/hooks/use-branch";
-import { Button } from "@/components/ui/button";
-import { NewBranchOrderDialog } from "@/components/branch/NewBranchOrderDialog";
 import { PageState } from "@/components/ui/page-state";
 import {
   Table,
@@ -15,7 +11,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/utils";
-import { Info, Plus } from "lucide-react";
 
 /**
  * Branch orders — the Phase 5 counter flow.
@@ -26,34 +21,15 @@ import { Info, Plus } from "lucide-react";
  */
 export default function BranchOrdersPage() {
   const { data, isLoading, error } = useBranchOrders();
-  const { can } = useAuth();
-  const [creating, setCreating] = useState(false);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-            Orders
-          </h1>
-          <p className="mt-1 text-sm text-muted">Orders taken at this branch.</p>
-        </div>
-        {can("branch-orders:create") && (
-          <Button onClick={() => setCreating(true)}>
-            <Plus className="mr-1.5 size-4" aria-hidden />
-            New order
-          </Button>
-        )}
+      <div>
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
+          Orders
+        </h1>
+        <p className="mt-1 text-sm text-muted">Orders taken at this branch.</p>
       </div>
-
-      <p className="flex items-start gap-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-muted">
-        <Info className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
-        <span>
-          The till at <code className="rounded bg-surface px-1 py-0.5 text-xs">/pos</code> takes
-          payment and prints tickets. Recording an order here is the fallback for when there
-          isn&apos;t one — it prices from the catalogue but takes no money.
-        </span>
-      </p>
 
       <PageState
         isLoading={isLoading}
@@ -98,8 +74,6 @@ export default function BranchOrdersPage() {
           </div>
         )}
       </PageState>
-
-      <NewBranchOrderDialog open={creating} onOpenChange={setCreating} />
     </div>
   );
 }
