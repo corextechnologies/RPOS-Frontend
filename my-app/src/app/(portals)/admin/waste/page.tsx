@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
+import { pluralize } from "@/lib/utils";
 import { useAdminWasteEvents } from "@/lib/hooks/use-requests";
 import type { AdminLocationType } from "@/lib/types/admin";
 import type { StockMovementType } from "@/lib/types/warehouse";
@@ -130,7 +131,7 @@ export default function AdminWastePage() {
               <SelectValue placeholder="Location" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All {locationType.toLowerCase()}s</SelectItem>
+              <SelectItem value="all">All {pluralize(locationType.toLowerCase())}</SelectItem>
               {locations?.map((loc) => (
                 <SelectItem key={loc.id} value={loc.id}>
                   {loc.name}
