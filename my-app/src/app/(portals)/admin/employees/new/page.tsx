@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
 import { useCreateUser } from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import {
@@ -106,6 +107,8 @@ export default function NewEmployeePage() {
       email: values.email.trim(),
       role: values.role,
     };
+    if (values.phone_number?.trim()) body.phone_number = values.phone_number.trim();
+    if (values.image_url) body.image_url = values.image_url;
     if (values.role === "BRANCH_MANAGER") body.branch_id = values.branch_id;
     if (values.role === "KITCHEN_MANAGER") body.kitchen_id = values.kitchen_id;
     if (values.role === "WAREHOUSE_MANAGER") body.warehouse_id = values.warehouse_id;
@@ -190,6 +193,42 @@ export default function NewEmployeePage() {
                     <FormLabel>Email (login)</FormLabel>
                     <FormControl>
                       <Input type="email" placeholder="manager@restaurant.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="phone_number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="tel"
+                        placeholder="+92 300 1234567"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="image_url"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Photo (optional)</FormLabel>
+                    <FormControl>
+                      <EmployeeImageField
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
 import { useEmployees, useUpdateEmployee } from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import {
@@ -64,6 +65,9 @@ export default function EditEmployeePage() {
     resolver: zodResolver(updateAdminUserSchema),
     defaultValues: {
       full_name: "",
+      email: "",
+      phone_number: "",
+      image_url: "",
       is_active: true,
       role,
       branch_id: "",
@@ -76,6 +80,9 @@ export default function EditEmployeePage() {
     if (!employee) return;
     form.reset({
       full_name: employee.full_name,
+      email: employee.email,
+      phone_number: employee.phone_number ?? "",
+      image_url: employee.image_url ?? "",
       is_active: employee.is_active,
       role: employee.role as AdminCreatableRole,
       branch_id: employee.branch_id ?? "",
@@ -109,6 +116,10 @@ export default function EditEmployeePage() {
 
     const body: UpdateAdminUserInput = {
       full_name: values.full_name.trim(),
+      email: values.email.trim(),
+      // Sent even when blank so a manager can clear a phone/photo.
+      phone_number: values.phone_number?.trim() ?? "",
+      image_url: values.image_url ?? "",
       is_active: values.is_active,
     };
     if (values.role === "BRANCH_MANAGER") body.branch_id = values.branch_id;
@@ -119,9 +130,11 @@ export default function EditEmployeePage() {
       await updateEmployee.mutateAsync({ id, body });
       router.push("/admin/employees");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setErrorMessage(err.message);
-      } else if (err instanceof Error) {
+      // The one edit-specific failure worth its own copy: email collides with
+      // another user (backend returns 409 `conflict`).
+      if (err instanceof ApiError && err.status === 409) {
+        setErrorMessage("That email is already used by another user.");
+      } else if (err instanceof ApiError || err instanceof Error) {
         setErrorMessage(err.message);
       } else {
         setErrorMessage("Failed to update employee.");
@@ -194,8 +207,8 @@ export default function EditEmployeePage() {
         <CardHeader>
           <CardTitle>Manager details</CardTitle>
           <CardDescription>
-            Update the manager&apos;s name, status, and assigned {locationLabel.toLowerCase()}. The
-            role and email cannot be changed here.
+            Update the manager&apos;s details, status, and assigned{" "}
+            {locationLabel.toLowerCase()}. The role cannot be changed here.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -209,6 +222,56 @@ export default function EditEmployeePage() {
                     <FormLabel>Full name</FormLabel>
                     <FormControl>
                       <Input placeholder="Sam Warehouse" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (login)</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="manager@restaurant.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="phone_number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="tel"
+                        placeholder="+92 300 1234567"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="image_url"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Photo (optional)</FormLabel>
+                    <FormControl>
+                      <EmployeeImageField
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

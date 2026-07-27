@@ -75,7 +75,7 @@ export function SubChefTable({
         <CardContent className="p-0">
           <EmptyState
             title="No sub-chefs yet"
-            description="Sub-chefs you add appear here. You only ever see the accounts you created."
+            description="Sub-chefs you add appear here, alongside anyone else assigned to your kitchen."
           />
         </CardContent>
       </Card>

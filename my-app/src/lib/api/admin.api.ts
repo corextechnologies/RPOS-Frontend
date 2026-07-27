@@ -41,7 +41,8 @@ import type {
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import type { BillingOut, BillingSummary } from "@/lib/types/super-admin";
 import { billingFromApi } from "./adapters";
-import { request, requestEnvelope } from "./client";
+import { request, requestEnvelope, requestUpload } from "./client";
+import { apiConfig } from "./config";
 
 function normalizeEmployee(e: Employee): Employee {
   return {
@@ -544,6 +545,24 @@ export const adminApi = {
       body: JSON.stringify(body),
     });
     return { ...data, id: String(data.id) };
+  },
+
+  // Mirrors `uploadMenuImage`: multipart POST, then absolutize a root-relative
+  // URL against the API origin so the <img> works regardless of where the app
+  // is served from.
+  async uploadEmployeeImage(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    const data = await requestUpload<{ url: string }>(
+      "/admin/upload/employee-image",
+      form,
+    );
+    const url = data.url;
+    if (url.startsWith("/")) {
+      const origin = apiConfig.baseUrl.replace(/\/v1$/, "");
+      return `${origin}${url}`;
+    }
+    return url;
   },
 
   async listProductPricing(

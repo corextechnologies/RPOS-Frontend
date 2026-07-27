@@ -52,6 +52,10 @@ export interface CreateAdminUserInput {
   branch_id?: string;
   kitchen_id?: string;
   warehouse_id?: string;
+  /** Optional contact number, free-form (the backend does not normalize it). */
+  phone_number?: string;
+  /** Absolute URL from `uploadEmployeeImage`; omit for no avatar. */
+  image_url?: string;
 }
 
 export interface CreateAdminUserResult {
@@ -64,6 +68,10 @@ export interface CreateAdminUserResult {
 
 export interface UpdateAdminUserInput {
   full_name?: string;
+  /** Now editable. A clash with another user's email returns 409 `conflict`. */
+  email?: string;
+  phone_number?: string;
+  image_url?: string;
   is_active?: boolean;
   branch_id?: string;
   kitchen_id?: string;
@@ -143,6 +151,10 @@ export interface Employee {
    * `POST /v1/branch/users`.
    */
   position?: BranchPosition | null;
+  /** Optional contact number, shown on the employee list and edit form. */
+  phone_number?: string | null;
+  /** Absolute avatar URL, or null when none was uploaded. */
+  image_url?: string | null;
   created_at?: string;
 }
 

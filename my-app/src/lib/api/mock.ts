@@ -2705,6 +2705,8 @@ function toEmployeeOut(e: MockEmployee): Employee {
     branch_id: e.branch_id,
     kitchen_id: e.kitchen_id,
     warehouse_id: e.warehouse_id,
+    phone_number: e.phone_number ?? null,
+    image_url: e.image_url ?? null,
     created_at: e.created_at,
   };
 }
@@ -3614,6 +3616,8 @@ export const mockClient: ApiClient = {
       branch_id: branchId,
       kitchen_id: kitchenId,
       warehouse_id: warehouseId,
+      phone_number: body.phone_number?.trim() || null,
+      image_url: body.image_url || null,
       created_at: now(),
     });
 
@@ -3663,13 +3667,33 @@ export const mockClient: ApiClient = {
       employee.warehouse_id = warehouse.id;
     }
 
+    // Resolve the login account by the CURRENT email before any email change,
+    // so a rename still finds the right record to migrate.
+    const account = findUser(db, employee.email);
+
+    if (body.email !== undefined) {
+      const newEmail = body.email.trim().toLowerCase();
+      if (newEmail && newEmail !== employee.email.toLowerCase()) {
+        // Mirror the backend: a clash with any OTHER user is a 409.
+        if (findUser(db, newEmail)) {
+          throw new ApiError("Email already in use", 409, "conflict");
+        }
+        employee.email = newEmail;
+        if (account) account.email = newEmail;
+      }
+    }
+
     if (body.full_name !== undefined) employee.full_name = body.full_name.trim();
     if (body.is_active !== undefined) employee.is_active = body.is_active;
+    if (body.phone_number !== undefined) {
+      employee.phone_number = body.phone_number.trim() || null;
+    }
+    if (body.image_url !== undefined) employee.image_url = body.image_url || null;
 
-    const account = findUser(db, employee.email);
     if (account) {
       account.me = {
         ...account.me,
+        email: employee.email,
         full_name: employee.full_name,
         is_active: employee.is_active,
       };
@@ -3753,6 +3777,20 @@ export const mockClient: ApiClient = {
       role: account.me.role,
     };
     return delay(profile);
+  },
+
+  // The real backend stores the file and returns a hosted URL; the mock has no
+  // server, so it inlines the image as a data URL. That persists in localStorage
+  // and renders offline, which is all the employee list/preview needs.
+  async uploadEmployeeImage(file: File): Promise<string> {
+    requireAuth();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new ApiError("Could not read the image", 400));
+      reader.readAsDataURL(file);
+    });
+    return delay(dataUrl, 300);
   },
 
   async recordSale(body: CreateSaleInput) {
@@ -4750,16 +4788,12 @@ export const mockClient: ApiClient = {
     const page = params?.page ?? 1;
     const page_size = params?.page_size ?? 20;
 
-    // Creator-scoped: only staff this manager created, never everyone attached
-    // to the warehouse. The creator link lives on the user account.
-    const createdByMe = new Set(
-      db.users
-        .filter((u) => u.me.created_by_id === me.id)
-        .map((u) => u.email.toLowerCase()),
-    );
+    // Location-scoped: every staff member attached to this warehouse, whoever
+    // created them. Any manager of the warehouse manages the whole roster, so a
+    // replacement or co-manager sees the same list. `created_by_id` survives on
+    // the record but is historical only — it no longer gates visibility.
     const all = db.employees.filter(
-      (e) =>
-        e.warehouse_id === warehouse.id && createdByMe.has(e.email.toLowerCase()),
+      (e) => e.warehouse_id === warehouse.id && e.role === "WAREHOUSE_STAFF",
     );
 
     const start = (page - 1) * page_size;
@@ -4849,13 +4883,15 @@ export const mockClient: ApiClient = {
     requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
+      : undefined;
+    // Scope by warehouse membership, not creator — another warehouse's staff
+    // (or a non-staff id) still 404s.
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     staff.me.is_active = false;
-    const emp = db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id);
-    if (emp) emp.is_active = false;
+    emp.is_active = false;
     saveDb(db);
     const result: WarehouseStaff = {
       id: String(staff.me.id),
@@ -4873,13 +4909,13 @@ export const mockClient: ApiClient = {
     requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
+      : undefined;
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     staff.me.is_active = true;
-    const emp = db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id);
-    if (emp) emp.is_active = true;
+    emp.is_active = true;
     saveDb(db);
     const result: WarehouseStaff = {
       id: String(staff.me.id),
@@ -4896,10 +4932,12 @@ export const mockClient: ApiClient = {
     const me = requireAuth();
     requireWarehouseManager(me);
     const db = loadDb();
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
+    const warehouse = resolveMyWarehouse(db, me);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
+      : undefined;
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     db.users = db.users.filter((u) => u !== staff);
     db.employees = db.employees.filter((e) => e.email !== staff.email);
     saveDb(db);
@@ -4911,11 +4949,11 @@ export const mockClient: ApiClient = {
     requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
-    const emp = db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
+      : undefined;
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     if (body.email !== undefined) {
       const newEmail = body.email.trim().toLowerCase();
       if (emp) emp.email = newEmail;
@@ -5423,15 +5461,11 @@ export const mockClient: ApiClient = {
     const page = params?.page ?? 1;
     const page_size = params?.page_size ?? 20;
 
-    // Creator-scoped: another manager's sub-chefs are invisible, and an empty
-    // list is the correct answer rather than a bug.
-    const createdByMe = new Set(
-      db.users
-        .filter((u) => u.me.created_by_id === me.id)
-        .map((u) => u.email.toLowerCase()),
-    );
+    // Location-scoped: every sub-chef in this kitchen, whoever created them, so
+    // any manager of the kitchen — a replacement or co-manager — sees the same
+    // roster. `created_by_id` stays on the record but is historical only.
     const all = db.employees.filter(
-      (e) => e.kitchen_id === kitchen.id && createdByMe.has(e.email.toLowerCase()),
+      (e) => e.kitchen_id === kitchen.id && e.role === "SUB_CHEF",
     );
 
     const start = (page - 1) * page_size;
@@ -5518,13 +5552,15 @@ export const mockClient: ApiClient = {
     const me = requireAuth();
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id)
+      : undefined;
+    // Scope by kitchen membership, not creator — another kitchen's sub-chef
+    // (or a non-staff id) still 404s.
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     staff.me.is_active = false;
-    const emp = db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id);
-    if (emp) emp.is_active = false;
+    emp.is_active = false;
     saveDb(db);
     const result: KitchenStaff = {
       id: String(staff.me.id),
@@ -5541,13 +5577,13 @@ export const mockClient: ApiClient = {
     const me = requireAuth();
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id)
+      : undefined;
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     staff.me.is_active = true;
-    const emp = db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id);
-    if (emp) emp.is_active = true;
+    emp.is_active = true;
     saveDb(db);
     const result: KitchenStaff = {
       id: String(staff.me.id),
@@ -5563,10 +5599,12 @@ export const mockClient: ApiClient = {
   async deleteKitchenUser(id: string) {
     const me = requireAuth();
     const db = loadDb();
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
+    const kitchen = resolveMyKitchen(db, me);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id)
+      : undefined;
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     db.users = db.users.filter((u) => u !== staff);
     db.employees = db.employees.filter((e) => e.email !== staff.email);
     saveDb(db);
@@ -5577,11 +5615,11 @@ export const mockClient: ApiClient = {
     const me = requireAuth();
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
-    const staff = db.users.find(
-      (u) => String(u.me.id) === id && u.me.created_by_id === me.id,
-    );
-    if (!staff) throw new ApiError("Staff not found", 404);
-    const emp = db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id);
+    const staff = db.users.find((u) => String(u.me.id) === id);
+    const emp = staff
+      ? db.employees.find((e) => e.email === staff.email && e.kitchen_id === kitchen.id)
+      : undefined;
+    if (!staff || !emp) throw new ApiError("Staff not found", 404);
     if (body.email !== undefined) {
       const newEmail = body.email.trim().toLowerCase();
       if (emp) emp.email = newEmail;

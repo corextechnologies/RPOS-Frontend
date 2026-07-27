@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Employee } from "@/lib/types/admin";
-import { formatDate, titleCase } from "@/lib/utils";
+import { formatDate, initials, titleCase } from "@/lib/utils";
 
 interface EmployeeListProps {
   items?: Employee[];
@@ -107,9 +107,31 @@ export function EmployeeList({
             {items.map((employee) => (
               <TableRow key={employee.id}>
                 <TableCell>
-                  <p className="font-medium text-content">{employee.full_name}</p>
+                  <div className="flex items-center gap-3">
+                    {employee.image_url ? (
+                      <img
+                        src={employee.image_url}
+                        alt=""
+                        className="size-9 shrink-0 rounded-full border border-line object-cover"
+                      />
+                    ) : (
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-medium text-faint">
+                        {employee.full_name ? (
+                          initials(employee.full_name)
+                        ) : (
+                          <UserRound className="size-4" aria-hidden />
+                        )}
+                      </span>
+                    )}
+                    <p className="font-medium text-content">{employee.full_name}</p>
+                  </div>
                 </TableCell>
-                <TableCell className="text-muted">{employee.email}</TableCell>
+                <TableCell className="text-muted">
+                  <p>{employee.email}</p>
+                  {employee.phone_number && (
+                    <p className="text-xs text-faint tabular-nums">{employee.phone_number}</p>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{formatRole(employee.role)}</Badge>
                 </TableCell>

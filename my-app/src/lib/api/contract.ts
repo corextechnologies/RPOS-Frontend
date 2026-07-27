@@ -201,6 +201,10 @@ export interface ApiClient {
   getAdminSettings(): Promise<AdminProfile>;
   updateAdminSettings(body: UpdateAdminProfileInput): Promise<AdminProfile>;
 
+  // Uploads an employee avatar and returns its absolute URL, to be passed as
+  // `image_url` on create/update. Mirrors the menu-image upload contract.
+  uploadEmployeeImage(file: File): Promise<string>;
+
   recordSale(body: CreateSaleInput): Promise<SalesRecord>;
   listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>>;
   getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummary>;
