@@ -30,7 +30,7 @@ const STATUS_OPTIONS: Array<KitchenBranchRequestStatus | "all"> = [
   "FORWARDED_TO_KITCHEN",
   "IN_PRODUCTION",
   "PRODUCED",
-  "ALLOCATED",
+  "DISPATCHED",
   "RECEIVED",
 ];
 

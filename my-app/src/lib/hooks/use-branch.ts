@@ -203,6 +203,19 @@ export function useCreateBranchRequest() {
   });
 }
 
+export function useReceiveBranchRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (requestId: string) => api.receiveBranchRequest(requestId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["branch-requests"] });
+      qc.invalidateQueries({ queryKey: branchKeys.inventory });
+      toast.success("Received into branch stock");
+    },
+    onError: (err) => toast.error(message(err, "Couldn't receive request")),
+  });
+}
+
 // ---- Incoming deliveries (from the kitchen) ----
 
 export function useBranchDeliveries() {

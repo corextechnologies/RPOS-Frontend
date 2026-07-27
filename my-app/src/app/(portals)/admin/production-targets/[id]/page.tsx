@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
-import { ProductionTargetAllocationPanel } from "@/components/production-targets/ProductionTargetAllocationPanel";
 import { ProductionTargetDetail } from "@/components/production-targets/ProductionTargetDetail";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -100,15 +99,24 @@ export default function AdminProductionTargetDetailPage() {
         <>
           <ProductionTargetDetail target={data} />
 
-          {data.status === "COMPLETED" && can("production-targets:update") && (
-            <ProductionTargetAllocationPanel target={data} />
-          )}
-
-          {!editable && data.status !== "COMPLETED" && (
+          {data.status === "COMPLETED" ? (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-3 py-6 text-center">
+                <p className="text-sm text-muted">
+                  This target is complete. Allocate it across branches from the Distribution tab.
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/admin/requests/target/${params.id}`}>
+                    Go to allocation
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : !editable ? (
             <p className="text-sm text-muted">
               {allocationHint(data.status)}
             </p>
-          )}
+          ) : null}
         </>
       )}
 

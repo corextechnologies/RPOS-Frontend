@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Printer } from "lucide-react";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,7 @@ import {
   useKitchenLabels,
   useKitchenProductOptions,
 } from "@/lib/hooks/use-kitchen-inventory";
+import { useKitchenCatalogue } from "@/lib/hooks/use-kitchen-recipes";
 import { printKitchenLabels } from "@/lib/kitchen/print-labels";
 import { isMissingKitchenAssignment } from "@/lib/types/kitchen";
 
@@ -47,9 +48,28 @@ export default function KitchenLabelsPage() {
   };
   const labels = useKitchenLabels(filters);
   const { products } = useKitchenProductOptions();
+  // The kitchen catalogue is the authoritative list of finished goods the kitchen
+  // makes; labels carry no `kind`, so we filter against these ids to keep raw
+  // materials (flour, chicken…) out of the sticker list.
+  const catalogue = useKitchenCatalogue();
+
+  const finishedGoodIds = useMemo(
+    () => new Set((catalogue.data ?? []).map((p) => p.id)),
+    [catalogue.data],
+  );
 
   const unassigned = isMissingKitchenAssignment(labels.error);
-  const rows = labels.data ?? [];
+  // Only finished goods get labels — exclude any raw-material stock rows.
+  const rows = useMemo(
+    () => (labels.data ?? []).filter((l) => finishedGoodIds.has(l.product_id)),
+    [labels.data, finishedGoodIds],
+  );
+  // Restrict the product filter to finished goods too, so the picker never lists
+  // a raw material that would only ever yield an empty result.
+  const productOptions = useMemo(
+    () => products.filter((p) => finishedGoodIds.has(p.id)),
+    [products, finishedGoodIds],
+  );
 
   return (
     <div className="space-y-6">
@@ -59,7 +79,8 @@ export default function KitchenLabelsPage() {
             Labels
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Expiry stickers for stock on hand. Empty batches are left out.
+            Expiry stickers for finished goods the kitchen makes. Raw materials and
+            empty batches are left out.
           </p>
         </div>
         {!unassigned && (
@@ -88,7 +109,7 @@ export default function KitchenLabelsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={ALL_PRODUCTS}>All products</SelectItem>
-                    {products.map((product) => (
+                    {productOptions.map((product) => (
                       <SelectItem key={product.id} value={product.id}>
                         {product.name}
                       </SelectItem>
@@ -119,7 +140,7 @@ export default function KitchenLabelsPage() {
             </CardContent>
           </Card>
 
-          {labels.isLoading ? (
+          {labels.isLoading || catalogue.isLoading ? (
             <Card>
               <CardContent className="space-y-3 p-4">
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -144,8 +165,8 @@ export default function KitchenLabelsPage() {
                   // A batch that matches nothing is an empty list, not an error.
                   description={
                     appliedBatch
-                      ? `Nothing on hand matches batch "${appliedBatch}".`
-                      : "Labels appear here for any stock with a quantity on hand."
+                      ? `No finished goods on hand match batch "${appliedBatch}".`
+                      : "Labels appear here for finished goods the kitchen has made and still holds."
                   }
                 />
               </CardContent>

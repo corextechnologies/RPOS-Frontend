@@ -164,12 +164,12 @@ export function KitchenRequestActionPanel({
           setConfirmOpen(open);
           if (!open) setPending(null);
         }}
-        title="Allocate this request to the branch?"
-        description="This removes the approved quantities from your kitchen's on-hand stock and cannot be undone from here. If stock is short, the request stays where it is."
-        confirmLabel="Allocate stock"
+        title="Dispatch to the branch?"
+        description="This removes the approved quantities from your kitchen's on-hand stock and dispatches them to the requesting branch. This cannot be undone."
+        confirmLabel="Dispatch"
         loading={isSubmitting}
         onConfirm={async () => {
-          await submit("ALLOCATED");
+          await submit("DISPATCHED");
         }}
       />
     </>

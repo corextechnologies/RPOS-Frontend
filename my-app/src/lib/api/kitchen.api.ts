@@ -502,6 +502,7 @@ export const kitchenApi = {
           product_id: body.product_id,
           quantity: body.quantity,
           batch_code: optionalText(body.batch_code ?? undefined) ?? null,
+          expiry_date: optionalText(body.expiry_date ?? undefined) ?? null,
           note: optionalText(body.note ?? undefined) ?? null,
         }),
       }),

@@ -36,7 +36,9 @@ export default function KitchenProductionTargetsPage() {
     allowed,
   );
   const unassigned = isMissingKitchenAssignment(error);
-  const targets = data ?? [];
+  const targets = (data ?? []).filter(
+    (t) => t.status === "PENDING" || t.status === "ACKNOWLEDGED" || t.status === "IN_PRODUCTION",
+  );
 
   if (!allowed) return <KitchenNoAccess />;
 
@@ -47,8 +49,8 @@ export default function KitchenProductionTargetsPage() {
           Production targets
         </h1>
         <p className="mt-1 text-sm text-muted">
-          What Admin has asked this kitchen to make. Acknowledge one, produce it,
-          complete it, then dispatch once Admin has allocated it to branches.
+          What Admin has asked this kitchen to make. Acknowledge, produce, and
+          complete &mdash; completed targets move to Dispatch to Admin.
         </p>
       </div>
 

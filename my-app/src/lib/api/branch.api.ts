@@ -361,6 +361,14 @@ export const branchApi = {
     );
   },
 
+  async receiveBranchRequest(requestId: string): Promise<StockRequest> {
+    return normalizeRequest(
+      await request<StockRequest>(`/branch/requests/${requestId}/receive`, {
+        method: "POST",
+      }),
+    );
+  },
+
   // ---- Incoming deliveries (from the kitchen) ----
 
   async listBranchDeliveries(): Promise<BranchDelivery[]> {

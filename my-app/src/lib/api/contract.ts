@@ -404,6 +404,7 @@ export interface ApiClient {
   listBranchKitchens(): Promise<Kitchen[]>;
   listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
   createBranchRequest(body: CreateBranchRequestInput): Promise<StockRequest>;
+  receiveBranchRequest(requestId: string): Promise<StockRequest>;
   // Finished goods the kitchen dispatched to this branch. Confirming receipt
   // (DISPATCHED → RECEIVED) credits branch inventory.
   listBranchDeliveries(): Promise<BranchDelivery[]>;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
 import type {
@@ -42,6 +43,16 @@ export function useProductionTargets(filters?: AdminProductionTargetFilters) {
     queryKey: queryKeys.productionTargets(filters),
     queryFn: () => api.listProductionTargets(filters),
   });
+}
+
+/** Targets the kitchen has acknowledged — everything past PENDING. */
+export function useAcknowledgedProductionTargets() {
+  const all = useProductionTargets();
+  const acknowledged = useMemo(
+    () => (all.data ?? []).filter((t) => t.status !== "PENDING"),
+    [all.data],
+  );
+  return { ...all, data: acknowledged };
 }
 
 export function useProductionTarget(id: string | null) {
@@ -97,6 +108,23 @@ export function useDeleteProductionTarget() {
 }
 
 // ---- Kitchen ----
+
+/** Kitchen-side: targets that reached COMPLETED or beyond — shown in Dispatch to Admin. */
+export function useCompletedKitchenProductionTargets(enabled = true) {
+  const all = useKitchenProductionTargets(undefined, enabled);
+  const completed = useMemo(
+    () =>
+      (all.data ?? []).filter(
+        (t) =>
+          t.status === "COMPLETED" ||
+          t.status === "ALLOCATED" ||
+          t.status === "DISPATCHED" ||
+          t.status === "RECEIVED",
+      ),
+    [all.data],
+  );
+  return { ...all, data: completed };
+}
 
 export function useKitchenProductionTargets(
   filters?: KitchenProductionTargetFilters,

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Check, CircleCheck, Factory, Send, Truck } from "lucide-react";
+import { ArrowLeft, Check, CircleCheck, Factory, Send } from "lucide-react";
 import { KitchenNoAccess } from "@/components/kitchen/KitchenNoAccess";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
 import { ProductionTargetDetail } from "@/components/production-targets/ProductionTargetDetail";
@@ -23,7 +23,6 @@ import { useAuth } from "@/lib/auth";
 import {
   useAcknowledgeProductionTarget,
   useCompleteProductionTarget,
-  useDispatchProductionTarget,
   useKitchenProductionTarget,
   useMarkProductionLineProduced,
   useStartProductionTarget,
@@ -91,9 +90,7 @@ function KitchenActions({ target }: { target: ProductionTarget }) {
   const acknowledge = useAcknowledgeProductionTarget();
   const start = useStartProductionTarget();
   const complete = useCompleteProductionTarget();
-  const dispatch = useDispatchProductionTarget();
   const [confirmComplete, setConfirmComplete] = useState(false);
-  const [confirmDispatch, setConfirmDispatch] = useState(false);
 
   switch (target.status) {
     case "PENDING":
@@ -145,57 +142,24 @@ function KitchenActions({ target }: { target: ProductionTarget }) {
       );
 
     case "COMPLETED":
-      return (
-        <ActionCard
-          title="Waiting on Admin"
-          description="This target is complete. Admin allocates the produced quantities across branches — you'll dispatch once that's done."
-        />
-      );
-
     case "ALLOCATED":
-      return (
-        <>
-          <ActionCard
-            title="Dispatch to branches"
-            description="Ship the allocated quantities. Each branch then confirms receipt on its Incoming screen."
-          >
-            <Button
-              onClick={() => setConfirmDispatch(true)}
-              disabled={dispatch.isPending}
-            >
-              <Truck className="mr-1.5 size-4" aria-hidden />
-              Dispatch to branches
-            </Button>
-          </ActionCard>
-          <ConfirmDialog
-            open={confirmDispatch}
-            onOpenChange={setConfirmDispatch}
-            title="Dispatch this target?"
-            description="The allocated quantities are sent to each branch to receive. This can't be undone."
-            confirmLabel="Dispatch"
-            loading={dispatch.isPending}
-            onConfirm={async () => {
-              try {
-                await dispatch.mutateAsync(target.id);
-                setConfirmDispatch(false);
-              } catch {
-                setConfirmDispatch(false);
-              }
-            }}
-          />
-        </>
-      );
-
     case "DISPATCHED":
-      return (
-        <ActionCard
-          title="Dispatched"
-          description="On its way to the branches. Each confirms receipt on its Incoming screen; the target is done once all have."
-        />
-      );
-
     case "RECEIVED":
-      return <p className="text-sm text-muted">Every branch has received this target.</p>;
+      return (
+        <Card>
+          <CardContent className="py-6 text-center space-y-3">
+            <p className="text-sm text-muted">
+              This target has been completed and moved to the Dispatch to Admin section.
+            </p>
+            <Button variant="outline" asChild>
+              <Link href={`/kitchen/requests/dispatch/target/${target.id}`}>
+                <Send className="mr-1.5 size-4" aria-hidden />
+                View in Dispatch to Admin
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      );
 
     default:
       return null;

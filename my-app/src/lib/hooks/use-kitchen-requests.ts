@@ -131,9 +131,9 @@ export function useUpdateKitchenRequestStatus(requestId: string) {
       qc.invalidateQueries({ queryKey: queryKeys.kitchenRequest(requestId) });
       qc.invalidateQueries({ queryKey: ["kitchen-warehouse-requests"] });
       qc.invalidateQueries({ queryKey: ["kitchen-branch-requests"] });
-      // ALLOCATED spends stock and RECEIVED credits it, so both leave the
-      // inventory views stale. The two marker statuses change nothing.
-      if (updated.status === "ALLOCATED" || updated.status === "RECEIVED") {
+      // DISPATCHED (branch refill) spends stock and RECEIVED credits it, so
+      // both leave the inventory views stale. The two marker statuses change nothing.
+      if (updated.status === "DISPATCHED" || updated.status === "RECEIVED") {
         qc.invalidateQueries({ queryKey: queryKeys.kitchenInventory });
         qc.invalidateQueries({ queryKey: ["kitchen-near-expiry"] });
         qc.invalidateQueries({ queryKey: ["kitchen-labels"] });
