@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 import {
-  useDeleteEmployee,
   useEmployees,
   useRestoreEmployee,
   useRevokeEmployee,
@@ -51,12 +50,8 @@ export default function AdminEmployeesPage() {
   const warehouses = useWarehouses();
   const revokeEmployee = useRevokeEmployee();
   const restoreEmployee = useRestoreEmployee();
-  const deleteEmployee = useDeleteEmployee();
   const canManage = can("users:create");
-  const [confirm, setConfirm] = useState<{
-    type: "revoke" | "delete";
-    employee: Employee;
-  } | null>(null);
+  const [confirm, setConfirm] = useState<{ employee: Employee } | null>(null);
 
   const locationLabel = useMemo(() => {
     const branchNames = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
@@ -114,11 +109,7 @@ export default function AdminEmployeesPage() {
 
   const handleConfirm = async () => {
     if (!confirm) return;
-    if (confirm.type === "revoke") {
-      await revokeEmployee.mutateAsync(confirm.employee.id);
-    } else {
-      await deleteEmployee.mutateAsync(confirm.employee.id);
-    }
+    await revokeEmployee.mutateAsync(confirm.employee.id);
     setConfirm(null);
   };
 
@@ -154,15 +145,12 @@ export default function AdminEmployeesPage() {
           canManage ? (id) => router.push(`/admin/employees/${id}/edit`) : undefined
         }
         onRevoke={
-          canManage ? (employee) => setConfirm({ type: "revoke", employee }) : undefined
+          canManage ? (employee) => setConfirm({ employee }) : undefined
         }
         onRestore={
           canManage
             ? (employee) => restoreEmployee.mutateAsync(employee.id)
             : undefined
-        }
-        onDelete={
-          canManage ? (employee) => setConfirm({ type: "delete", employee }) : undefined
         }
         emptyTitle="No managers yet"
         emptyDescription="Branch, kitchen, and warehouse managers will appear here."
@@ -249,17 +237,15 @@ export default function AdminEmployeesPage() {
         onOpenChange={(open) => {
           if (!open) setConfirm(null);
         }}
-        title={confirm?.type === "delete" ? "Delete employee?" : "Revoke access?"}
+        title="Revoke access?"
         description={
-          confirm?.type === "delete"
-            ? `Permanently delete “${confirm.employee.full_name}”? This cannot be undone.`
-            : confirm
-              ? `Revoke login access for “${confirm.employee.full_name}”? They will not be able to sign in until restored.`
-              : ""
+          confirm
+            ? `Revoke login access for “${confirm.employee.full_name}”? They will not be able to sign in until restored.`
+            : ""
         }
-        confirmLabel={confirm?.type === "delete" ? "Delete employee" : "Revoke access"}
+        confirmLabel="Revoke access"
         destructive
-        loading={revokeEmployee.isPending || deleteEmployee.isPending}
+        loading={revokeEmployee.isPending}
         onConfirm={handleConfirm}
       />
     </div>

@@ -159,7 +159,10 @@ export function EmployeeList({
                           </DropdownMenuItem>
                         )}
                         {onRevoke && employee.is_active && (
-                          <DropdownMenuItem onClick={() => onRevoke(employee)}>
+                          <DropdownMenuItem
+                            className="text-danger"
+                            onClick={() => onRevoke(employee)}
+                          >
                             <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
                           </DropdownMenuItem>
                         )}
