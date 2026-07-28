@@ -8,6 +8,12 @@ export interface PublicMenuItem {
   price_minor: Minor;
   is_available: boolean;
   image_url?: string | null;
+  /** Longer marketing copy shown on the item detail view. */
+  description?: string | null;
+  /** Energy in kilocalories, shown as a detail chip when present. */
+  calories?: number | null;
+  /** Typical preparation time in minutes, shown as a detail chip when present. */
+  prep_time_minutes?: number | null;
 }
 
 /**

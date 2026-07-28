@@ -15,7 +15,13 @@
  * every time an admin opens the page and changes their mind.
  */
 
-import type { CreateMenuItemInput, CreateModifierGroupInput } from "@/lib/types/pos";
+import { minorToDecimalString } from "@/lib/money";
+import type {
+  CreateMenuItemInput,
+  CreateModifierGroupInput,
+  MenuModifierGroup,
+  PosMenu,
+} from "@/lib/types/pos";
 
 export interface DraftOption {
   name: string;
@@ -40,6 +46,12 @@ export interface DraftItem {
   product_id?: number | null;
   category?: string;
   image_url?: string;
+  /** Marketing copy shown on the public menu item detail view. */
+  description?: string;
+  /** Energy in kilocalories; empty when not set. */
+  calories?: number | null;
+  /** Typical preparation time in minutes; empty when not set. */
+  prep_time_minutes?: number | null;
   is_combo: boolean;
   /** `tempId`s of other draft items this combo contains. */
   componentTempIds: string[];
@@ -50,6 +62,62 @@ export interface DraftItem {
 export interface MenuDraft {
   groups: DraftGroup[];
   items: DraftItem[];
+}
+
+/**
+ * Seed a fresh draft from the live published menu.
+ *
+ * Published versions are immutable, so "editing the menu" — tweaking a price,
+ * adding a couple of items — means composing a *new* version. Rather than retype
+ * the whole thing, an admin loads the live menu into the draft, changes what they
+ * need, and publishes. The result is a new version containing everything.
+ *
+ * tempIds are derived from the live ids (`item-<id>`, `group-<id>`) so combo
+ * components and modifier-group links resolve deterministically to the same
+ * seeded rows. Combo component quantity isn't part of the draft model, so a
+ * component that appeared N times collapses to a single reference (same as
+ * authoring a combo by hand).
+ */
+export function draftFromMenu(menu: PosMenu): MenuDraft {
+  const itemTempId = (id: number) => `item-${id}`;
+  const groupTempId = (id: number) => `group-${id}`;
+
+  // Each modifier group can be attached to several items; stage it once.
+  const groupsById = new Map<number, MenuModifierGroup>();
+  for (const item of menu.items) {
+    for (const group of item.modifier_groups) {
+      if (!groupsById.has(group.id)) groupsById.set(group.id, group);
+    }
+  }
+
+  const groups: DraftGroup[] = [...groupsById.values()].map((group) => ({
+    tempId: groupTempId(group.id),
+    name: group.name,
+    min_select: group.min_select,
+    max_select: group.max_select,
+    options: group.options.map((option) => ({
+      name: option.name,
+      price_delta: minorToDecimalString(option.price_delta_minor),
+      product_id: option.product_id ?? undefined,
+    })),
+  }));
+
+  const items: DraftItem[] = menu.items.map((item) => ({
+    tempId: itemTempId(item.id),
+    name: item.name,
+    price: minorToDecimalString(item.price_minor),
+    product_id: item.product_id ?? null,
+    category: item.category ?? undefined,
+    image_url: item.image_url ?? undefined,
+    description: item.description ?? undefined,
+    calories: item.calories ?? null,
+    prep_time_minutes: item.prep_time_minutes ?? null,
+    is_combo: item.is_combo,
+    componentTempIds: item.components.map((c) => itemTempId(c.item_id)),
+    groupTempIds: item.modifier_groups.map((g) => groupTempId(g.id)),
+  }));
+
+  return { groups, items };
 }
 
 export class MenuDraftError extends Error {
@@ -176,6 +244,9 @@ export function toItemInput(
     product_id: item.is_combo ? null : (item.product_id ?? undefined),
     category: item.category?.trim() || undefined,
     image_url: item.image_url?.trim() || undefined,
+    description: item.description?.trim() || undefined,
+    calories: item.calories ?? undefined,
+    prep_time_minutes: item.prep_time_minutes ?? undefined,
     is_combo: item.is_combo || undefined,
     component_item_ids: item.is_combo
       ? item.componentTempIds.map((t) => {

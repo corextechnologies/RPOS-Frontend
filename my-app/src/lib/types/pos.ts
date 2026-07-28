@@ -249,6 +249,12 @@ export interface MenuItem {
   modifier_groups: MenuModifierGroup[];
   product_id?: number | null;
   image_url?: string | null;
+  /** Marketing copy shown on the public menu item detail view. */
+  description?: string | null;
+  /** Energy in kilocalories, shown as a detail chip on the public menu. */
+  calories?: number | null;
+  /** Typical preparation time in minutes, shown as a detail chip. */
+  prep_time_minutes?: number | null;
 }
 
 export interface PosMenu {
@@ -298,6 +304,9 @@ export interface CreateMenuItemInput {
   product_id?: number | null;
   category?: string | null;
   image_url?: string | null;
+  description?: string | null;
+  calories?: number | null;
+  prep_time_minutes?: number | null;
   is_combo?: boolean;
   component_item_ids?: number[];
   modifier_group_ids?: number[];

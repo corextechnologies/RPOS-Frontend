@@ -1,10 +1,21 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ImagePlus, Layers, Lock, Plus, Send, Trash2, TriangleAlert, X } from "lucide-react";
+import {
+  CopyPlus,
+  ImagePlus,
+  Layers,
+  Lock,
+  Plus,
+  Send,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +33,7 @@ import { usePublishedMenu, useSellableProducts } from "@/lib/hooks/use-pos-admin
 import { imageUploadErrorMessage, posErrorMessage } from "@/lib/api/errors";
 import { minorToDecimalString } from "@/lib/money";
 import {
+  draftFromMenu,
   publishDraft,
   validateDraft,
   type DraftGroup,
@@ -64,10 +76,29 @@ export default function AdminMenuPage() {
 
   const [draft, setDraft] = useState<MenuDraft>({ groups: [], items: [] });
   const [confirmPublish, setConfirmPublish] = useState(false);
+  const [confirmLoad, setConfirmLoad] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   const errors = draft.items.length ? validateDraft(draft) : [];
   const canPublish = draft.items.length > 0 && errors.length === 0;
+  const liveHasItems = (live.data?.items.length ?? 0) > 0;
+
+  /** Seed the draft from the live menu so a small change doesn't mean retyping. */
+  function loadFromLive() {
+    if (!live.data) return;
+    setDraft(draftFromMenu(live.data));
+    setConfirmLoad(false);
+    toast.success("Loaded the live menu — edit or add items, then publish.");
+  }
+
+  /** Guard against silently discarding staged work. */
+  function startFromLive() {
+    if (draft.items.length > 0 || draft.groups.length > 0) {
+      setConfirmLoad(true);
+    } else {
+      loadFromLive();
+    }
+  }
 
   async function publish() {
     setPublishing(true);
@@ -103,10 +134,31 @@ export default function AdminMenuPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Next version</CardTitle>
-              <CardDescription>
-                Staged here and published all at once. Nothing goes live until you publish.
-              </CardDescription>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">Next version</CardTitle>
+                  <CardDescription>
+                    Staged here and published all at once. Nothing goes live until you publish.
+                  </CardDescription>
+                </div>
+                {liveHasItems && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={startFromLive}
+                  >
+                    <CopyPlus className="mr-1.5 size-3.5" aria-hidden />
+                    Start from live menu
+                  </Button>
+                )}
+              </div>
+              {liveHasItems && (
+                <p className="mt-2 text-xs text-faint">
+                  To edit the live menu or add a few items, load it here, make your changes, then
+                  publish a new version.
+                </p>
+              )}
             </CardHeader>
             <CardContent className="space-y-5">
               <GroupBuilder
@@ -152,6 +204,15 @@ export default function AdminMenuPage() {
         confirmLabel="Publish"
         loading={publishing}
         onConfirm={publish}
+      />
+
+      <ConfirmDialog
+        open={confirmLoad}
+        onOpenChange={setConfirmLoad}
+        title="Replace staged items?"
+        description="Loading the live menu will replace what you've staged so far. This can't be undone."
+        confirmLabel="Load live menu"
+        onConfirm={loadFromLive}
       />
     </div>
   );
@@ -402,6 +463,9 @@ function ItemBuilder({
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [calories, setCalories] = useState("");
+  const [prepTime, setPrepTime] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -442,6 +506,9 @@ function ItemBuilder({
         product_id: isCombo ? null : productId ? Number(productId) : null,
         category: category.trim() || undefined,
         image_url: imageUrl.trim() || undefined,
+        description: description.trim() || undefined,
+        calories: calories.trim() ? Number(calories) : null,
+        prep_time_minutes: prepTime.trim() ? Number(prepTime) : null,
         is_combo: isCombo,
         componentTempIds: isCombo ? componentTempIds : [],
         groupTempIds,
@@ -450,6 +517,9 @@ function ItemBuilder({
     setName("");
     setPrice("");
     setCategory("");
+    setDescription("");
+    setCalories("");
+    setPrepTime("");
     setImageUrl("");
     setProductId("");
     setIsCombo(false);
@@ -588,6 +658,49 @@ function ItemBuilder({
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-xs" htmlFor="menu-description">
+            Description <span className="text-faint">(optional)</span>
+          </Label>
+          <Textarea
+            id="menu-description"
+            rows={3}
+            placeholder="A wonderful dish prepared with the finest ingredients…"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <p className="text-xs text-faint">Shown on the public QR menu item detail.</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="menu-calories">
+              Calories <span className="text-faint">(optional)</span>
+            </Label>
+            <Input
+              id="menu-calories"
+              className="h-9"
+              inputMode="numeric"
+              placeholder="580"
+              value={calories}
+              onChange={(e) => setCalories(e.target.value.replace(/\D/g, ""))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="menu-prep-time">
+              Prep time <span className="text-faint">(optional)</span>
+            </Label>
+            <Input
+              id="menu-prep-time"
+              className="h-9"
+              inputMode="numeric"
+              placeholder="25"
+              value={prepTime}
+              onChange={(e) => setPrepTime(e.target.value.replace(/\D/g, ""))}
+            />
+          </div>
         </div>
 
         <div className="space-y-1.5">

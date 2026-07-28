@@ -30,7 +30,17 @@ function mockPublicMenu(slug: string): PublicMenu {
     logo_url: null,
     currency: "PKR",
     items: [
-      { id: 1, name: "Margherita Pizza", category: "Pizza", price_minor: 89900, is_available: true },
+      {
+        id: 1,
+        name: "Margherita Pizza",
+        category: "Pizza",
+        price_minor: 89900,
+        is_available: true,
+        description:
+          "A wonderful pizza for dinner, prepared with the finest ingredients — San Marzano tomatoes, fresh mozzarella, and hand-torn basil on a slow-proofed sourdough base.",
+        calories: 780,
+        prep_time_minutes: 20,
+      },
       { id: 2, name: "Pepperoni Pizza", category: "Pizza", price_minor: 109900, is_available: true },
       { id: 3, name: "Truffle Mushroom Pizza", category: "Pizza", price_minor: 129900, is_available: false },
       { id: 4, name: "Classic Beef Burger", category: "Burgers", price_minor: 79900, is_available: true },
