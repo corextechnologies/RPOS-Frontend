@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus } from "lucide-react";
 import { AddStaffDialog } from "@/components/warehouse/staff/AddStaffDialog";
+import { WarehouseStaffDetailDialog } from "@/components/warehouse/staff/WarehouseStaffDetailDialog";
 import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
 import { StaffDocumentField } from "@/components/staff/StaffDocumentField";
 import { StaffTable } from "@/components/warehouse/staff/StaffTable";
@@ -42,6 +43,7 @@ export default function WarehouseStaffPage() {
   const staff = useWarehouseStaff(page, allowed);
   const createStaff = useCreateWarehouseStaff();
   const [editing, setEditing] = useState<WarehouseStaff | null>(null);
+  const [detail, setDetail] = useState<WarehouseStaff | null>(null);
   const [confirm, setConfirm] = useState<{ staff: WarehouseStaff } | null>(null);
 
   const unassigned = isMissingWarehouseAssignment(staff.error);
@@ -121,6 +123,7 @@ export default function WarehouseStaffPage() {
             isLoading={staff.isLoading}
             isError={staff.isError}
             onRetry={() => staff.refetch()}
+            onRowClick={(s) => setDetail(s)}
             onEdit={(s) => setEditing(s)}
             onDelete={(s) => setConfirm({ staff: s })}
           />
@@ -156,6 +159,12 @@ export default function WarehouseStaffPage() {
         onOpenChange={setAdding}
         onSubmit={handleAdd}
         isSubmitting={createStaff.isPending}
+      />
+
+      <WarehouseStaffDetailDialog
+        staff={detail}
+        open={detail !== null}
+        onOpenChange={(o) => { if (!o) setDetail(null); }}
       />
 
       <EditWarehouseStaffDialog

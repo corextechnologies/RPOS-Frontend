@@ -4,13 +4,11 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Pencil, Plus, ShieldCheck, ShieldOff, Trash2, TriangleAlert, UserRound } from "lucide-react";
+import { Pencil, Plus, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -20,22 +18,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { PageState } from "@/components/ui/page-state";
+import { BranchStaffTable } from "@/components/branch/staff/BranchStaffTable";
+import { BranchStaffDetailDialog } from "@/components/branch/staff/BranchStaffDetailDialog";
 import { CredentialsDialog } from "@/components/ui/credentials-dialog";
 import {
   Form,
@@ -89,6 +74,7 @@ export default function BranchStaffPage() {
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<CreateBranchStaffResult | null>(null);
   const [editing, setEditing] = useState<BranchStaff | null>(null);
+  const [detail, setDetail] = useState<BranchStaff | null>(null);
   const [confirm, setConfirm] = useState<{
     type: "revoke" | "delete";
     staff: BranchStaff;
@@ -176,83 +162,24 @@ export default function BranchStaffPage() {
         emptyDescription="Add someone, then they can unlock a till with their PIN."
       >
         {(rows) => (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Position</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[72px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((person) => (
-                    <TableRow key={person.id}>
-                      <TableCell className="text-content">
-                        {person.full_name || <span className="text-faint">—</span>}
-                      </TableCell>
-                      <TableCell className="text-muted">{person.email}</TableCell>
-                      <TableCell>
-                        {person.position ? (
-                          <Badge variant="secondary">
-                            {person.position.toLowerCase().replace(/_/g, " ")}
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="gap-1">
-                            <TriangleAlert className="size-3" aria-hidden />
-                            none — can&apos;t use a till
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={person.is_active ? "secondary" : "outline"}>
-                          {person.is_active ? "active" : "revoked"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label="Actions">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setEditing(person)}>
-                              <Pencil className="mr-2 h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {person.is_active ? (
-                              <DropdownMenuItem onClick={() => setConfirm({ type: "revoke", staff: person })}>
-                                <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => restoreMut.mutate(person.id)}>
-                                <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-danger"
-                              onClick={() => setConfirm({ type: "delete", staff: person })}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <BranchStaffTable
+            items={rows}
+            onRowClick={(person) => setDetail(person)}
+            onEdit={(person) => setEditing(person)}
+            onRevoke={(person) => setConfirm({ type: "revoke", staff: person })}
+            onRestore={(person) => restoreMut.mutate(person.id)}
+            onDelete={(person) => setConfirm({ type: "delete", staff: person })}
+          />
         )}
       </PageState>
 
       <AddStaffDialog open={open} onOpenChange={setOpen} onCreated={setCreated} />
+
+      <BranchStaffDetailDialog
+        staff={detail}
+        open={detail !== null}
+        onOpenChange={(o) => { if (!o) setDetail(null); }}
+      />
 
       <EditBranchStaffDialog
         staff={editing}
