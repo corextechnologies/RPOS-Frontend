@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { StaffFormFields } from "@/components/staff/StaffFormFields";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -51,47 +52,40 @@ export function AddStaffDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* Eight fields including three uploads — taller than the default, and
+          scrollable so the footer stays reachable on a laptop screen. */}
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add staff</DialogTitle>
+          <DialogTitle>Add staff member</DialogTitle>
+          {/* No mention of sign-in or emailed credentials: warehouse staff are
+              personnel records now, not accounts. */}
           <DialogDescription>
-            They are added to your warehouse and sign in with credentials emailed
-            to them. No password is shown here.
+            A roster record for someone in your warehouse. They cannot sign in —
+            this is just their details.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-            <FormField
+            <StaffFormFields
               control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="staff@restaurant.com"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="full_name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Full name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ali Warehouse" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+              namePlaceholder="Ali Warehouse"
+              emailPlaceholder="staff@restaurant.com"
+              roleField={
+                <FormField
+                  control={form.control}
+                  name="job_title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Role</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Loader" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              }
             />
 
             <DialogFooter>
@@ -104,7 +98,7 @@ export function AddStaffDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Adding…" : "Add staff"}
+                {isSubmitting ? "Adding…" : "Add staff member"}
               </Button>
             </DialogFooter>
           </form>

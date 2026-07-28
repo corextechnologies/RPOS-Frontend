@@ -4,14 +4,10 @@ export type AccessStatus = "active" | "revoked";
 export type RestaurantStatus = "ACTIVE" | "HALTED";
 
 /**
- * WAREHOUSE_STAFF shares the Warehouse portal with WAREHOUSE_MANAGER rather than
- * having one of its own: inventory, products, and requests are open; staff
- * provisioning (`/warehouse/users`) is manager-only. Admin creates managers;
- * warehouse managers create staff (role WAREHOUSE_STAFF).
- *
- * The Kitchen portal, by contrast, is manager-only: kitchen staff are personnel
- * records on a roster (see `KitchenStaff`), not user accounts — they cannot sign
- * in, so there is no kitchen-staff role here.
+ * The Warehouse and Kitchen portals are both manager-only: their staff are
+ * personnel records on a roster (see `WarehouseStaff` / `KitchenStaff`), not
+ * user accounts — they cannot sign in, so neither has a staff role here. Admin
+ * creates the managers; each manager keeps their location's roster.
  *
  * BRANCH_STAFF lands in `/pos` rather than the Branch Manager portal. The POS
  * gates on the capability list from `/pos/session/bootstrap`, which already
@@ -22,7 +18,6 @@ export type UserRole =
   | "SUPER_ADMIN"
   | "ADMIN"
   | "WAREHOUSE_MANAGER"
-  | "WAREHOUSE_STAFF"
   | "KITCHEN_MANAGER"
   | "BRANCH_MANAGER"
   | "BRANCH_STAFF";

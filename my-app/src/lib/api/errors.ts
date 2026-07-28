@@ -377,6 +377,10 @@ export function imageUploadErrorMessage(err: unknown): string {
         return "Image must be under 10 MB.";
       case "storage_unavailable":
         return "Couldn't upload, please try again.";
+      // A client bug — the caller sent a `kind` other than personal/cnic. The
+      // user can't act on it, so keep the copy generic rather than leaking it.
+      case "invalid_document_kind":
+        return "Couldn't upload this document. Please try again.";
     }
   }
   if (err instanceof Error && err.message) return err.message;

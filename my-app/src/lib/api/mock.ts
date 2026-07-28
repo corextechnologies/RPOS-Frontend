@@ -83,6 +83,7 @@ import type {
   KitchenProduceInput,
   KitchenRecipe,
 } from "@/lib/types/kitchen";
+import type { StaffDocumentKind } from "@/lib/types/staff";
 import type {
   BranchCustomer,
   BranchCustomerFilters,
@@ -525,20 +526,6 @@ function seedUsers(): MockUserAccount[] {
         created_by_id: 1,
         is_active: true,
         must_change_password: true,
-      },
-    },
-    {
-      // Created by the warehouse manager (id 3), not Admin — role is staff.
-      email: "wh-staff@demo.ros",
-      password: "Demo@1234",
-      me: {
-        id: 8,
-        email: "wh-staff@demo.ros",
-        full_name: "Whitney Staff",
-        role: "WAREHOUSE_STAFF",
-        restaurant_id: 1,
-        created_by_id: 3,
-        is_active: true,
       },
     },
   );
@@ -2732,8 +2719,12 @@ function toEmployeeOut(e: MockEmployee): Employee {
     branch_id: e.branch_id,
     kitchen_id: e.kitchen_id,
     warehouse_id: e.warehouse_id,
+    job_title: e.job_title ?? null,
     phone_number: e.phone_number ?? null,
+    address: e.address ?? null,
     image_url: e.image_url ?? null,
+    cnic_front_url: e.cnic_front_url ?? null,
+    cnic_back_url: e.cnic_back_url ?? null,
     created_at: e.created_at,
   };
 }
@@ -3694,7 +3685,10 @@ export const mockClient: ApiClient = {
       kitchen_id: kitchenId,
       warehouse_id: warehouseId,
       phone_number: body.phone_number?.trim() || null,
+      address: body.address?.trim() || null,
       image_url: body.image_url || null,
+      cnic_front_url: body.cnic_front_url || null,
+      cnic_back_url: body.cnic_back_url || null,
       created_at: now(),
     });
 
@@ -3765,7 +3759,14 @@ export const mockClient: ApiClient = {
     if (body.phone_number !== undefined) {
       employee.phone_number = body.phone_number.trim() || null;
     }
+    if (body.address !== undefined) employee.address = body.address.trim() || null;
     if (body.image_url !== undefined) employee.image_url = body.image_url || null;
+    if (body.cnic_front_url !== undefined) {
+      employee.cnic_front_url = body.cnic_front_url || null;
+    }
+    if (body.cnic_back_url !== undefined) {
+      employee.cnic_back_url = body.cnic_back_url || null;
+    }
 
     if (account) {
       account.me = {
@@ -4880,6 +4881,12 @@ export const mockClient: ApiClient = {
         id: e.id,
         email: e.email,
         full_name: e.full_name,
+        job_title: e.job_title ?? null,
+        phone_number: e.phone_number ?? null,
+        address: e.address ?? null,
+        image_url: e.image_url ?? null,
+        cnic_front_url: e.cnic_front_url ?? null,
+        cnic_back_url: e.cnic_back_url ?? null,
         role: e.role,
         is_active: e.is_active,
         warehouse_id: warehouse.id,
@@ -4907,34 +4914,22 @@ export const mockClient: ApiClient = {
     }
 
     const fullName = body.full_name?.trim() || null;
-    const nextId =
-      db.users.reduce(
-        (max, u) => Math.max(max, typeof u.me.id === "number" ? u.me.id : 0),
-        0,
-      ) + 1;
+    const empId = `emp-${nextEmployeeSeq(db)}`;
 
-    // The live API emails a generated password and never returns it. The mock
-    // reuses the shared demo password so created staff stay testable offline —
-    // it is deliberately absent from the response either way.
-    db.users.push({
-      email,
-      password: "Demo@1234",
-      me: {
-        id: nextId,
-        email,
-        full_name: fullName,
-        role: "WAREHOUSE_STAFF",
-        restaurant_id: me.restaurant_id ?? 1,
-        created_by_id: me.id,
-        is_active: true,
-      },
-    });
-
+    // No `db.users` account: warehouse staff are personnel records and cannot
+    // sign in — the same rule as kitchen staff. The record lives only on the
+    // roster (`db.employees`).
     db.employees.push({
-      id: `emp-${nextId}`,
+      id: empId,
       restaurant_id: warehouse.restaurant_id,
       email,
       full_name: fullName ?? "",
+      job_title: body.job_title?.trim() || null,
+      phone_number: body.phone_number?.trim() || null,
+      address: body.address?.trim() || null,
+      image_url: body.image_url || null,
+      cnic_front_url: body.cnic_front_url || null,
+      cnic_back_url: body.cnic_back_url || null,
       role: "WAREHOUSE_STAFF",
       is_active: true,
       branch_id: null,
@@ -4946,77 +4941,36 @@ export const mockClient: ApiClient = {
     saveDb(db);
 
     const result: CreateWarehouseStaffResult = {
-      user_id: String(nextId),
+      user_id: empId,
       email,
+      full_name: fullName,
+      job_title: body.job_title?.trim() || null,
+      phone_number: body.phone_number?.trim() || null,
+      address: body.address?.trim() || null,
+      image_url: body.image_url || null,
+      cnic_front_url: body.cnic_front_url || null,
+      cnic_back_url: body.cnic_back_url || null,
       role: "WAREHOUSE_STAFF",
       warehouse_id: warehouse.id,
-      credential_email_sent: true,
     };
     return delay(result, 400);
   },
 
-  async revokeWarehouseUser(id: string) {
-    const me = requireAuth();
-    requireWarehouseManager(me);
-    const db = loadDb();
-    const warehouse = resolveMyWarehouse(db, me);
-    const staff = db.users.find((u) => String(u.me.id) === id);
-    const emp = staff
-      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
-      : undefined;
-    // Scope by warehouse membership, not creator — another warehouse's staff
-    // (or a non-staff id) still 404s.
-    if (!staff || !emp) throw new ApiError("Staff not found", 404);
-    staff.me.is_active = false;
-    emp.is_active = false;
-    saveDb(db);
-    const result: WarehouseStaff = {
-      id: String(staff.me.id),
-      email: staff.email,
-      full_name: staff.me.full_name,
-      role: staff.me.role,
-      is_active: false,
-      warehouse_id: warehouse.id,
-    };
-    return delay(result, 300);
-  },
-
-  async restoreWarehouseUser(id: string) {
-    const me = requireAuth();
-    requireWarehouseManager(me);
-    const db = loadDb();
-    const warehouse = resolveMyWarehouse(db, me);
-    const staff = db.users.find((u) => String(u.me.id) === id);
-    const emp = staff
-      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
-      : undefined;
-    if (!staff || !emp) throw new ApiError("Staff not found", 404);
-    staff.me.is_active = true;
-    emp.is_active = true;
-    saveDb(db);
-    const result: WarehouseStaff = {
-      id: String(staff.me.id),
-      email: staff.email,
-      full_name: staff.me.full_name,
-      role: staff.me.role,
-      is_active: true,
-      warehouse_id: warehouse.id,
-    };
-    return delay(result, 300);
-  },
+  // No revoke/restore for warehouse staff: they are personnel records with no
+  // login to revoke, and the live routes 404. Delete is the only removal.
 
   async deleteWarehouseUser(id: string) {
     const me = requireAuth();
     requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
-    const staff = db.users.find((u) => String(u.me.id) === id);
-    const emp = staff
-      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
-      : undefined;
-    if (!staff || !emp) throw new ApiError("Staff not found", 404);
-    db.users = db.users.filter((u) => u !== staff);
-    db.employees = db.employees.filter((e) => e.email !== staff.email);
+    // Scope by warehouse membership — another warehouse's staff (or a bad id)
+    // 404s, which is what stops one manager reaching another's roster.
+    const emp = db.employees.find(
+      (e) => e.id === id && e.warehouse_id === warehouse.id && e.role === "WAREHOUSE_STAFF",
+    );
+    if (!emp) throw new ApiError("Staff member not found.", 404);
+    db.employees = db.employees.filter((e) => e !== emp);
     saveDb(db);
     return delay(undefined as never, 300);
   },
@@ -5026,28 +4980,38 @@ export const mockClient: ApiClient = {
     requireWarehouseManager(me);
     const db = loadDb();
     const warehouse = resolveMyWarehouse(db, me);
-    const staff = db.users.find((u) => String(u.me.id) === id);
-    const emp = staff
-      ? db.employees.find((e) => e.email === staff.email && e.warehouse_id === warehouse.id)
-      : undefined;
-    if (!staff || !emp) throw new ApiError("Staff not found", 404);
+    const emp = db.employees.find(
+      (e) => e.id === id && e.warehouse_id === warehouse.id && e.role === "WAREHOUSE_STAFF",
+    );
+    if (!emp) throw new ApiError("Staff member not found.", 404);
     if (body.email !== undefined) {
       const newEmail = body.email.trim().toLowerCase();
-      if (emp) emp.email = newEmail;
-      staff.email = newEmail;
-      staff.me.email = newEmail;
+      // Re-saving the member's own email is fine; a clash with anyone else 409s.
+      if (newEmail !== emp.email && emailTaken(db, newEmail)) {
+        throw new ApiError("A user with this email already exists.", 409, "conflict");
+      }
+      emp.email = newEmail;
     }
-    if (body.full_name !== undefined) {
-      staff.me.full_name = body.full_name;
-      if (emp) emp.full_name = body.full_name;
-    }
+    if (body.full_name !== undefined) emp.full_name = body.full_name.trim();
+    if (body.job_title !== undefined) emp.job_title = body.job_title.trim() || null;
+    if (body.phone_number !== undefined) emp.phone_number = body.phone_number.trim() || null;
+    if (body.address !== undefined) emp.address = body.address.trim() || null;
+    if (body.image_url !== undefined) emp.image_url = body.image_url || null;
+    if (body.cnic_front_url !== undefined) emp.cnic_front_url = body.cnic_front_url || null;
+    if (body.cnic_back_url !== undefined) emp.cnic_back_url = body.cnic_back_url || null;
     saveDb(db);
     const result: WarehouseStaff = {
-      id: String(staff.me.id),
-      email: staff.email,
-      full_name: staff.me.full_name,
-      role: staff.me.role,
-      is_active: staff.me.is_active,
+      id: emp.id,
+      email: emp.email,
+      full_name: emp.full_name || null,
+      job_title: emp.job_title ?? null,
+      phone_number: emp.phone_number ?? null,
+      address: emp.address ?? null,
+      image_url: emp.image_url ?? null,
+      cnic_front_url: emp.cnic_front_url ?? null,
+      cnic_back_url: emp.cnic_back_url ?? null,
+      role: emp.role,
+      is_active: emp.is_active,
       warehouse_id: warehouse.id,
     };
     return delay(result, 300);
@@ -5552,7 +5516,10 @@ export const mockClient: ApiClient = {
       full_name: e.full_name || null,
       job_title: e.job_title ?? null,
       phone_number: e.phone_number ?? null,
+      address: e.address ?? null,
       image_url: e.image_url ?? null,
+      cnic_front_url: e.cnic_front_url ?? null,
+      cnic_back_url: e.cnic_back_url ?? null,
       role: e.role,
       is_active: e.is_active,
       kitchen_id: kitchen.id,
@@ -5593,7 +5560,10 @@ export const mockClient: ApiClient = {
       full_name: fullName ?? "",
       job_title: body.job_title?.trim() || null,
       phone_number: body.phone_number?.trim() || null,
+      address: body.address?.trim() || null,
       image_url: body.image_url || null,
+      cnic_front_url: body.cnic_front_url || null,
+      cnic_back_url: body.cnic_back_url || null,
       role: "KITCHEN_STAFF",
       is_active: true,
       branch_id: null,
@@ -5609,7 +5579,10 @@ export const mockClient: ApiClient = {
       email,
       full_name: fullName,
       phone_number: body.phone_number?.trim() || null,
+      address: body.address?.trim() || null,
       image_url: body.image_url || null,
+      cnic_front_url: body.cnic_front_url || null,
+      cnic_back_url: body.cnic_back_url || null,
       job_title: body.job_title?.trim() || null,
       role: "KITCHEN_STAFF",
       kitchen_id: kitchen.id,
@@ -5649,7 +5622,10 @@ export const mockClient: ApiClient = {
     }
     if (body.full_name !== undefined) emp.full_name = body.full_name.trim();
     if (body.phone_number !== undefined) emp.phone_number = body.phone_number.trim() || null;
+    if (body.address !== undefined) emp.address = body.address.trim() || null;
     if (body.image_url !== undefined) emp.image_url = body.image_url || null;
+    if (body.cnic_front_url !== undefined) emp.cnic_front_url = body.cnic_front_url || null;
+    if (body.cnic_back_url !== undefined) emp.cnic_back_url = body.cnic_back_url || null;
     if (body.job_title !== undefined) emp.job_title = body.job_title.trim() || null;
     saveDb(db);
     const result: KitchenStaff = {
@@ -5658,7 +5634,10 @@ export const mockClient: ApiClient = {
       full_name: emp.full_name || null,
       job_title: emp.job_title ?? null,
       phone_number: emp.phone_number ?? null,
+      address: emp.address ?? null,
       image_url: emp.image_url ?? null,
+      cnic_front_url: emp.cnic_front_url ?? null,
+      cnic_back_url: emp.cnic_back_url ?? null,
       role: emp.role,
       is_active: emp.is_active,
       kitchen_id: kitchen.id,
@@ -5672,6 +5651,30 @@ export const mockClient: ApiClient = {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(new ApiError("Could not read the image", 400));
+      reader.readAsDataURL(file);
+    });
+    return delay(dataUrl, 300);
+  },
+
+  /**
+   * The live route stores the file privately and returns a signed link that
+   * expires. The mock has no server, so it inlines a data URL — which never
+   * expires. That difference is deliberate but worth remembering: the
+   * expired-image path simply cannot be reproduced offline.
+   */
+  async uploadStaffDocument(file: File, kind: StaffDocumentKind): Promise<string> {
+    requireAuth();
+    if (kind !== "personal" && kind !== "cnic") {
+      throw new ApiError("Unknown document kind", 409, "invalid_document_kind");
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      throw new ApiError("Image must be under 10 MB", 409, "file_too_large");
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () =>
+        reject(new ApiError("Could not read the image", 409, "invalid_image"));
       reader.readAsDataURL(file);
     });
     return delay(dataUrl, 300);
@@ -6451,6 +6454,11 @@ export const mockClient: ApiClient = {
           email: e.email,
           full_name: e.full_name ?? null,
           position: (e.position as BranchPosition | undefined) ?? null,
+          phone_number: e.phone_number ?? null,
+          address: e.address ?? null,
+          image_url: e.image_url ?? null,
+          cnic_front_url: e.cnic_front_url ?? null,
+          cnic_back_url: e.cnic_back_url ?? null,
           is_active: e.is_active,
           branch_id: branch.id,
           created_at: e.created_at,
@@ -6480,6 +6488,11 @@ export const mockClient: ApiClient = {
       is_active: true,
       branch_id: branch.id,
       position: body.position,
+      phone_number: body.phone_number?.trim() || null,
+      address: body.address?.trim() || null,
+      image_url: body.image_url || null,
+      cnic_front_url: body.cnic_front_url || null,
+      cnic_back_url: body.cnic_back_url || null,
       created_at: now(),
     } as MockEmployee);
 
@@ -6582,12 +6595,22 @@ export const mockClient: ApiClient = {
       if (user) user.me.full_name = body.full_name;
     }
     if (body.position !== undefined) (emp as any).position = body.position;
+    if (body.phone_number !== undefined) emp.phone_number = body.phone_number.trim() || null;
+    if (body.address !== undefined) emp.address = body.address.trim() || null;
+    if (body.image_url !== undefined) emp.image_url = body.image_url || null;
+    if (body.cnic_front_url !== undefined) emp.cnic_front_url = body.cnic_front_url || null;
+    if (body.cnic_back_url !== undefined) emp.cnic_back_url = body.cnic_back_url || null;
     saveDb(db);
     return delay({
       id: emp.id,
       email: emp.email,
       full_name: emp.full_name || null,
       position: (emp as any).position ?? null,
+      phone_number: emp.phone_number ?? null,
+      address: emp.address ?? null,
+      image_url: emp.image_url ?? null,
+      cnic_front_url: emp.cnic_front_url ?? null,
+      cnic_back_url: emp.cnic_back_url ?? null,
       is_active: emp.is_active,
       branch_id: branch.id,
     });

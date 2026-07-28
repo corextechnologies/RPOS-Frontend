@@ -98,6 +98,7 @@ import type {
   AppNotification,
   NotificationFilters,
 } from "@/lib/types/notification";
+import type { StaffDocumentKind } from "@/lib/types/staff";
 import type {
   BranchCustomer,
   BranchCustomerFilters,
@@ -209,6 +210,15 @@ export interface ApiClient {
   // `image_url` on create/update. Mirrors the menu-image upload contract.
   uploadEmployeeImage(file: File): Promise<string>;
 
+  /**
+   * Staff photo / CNIC upload, shared by all four portals (ADMIN and each
+   * location manager may call it). Returns a SIGNED, EXPIRING url — pass it
+   * straight to the matching field and never cache it. Supersedes the older
+   * per-portal `uploadEmployeeImage` / `uploadKitchenStaffImage` routes, which
+   * still work but only cover one portal each.
+   */
+  uploadStaffDocument(file: File, kind: StaffDocumentKind): Promise<string>;
+
   recordSale(body: CreateSaleInput): Promise<SalesRecord>;
   listSalesRecords(filters?: SalesRecordFilters): Promise<Paginated<SalesRecord>>;
   getSalesSummary(filters?: SalesSummaryFilters): Promise<SalesSummary>;
@@ -285,8 +295,8 @@ export interface ApiClient {
   createWarehouseUser(
     body: CreateWarehouseStaffInput,
   ): Promise<CreateWarehouseStaffResult>;
-  revokeWarehouseUser(id: string): Promise<WarehouseStaff>;
-  restoreWarehouseUser(id: string): Promise<WarehouseStaff>;
+  // No revoke/restore: warehouse staff are personnel records with no login to
+  // revoke, and those routes 404 on the live API.
   deleteWarehouseUser(id: string): Promise<void>;
   updateWarehouseUser(id: string, body: UpdateWarehouseStaffInput): Promise<WarehouseStaff>;
   createWarehousePo(body: CreatePurchaseOrderInput): Promise<WarehouseRequest>;

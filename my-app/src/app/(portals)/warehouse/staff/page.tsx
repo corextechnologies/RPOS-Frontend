@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus } from "lucide-react";
 import { AddStaffDialog } from "@/components/warehouse/staff/AddStaffDialog";
+import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
+import { StaffDocumentField } from "@/components/staff/StaffDocumentField";
 import { StaffTable } from "@/components/warehouse/staff/StaffTable";
 import { WarehouseNoAccess } from "@/components/warehouse/WarehouseNoAccess";
 import { WarehouseUnassigned } from "@/components/warehouse/WarehouseUnassigned";
@@ -40,31 +42,15 @@ export default function WarehouseStaffPage() {
   const staff = useWarehouseStaff(page, allowed);
   const createStaff = useCreateWarehouseStaff();
   const [editing, setEditing] = useState<WarehouseStaff | null>(null);
-  const [confirm, setConfirm] = useState<{
-    type: "revoke" | "delete";
-    staff: WarehouseStaff;
-  } | null>(null);
+  const [confirm, setConfirm] = useState<{ staff: WarehouseStaff } | null>(null);
 
   const unassigned = isMissingWarehouseAssignment(staff.error);
   const total = staff.data?.total ?? 0;
   const pageSize = staff.data?.page_size ?? 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const revokeMut = useMutation({
-    mutationFn: (id: string) => api.revokeWarehouseUser(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["warehouse-staff"] });
-      setConfirm(null);
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't revoke access"),
-  });
-
-  const restoreMut = useMutation({
-    mutationFn: (id: string) => api.restoreWarehouseUser(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["warehouse-staff"] }),
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't restore access"),
-  });
-
+  // No revoke/restore here: warehouse staff are personnel records with no login
+  // to revoke, and those routes 404. Delete is the only removal.
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.deleteWarehouseUser(id),
     onSuccess: () => {
@@ -85,20 +71,24 @@ export default function WarehouseStaffPage() {
   });
 
   const handleAdd = async (values: CreateWarehouseStaffForm) => {
+    // Every field is required by the form, so send them all — the server 422s
+    // on a partial create body.
     await createStaff.mutateAsync({
       email: values.email,
-      full_name: values.full_name || undefined,
+      full_name: values.full_name,
+      job_title: values.job_title,
+      phone_number: values.phone_number,
+      address: values.address,
+      image_url: values.image_url,
+      cnic_front_url: values.cnic_front_url,
+      cnic_back_url: values.cnic_back_url,
     });
     setAdding(false);
   };
 
   const handleConfirm = async () => {
     if (!confirm) return;
-    if (confirm.type === "revoke") {
-      await revokeMut.mutateAsync(confirm.staff.id);
-    } else {
-      await deleteMut.mutateAsync(confirm.staff.id);
-    }
+    await deleteMut.mutateAsync(confirm.staff.id);
   };
 
   return (
@@ -132,9 +122,7 @@ export default function WarehouseStaffPage() {
             isError={staff.isError}
             onRetry={() => staff.refetch()}
             onEdit={(s) => setEditing(s)}
-            onRevoke={(s) => setConfirm({ type: "revoke", staff: s })}
-            onRestore={(s) => restoreMut.mutate(s.id)}
-            onDelete={(s) => setConfirm({ type: "delete", staff: s })}
+            onDelete={(s) => setConfirm({ staff: s })}
           />
 
           {total > pageSize && (
@@ -180,17 +168,15 @@ export default function WarehouseStaffPage() {
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(o) => { if (!o) setConfirm(null); }}
-        title={confirm?.type === "delete" ? "Delete staff member?" : "Revoke access?"}
+        title="Delete staff member?"
         description={
-          confirm?.type === "delete"
-            ? `Permanently delete "${confirm.staff.full_name || confirm.staff.email}"? This cannot be undone.`
-            : confirm
-              ? `Revoke login access for "${confirm.staff.full_name || confirm.staff.email}"? They will not be able to sign in until restored.`
-              : ""
+          confirm
+            ? `Permanently delete “${confirm.staff.full_name || confirm.staff.email}”? This erases the record and cannot be undone.`
+            : ""
         }
-        confirmLabel={confirm?.type === "delete" ? "Delete" : "Revoke access"}
+        confirmLabel="Delete"
         destructive
-        loading={revokeMut.isPending || deleteMut.isPending}
+        loading={deleteMut.isPending}
         onConfirm={handleConfirm}
       />
     </div>
@@ -210,6 +196,12 @@ function EditWarehouseStaffDialog({
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [cnicFront, setCnicFront] = useState("");
+  const [cnicBack, setCnicBack] = useState("");
 
   const staffId = staff?.id;
   const [prevId, setPrevId] = useState<string | undefined>();
@@ -218,6 +210,12 @@ function EditWarehouseStaffDialog({
     if (staff) {
       setEmail(staff.email);
       setName(staff.full_name ?? "");
+      setJobTitle(staff.job_title ?? "");
+      setPhone(staff.phone_number ?? "");
+      setAddress(staff.address ?? "");
+      setImageUrl(staff.image_url ?? "");
+      setCnicFront(staff.cnic_front_url ?? "");
+      setCnicBack(staff.cnic_back_url ?? "");
     }
   }
 
@@ -225,7 +223,7 @@ function EditWarehouseStaffDialog({
 
   return (
     <Dialog open={staff !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="size-4 text-brand" aria-hidden />
@@ -238,22 +236,80 @@ function EditWarehouseStaffDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
+            <Label>Photo</Label>
+            <EmployeeImageField
+              value={imageUrl}
+              onChange={setImageUrl}
+              upload={(file) => api.uploadStaffDocument(file, "personal")}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-wh-staff-name">Full name</Label>
+            <Input
+              id="edit-wh-staff-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-wh-staff-role">Role</Label>
+            <Input
+              id="edit-wh-staff-role"
+              placeholder="Loader"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="edit-wh-staff-email">Email</Label>
             <Input
               id="edit-wh-staff-email"
               type="email"
-              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-wh-staff-name">Name</Label>
+            <Label htmlFor="edit-wh-staff-phone">Phone number</Label>
             <Input
-              id="edit-wh-staff-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              id="edit-wh-staff-phone"
+              type="tel"
+              placeholder="+92 300 1234567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-wh-staff-address">Address</Label>
+            <Input
+              id="edit-wh-staff-address"
+              placeholder="12 Mall Road, Lahore"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — front</Label>
+            <StaffDocumentField
+              value={cnicFront}
+              onChange={setCnicFront}
+              label="CNIC front"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — back</Label>
+            <StaffDocumentField
+              value={cnicBack}
+              onChange={setCnicBack}
+              label="CNIC back"
             />
           </div>
         </div>
@@ -271,6 +327,15 @@ function EditWarehouseStaffDialog({
               if (trimmedEmail !== staff.email) body.email = trimmedEmail;
               const trimmedName = name.trim();
               if (trimmedName !== (staff.full_name ?? "")) body.full_name = trimmedName;
+              const trimmedRole = jobTitle.trim();
+              if (trimmedRole !== (staff.job_title ?? "")) body.job_title = trimmedRole;
+              const trimmedPhone = phone.trim();
+              if (trimmedPhone !== (staff.phone_number ?? "")) body.phone_number = trimmedPhone;
+              const trimmedAddress = address.trim();
+              if (trimmedAddress !== (staff.address ?? "")) body.address = trimmedAddress;
+              if (imageUrl !== (staff.image_url ?? "")) body.image_url = imageUrl;
+              if (cnicFront !== (staff.cnic_front_url ?? "")) body.cnic_front_url = cnicFront;
+              if (cnicBack !== (staff.cnic_back_url ?? "")) body.cnic_back_url = cnicBack;
               onSave(staff.id, body);
             }}
           >

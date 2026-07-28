@@ -30,6 +30,7 @@ import type { DeviceCreateInput, PosDevice, PosDeviceActivation } from "@/lib/ty
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import type { StockUnit } from "@/lib/stock-unit";
 import { request, requestEnvelope } from "./client";
+import { staffProfileBody } from "./staff-body";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
@@ -193,8 +194,8 @@ export const branchApi = {
     const res = await request<CreateBranchStaffResult>("/branch/users", {
       method: "POST",
       body: JSON.stringify({
-        email: body.email,
-        full_name: optionalText(body.full_name),
+        ...staffProfileBody(body),
+        email: body.email.trim(),
         position: body.position,
       }),
     });

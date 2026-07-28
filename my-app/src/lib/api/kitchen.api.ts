@@ -33,6 +33,7 @@ import type {
 } from "@/lib/types/production-target";
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import { request, requestEnvelope, requestUpload } from "./client";
+import { staffProfileBody } from "./staff-body";
 import { apiConfig } from "./config";
 import { normalizeProductionTarget } from "./admin.api";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
@@ -77,7 +78,10 @@ function normalizeStaff(staff: KitchenStaff): KitchenStaff {
     full_name: staff.full_name ?? null,
     job_title: staff.job_title ?? null,
     phone_number: staff.phone_number ?? null,
+    address: staff.address ?? null,
     image_url: staff.image_url ?? null,
+    cnic_front_url: staff.cnic_front_url ?? null,
+    cnic_back_url: staff.cnic_back_url ?? null,
   };
 }
 
@@ -302,11 +306,9 @@ export const kitchenApi = {
     const data = await request<CreateKitchenStaffResult>("/kitchen/users", {
       method: "POST",
       body: JSON.stringify({
+        ...staffProfileBody(body),
         email: body.email.trim(),
-        full_name: optionalText(body.full_name),
-        phone_number: optionalText(body.phone_number),
-        image_url: optionalText(body.image_url),
-        job_title: optionalText(body.job_title),
+        job_title: body.job_title?.trim() ?? "",
       }),
     });
     return {

@@ -7,6 +7,7 @@ import { AddKitchenStaffDialog } from "@/components/kitchen/staff/AddKitchenStaf
 import { KitchenStaffDetailDialog } from "@/components/kitchen/staff/KitchenStaffDetailDialog";
 import { KitchenStaffTable } from "@/components/kitchen/staff/KitchenStaffTable";
 import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
+import { StaffDocumentField } from "@/components/staff/StaffDocumentField";
 import { KitchenNoAccess } from "@/components/kitchen/KitchenNoAccess";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
 import { Button } from "@/components/ui/button";
@@ -69,12 +70,17 @@ export default function KitchenStaffPage() {
   });
 
   const handleAdd = async (values: CreateKitchenStaffForm) => {
+    // Every field is required by the form, so send them all — the server 422s
+    // on a partial create body.
     await createStaff.mutateAsync({
       email: values.email,
-      full_name: values.full_name || undefined,
-      job_title: values.job_title || undefined,
-      phone_number: values.phone_number || undefined,
-      image_url: values.image_url || undefined,
+      full_name: values.full_name,
+      job_title: values.job_title,
+      phone_number: values.phone_number,
+      address: values.address,
+      image_url: values.image_url,
+      cnic_front_url: values.cnic_front_url,
+      cnic_back_url: values.cnic_back_url,
     });
     setAdding(false);
   };
@@ -198,7 +204,10 @@ function EditKitchenStaffDialog({
   const [name, setName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [cnicFront, setCnicFront] = useState("");
+  const [cnicBack, setCnicBack] = useState("");
 
   const staffId = staff?.id;
   const [prevId, setPrevId] = useState<string | undefined>();
@@ -209,7 +218,10 @@ function EditKitchenStaffDialog({
       setName(staff.full_name ?? "");
       setJobTitle(staff.job_title ?? "");
       setPhone(staff.phone_number ?? "");
+      setAddress(staff.address ?? "");
       setImageUrl(staff.image_url ?? "");
+      setCnicFront(staff.cnic_front_url ?? "");
+      setCnicBack(staff.cnic_back_url ?? "");
     }
   }
 
@@ -277,6 +289,34 @@ function EditKitchenStaffDialog({
               onChange={(e) => setPhone(e.target.value)}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-kitchen-staff-address">Address</Label>
+            <Input
+              id="edit-kitchen-staff-address"
+              placeholder="12 Mall Road, Lahore"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — front</Label>
+            <StaffDocumentField
+              value={cnicFront}
+              onChange={setCnicFront}
+              label="CNIC front"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — back</Label>
+            <StaffDocumentField
+              value={cnicBack}
+              onChange={setCnicBack}
+              label="CNIC back"
+            />
+          </div>
         </div>
 
         <DialogFooter className="gap-2">
@@ -296,7 +336,11 @@ function EditKitchenStaffDialog({
               if (trimmedRole !== (staff.job_title ?? "")) body.job_title = trimmedRole;
               const trimmedPhone = phone.trim();
               if (trimmedPhone !== (staff.phone_number ?? "")) body.phone_number = trimmedPhone;
+              const trimmedAddress = address.trim();
+              if (trimmedAddress !== (staff.address ?? "")) body.address = trimmedAddress;
               if (imageUrl !== (staff.image_url ?? "")) body.image_url = imageUrl;
+              if (cnicFront !== (staff.cnic_front_url ?? "")) body.cnic_front_url = cnicFront;
+              if (cnicBack !== (staff.cnic_back_url ?? "")) body.cnic_back_url = cnicBack;
               onSave(staff.id, body);
             }}
           >

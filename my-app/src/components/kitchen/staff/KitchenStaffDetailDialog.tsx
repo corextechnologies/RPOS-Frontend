@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StaffAvatar } from "@/components/ui/staff-avatar";
+import { StaffDocumentImage } from "@/components/staff/StaffDocumentImage";
 import type { KitchenStaff } from "@/lib/types/kitchen";
 import { formatDate } from "@/lib/utils";
 
@@ -56,11 +57,22 @@ export function KitchenStaffDetailDialog({
                   )
                 }
               />
+              <Field label="Address" value={staff.address || "—"} />
               <Field
                 label="Added"
                 value={staff.created_at ? formatDate(staff.created_at) : "—"}
               />
             </dl>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-faint">
+                CNIC
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <StaffDocumentImage url={staff.cnic_front_url} label="CNIC front" />
+                <StaffDocumentImage url={staff.cnic_back_url} label="CNIC back" />
+              </div>
+            </div>
           </>
         )}
       </DialogContent>

@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/types/super-admin";
 import type { WasteReason } from "@/lib/stock/waste-reason";
 import type { ProductKind } from "@/lib/types/admin";
+import type { StaffProfileFields, StaffProfileRecord } from "@/lib/types/staff";
 import type { StockUnit } from "@/lib/types/kitchen";
 
 // Warehouse (Phase 3) DTOs — mirrors the /v1/warehouse/* backend contract.
@@ -56,48 +57,59 @@ export interface InventoryItem {
 }
 
 /**
- * A staff member created by the signed-in warehouse manager.
+ * Someone on the warehouse's roster.
  *
- * `GET /warehouse/users` is creator-scoped: it returns only the staff this
- * manager created, never everyone attached to the warehouse. UI copy must not
- * imply otherwise. The API assigns them the WAREHOUSE_STAFF role (managers are
- * created by Admin and stay WAREHOUSE_MANAGER).
+ * ⚠️ These are PERSONNEL RECORDS, not accounts — warehouse staff cannot sign
+ * in, exactly like kitchen staff. Every warehouse operation (inventory, counts,
+ * requests) belongs to the WAREHOUSE_MANAGER alone. Never show a login,
+ * password, or "credentials emailed" affordance on this roster.
+ *
+ * `GET /warehouse/users` is location-scoped: any manager of the warehouse sees
+ * the whole roster, whoever created each record.
  */
-export interface WarehouseStaff {
+export interface WarehouseStaff extends StaffProfileRecord {
   id: string;
   email: string;
   full_name: string | null;
+  /** Free-text job title ("Loader"), shown as "Role" in the UI. */
+  job_title?: string | null;
   role: string;
   is_active: boolean;
   warehouse_id: string;
   created_at?: string;
 }
 
-/** Body for `POST /warehouse/users`. */
-export interface CreateWarehouseStaffInput {
+/**
+ * Body for `POST /warehouse/users`.
+ *
+ * All eight fields are REQUIRED — a partial body is a 422. They stay optional
+ * in `StaffProfileFields` because PATCH shares the shape; the create FORM is
+ * what enforces "all required", via `createWarehouseStaffSchema`.
+ */
+export interface CreateWarehouseStaffInput extends StaffProfileFields {
   email: string;
-  full_name?: string;
+  job_title?: string;
+}
+
+/** Body for `PATCH /warehouse/users/{id}` — partial, send only what changed. */
+export interface UpdateWarehouseStaffInput extends StaffProfileFields {
+  job_title?: string;
 }
 
 /**
- * Result of `POST /warehouse/users`.
+ * Result of `POST /warehouse/users` — the created roster record.
  *
- * Note there is no temporary password here — unlike the Admin equivalent, this
- * endpoint only emails the credentials. Never surface a credentials dialog for
+ * There is no password and no `credential_email_sent`: warehouse staff are
+ * personnel records and cannot sign in. Never surface a credentials dialog for
  * this flow; there is nothing to show.
  */
-/** Body for `PATCH /warehouse/users/{id}`. */
-export interface UpdateWarehouseStaffInput {
-  email?: string;
-  full_name?: string;
-}
-
-export interface CreateWarehouseStaffResult {
+export interface CreateWarehouseStaffResult extends StaffProfileRecord {
   user_id: string;
   email: string;
+  full_name?: string | null;
+  job_title?: string | null;
   role: string;
   warehouse_id: string;
-  credential_email_sent: boolean;
 }
 
 /**

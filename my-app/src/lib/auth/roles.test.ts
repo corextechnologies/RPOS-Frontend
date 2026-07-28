@@ -16,24 +16,20 @@ describe("role routing", () => {
     expect(BRANCH_PORTAL_ROLES).toEqual(["BRANCH_MANAGER"]);
   });
 
-  it("sends warehouse staff to the warehouse portal with managers", () => {
-    expect(portalPathForRole("WAREHOUSE_STAFF")).toBe("/warehouse/dashboard");
-    expect(WAREHOUSE_PORTAL_ROLES).toEqual(["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"]);
-    expect(isWarehousePortalRole("WAREHOUSE_STAFF")).toBe(true);
+  /**
+   * Warehouse staff used to sign in and share this portal. They are personnel
+   * records now — no account, no role — so the portal is manager-only, exactly
+   * like Kitchen.
+   */
+  it("keeps the Warehouse portal manager-only", () => {
+    expect(portalPathForRole("WAREHOUSE_MANAGER")).toBe("/warehouse/dashboard");
+    expect(WAREHOUSE_PORTAL_ROLES).toEqual(["WAREHOUSE_MANAGER"]);
     expect(isWarehousePortalRole("WAREHOUSE_MANAGER")).toBe(true);
     expect(isWarehousePortalRole("ADMIN")).toBe(false);
   });
 });
 
-describe("warehouse staff capabilities", () => {
-  it("allows inventory and requests but not staff provisioning", () => {
-    expect(canPerform("WAREHOUSE_STAFF", "inventory:read")).toBe(true);
-    expect(canPerform("WAREHOUSE_STAFF", "stock:receive")).toBe(true);
-    expect(canPerform("WAREHOUSE_STAFF", "po:create")).toBe(true);
-    expect(canPerform("WAREHOUSE_STAFF", "requests:update")).toBe(true);
-    expect(canPerform("WAREHOUSE_STAFF", "staff:read")).toBe(false);
-    expect(canPerform("WAREHOUSE_STAFF", "staff:create")).toBe(false);
-  });
+describe("warehouse capabilities", () => {
 
   it("keeps staff provisioning on the manager", () => {
     expect(canPerform("WAREHOUSE_MANAGER", "staff:read")).toBe(true);

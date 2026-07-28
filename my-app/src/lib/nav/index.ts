@@ -13,8 +13,6 @@ const NAV_BY_ROLE: Record<UserRole, NavSection[]> = {
   SUPER_ADMIN: SUPER_ADMIN_NAV,
   ADMIN: ADMIN_NAV,
   WAREHOUSE_MANAGER: WAREHOUSE_NAV,
-  // Same nav as the manager; `visibleNavItems` drops Staff (no staff:read).
-  WAREHOUSE_STAFF: WAREHOUSE_NAV,
   KITCHEN_MANAGER: KITCHEN_NAV,
   BRANCH_MANAGER: BRANCH_NAV,
   BRANCH_STAFF: BRANCH_NAV,

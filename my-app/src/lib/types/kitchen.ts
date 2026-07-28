@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/types/super-admin";
 import type { WasteReason } from "@/lib/stock/waste-reason";
 import type { ProductKind, RequestBranchAllocation } from "@/lib/types/admin";
+import type { StaffProfileFields, StaffProfileRecord } from "@/lib/types/staff";
 import type { StockUnit } from "@/lib/stock-unit";
 
 // Kitchen (Phase 4) DTOs — mirrors the /v1/kitchen/* backend contract.
@@ -169,14 +170,12 @@ export interface KitchenCountFilters {
  * Dishwasher…) is free text carried on `job_title`. `is_active` is always
  * `true`; there is no suspend, so it is safe to ignore.
  */
-export interface KitchenStaff {
+export interface KitchenStaff extends StaffProfileRecord {
   id: string;
   email: string;
   full_name: string | null;
   /** Free-text job title, shown as "Role" in the UI. */
   job_title?: string | null;
-  phone_number?: string | null;
-  image_url?: string | null;
   role: string;
   is_active: boolean;
   kitchen_id: string;
@@ -187,20 +186,19 @@ export interface KitchenStaff {
  * Body for `PATCH /kitchen/users/{id}`. All five fields are editable and
  * optional — send only what changed. `role` is never sent.
  */
-export interface UpdateKitchenStaffInput {
-  email?: string;
-  full_name?: string;
-  phone_number?: string;
-  image_url?: string;
+export interface UpdateKitchenStaffInput extends StaffProfileFields {
   job_title?: string;
 }
 
-/** Body for `POST /kitchen/users`. */
-export interface CreateKitchenStaffInput {
+/**
+ * Body for `POST /kitchen/users`.
+ *
+ * Every field is REQUIRED — a partial body is a 422. The inherited fields are
+ * optional in `StaffProfileFields` because PATCH shares that shape; the create
+ * FORM is what enforces "all eight", via `createKitchenStaffSchema`.
+ */
+export interface CreateKitchenStaffInput extends StaffProfileFields {
   email: string;
-  full_name?: string;
-  phone_number?: string;
-  image_url?: string;
   job_title?: string;
 }
 
@@ -212,12 +210,10 @@ export interface CreateKitchenStaffInput {
  * `user_id` here but `id` on list/edit rows — the same value, different key,
  * a backend inconsistency the client normalizes on read.
  */
-export interface CreateKitchenStaffResult {
+export interface CreateKitchenStaffResult extends StaffProfileRecord {
   user_id: string;
   email: string;
   full_name?: string | null;
-  phone_number?: string | null;
-  image_url?: string | null;
   job_title?: string | null;
   role: string;
   kitchen_id: string;

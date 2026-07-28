@@ -4,7 +4,6 @@ export const PORTAL_HOME: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin/dashboard",
   ADMIN: "/admin/dashboard",
   WAREHOUSE_MANAGER: "/warehouse/dashboard",
-  WAREHOUSE_STAFF: "/warehouse/dashboard",
   KITCHEN_MANAGER: "/kitchen/dashboard",
   BRANCH_MANAGER: "/branch/dashboard",
   BRANCH_STAFF: "/pos",
@@ -14,7 +13,6 @@ export const PORTAL_PREFIX: Record<UserRole, string> = {
   SUPER_ADMIN: "/super-admin",
   ADMIN: "/admin",
   WAREHOUSE_MANAGER: "/warehouse",
-  WAREHOUSE_STAFF: "/warehouse",
   KITCHEN_MANAGER: "/kitchen",
   BRANCH_MANAGER: "/branch",
   BRANCH_STAFF: "/pos",
@@ -24,7 +22,6 @@ export const PORTAL_LABEL: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
   ADMIN: "Admin",
   WAREHOUSE_MANAGER: "Warehouse",
-  WAREHOUSE_STAFF: "Warehouse",
   KITCHEN_MANAGER: "Kitchen",
   BRANCH_MANAGER: "Branch",
   BRANCH_STAFF: "POS",
@@ -34,13 +31,13 @@ export const PORTAL_LABEL: Record<UserRole, string> = {
 export const BRANCH_PORTAL_ROLES = ["BRANCH_MANAGER"] as const;
 
 /**
- * Warehouse managers and warehouse staff share `/warehouse`. Staff provisioning
- * is gated by AuthAction (`staff:read` / `staff:create`), not by this list.
+ * The Warehouse portal is for managers alone. Warehouse staff are personnel
+ * records with no login — every warehouse operation belongs to the manager.
  */
-export const WAREHOUSE_PORTAL_ROLES = ["WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"] as const;
+export const WAREHOUSE_PORTAL_ROLES = ["WAREHOUSE_MANAGER"] as const;
 
 export function isWarehousePortalRole(role: UserRole | undefined): boolean {
-  return role === "WAREHOUSE_MANAGER" || role === "WAREHOUSE_STAFF";
+  return role === "WAREHOUSE_MANAGER";
 }
 
 export function portalPathForRole(role: UserRole): string {
@@ -48,10 +45,8 @@ export function portalPathForRole(role: UserRole): string {
 }
 
 /**
- * Note that WAREHOUSE_MANAGER/WAREHOUSE_STAFF share `/warehouse`, so this
- * resolves that path to whichever key `PORTAL_PREFIX` lists first. Callers
- * wanting the signed-in user's actual role should read it from the user, not
- * infer it from the URL.
+ * Callers wanting the signed-in user's actual role should read it from the
+ * user, not infer it from the URL.
  */
 export function roleForPortalPath(pathname: string): UserRole | null {
   const entry = (Object.entries(PORTAL_PREFIX) as [UserRole, string][]).find(
