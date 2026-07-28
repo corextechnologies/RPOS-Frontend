@@ -1,14 +1,14 @@
 "use client";
 
-import { UserRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { StaffAvatar } from "@/components/ui/staff-avatar";
 import type { KitchenStaff } from "@/lib/types/kitchen";
-import { formatDate, initials } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 interface KitchenStaffDetailDialogProps {
   staff: KitchenStaff | null;
@@ -38,21 +38,7 @@ export function KitchenStaffDetailDialog({
           <>
             <DialogHeader>
               <div className="flex items-center gap-3 text-left">
-                {staff.image_url ? (
-                  <img
-                    src={staff.image_url}
-                    alt=""
-                    className="size-12 shrink-0 rounded-full border border-line object-cover"
-                  />
-                ) : (
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-sm font-medium text-faint">
-                    {staff.full_name ? (
-                      initials(staff.full_name)
-                    ) : (
-                      <UserRound className="size-5" aria-hidden />
-                    )}
-                  </span>
-                )}
+                <StaffAvatar imageUrl={staff.image_url} name={staff.full_name} size="lg" />
                 <DialogTitle>{staff.full_name || staff.email}</DialogTitle>
               </div>
             </DialogHeader>

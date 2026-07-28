@@ -359,3 +359,26 @@ export function posErrorMessage(err: unknown): string {
       return err.message;
   }
 }
+
+/**
+ * Friendly copy for an image-upload failure. Shared by every upload surface
+ * (menu photo, logo, employee/kitchen-staff avatar) so the four call sites can't
+ * drift. Branches on `code`, never `message`; falls back to the server message
+ * (then a generic line) for anything unrecognised.
+ */
+export function imageUploadErrorMessage(err: unknown): string {
+  if (isApiError(err)) {
+    switch (err.code) {
+      case "invalid_image":
+        return "Please choose a valid image file.";
+      case "invalid_file_type":
+        return "Please upload a JPEG, PNG, WebP or SVG.";
+      case "file_too_large":
+        return "Image must be under 10 MB.";
+      case "storage_unavailable":
+        return "Couldn't upload, please try again.";
+    }
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return "Couldn't upload the image";
+}

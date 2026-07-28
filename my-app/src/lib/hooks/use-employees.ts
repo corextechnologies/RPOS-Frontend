@@ -9,6 +9,9 @@ export function useEmployees(page = 1) {
   return useQuery({
     queryKey: queryKeys.employees(page),
     queryFn: () => api.listEmployees({ page, page_size: 20 }),
+    // Employee avatars are signed R2 URLs that expire after ~15 min. Refetch
+    // under that window so a long-open list keeps working URLs.
+    refetchInterval: 10 * 60_000,
   });
 }
 

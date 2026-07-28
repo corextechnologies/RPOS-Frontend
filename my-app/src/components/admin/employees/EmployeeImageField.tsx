@@ -3,10 +3,11 @@
 import { useRef, useState } from "react";
 import { UserRound, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { imageUploadErrorMessage } from "@/lib/api/errors";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT_DEFAULT = "image/jpeg,image/png,image/webp";
 const ACCEPT_WITH_SVG = "image/jpeg,image/png,image/webp,image/svg+xml";
 
@@ -14,9 +15,10 @@ const ACCEPT_WITH_SVG = "image/jpeg,image/png,image/webp,image/svg+xml";
  * Avatar picker for the employee/staff create/edit forms. Uploads via the
  * supplied `upload` fn (defaults to `api.uploadEmployeeImage`) and hands the
  * returned URL back via `onChange` — the form only ever stores the URL string,
- * never the File, so a form can treat `image_url` like any other field. Mirrors
- * the menu-image uploader's 2 MB guardrail. Pass `allowSvg` for surfaces whose
- * upload endpoint accepts SVG (e.g. the kitchen staff-image route).
+ * never the File, so a form can treat `image_url` like any other field. The
+ * server resizes and converts to WebP, so the guardrail here is just the 10 MB
+ * ceiling. Pass `allowSvg` for surfaces whose upload endpoint accepts SVG (e.g.
+ * the kitchen staff-image route).
  */
 export function EmployeeImageField({
   value,
@@ -34,7 +36,7 @@ export function EmployeeImageField({
 
   async function handleFile(file: File) {
     if (file.size > MAX_BYTES) {
-      toast.error("Image must be under 2 MB");
+      toast.error("Image must be under 10 MB");
       return;
     }
     setUploading(true);
@@ -42,7 +44,7 @@ export function EmployeeImageField({
       const url = await upload(file);
       onChange(url);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't upload the image");
+      toast.error(imageUploadErrorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -96,7 +98,7 @@ export function EmployeeImageField({
           {uploading ? "Uploading…" : value ? "Change photo" : "Upload photo"}
         </Button>
         <p className="text-xs text-faint">
-          {allowSvg ? "JPEG, PNG, WebP, or SVG" : "JPEG, PNG, or WebP"} · up to 2 MB.
+          {allowSvg ? "JPEG, PNG, WebP, or SVG" : "JPEG, PNG, or WebP"} · up to 10 MB.
         </p>
       </div>
     </div>

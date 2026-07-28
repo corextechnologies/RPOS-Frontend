@@ -1,9 +1,10 @@
 "use client";
 
-import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2, UserRound } from "lucide-react";
+import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { StaffAvatar } from "@/components/ui/staff-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Employee } from "@/lib/types/admin";
-import { formatDate, formatRole, initials } from "@/lib/utils";
+import { formatDate, formatRole } from "@/lib/utils";
 
 interface EmployeeListProps {
   items?: Employee[];
@@ -127,21 +128,7 @@ export function EmployeeList({
               >
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    {employee.image_url ? (
-                      <img
-                        src={employee.image_url}
-                        alt=""
-                        className="size-9 shrink-0 rounded-full border border-line object-cover"
-                      />
-                    ) : (
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-medium text-faint">
-                        {employee.full_name ? (
-                          initials(employee.full_name)
-                        ) : (
-                          <UserRound className="size-4" aria-hidden />
-                        )}
-                      </span>
-                    )}
+                    <StaffAvatar imageUrl={employee.image_url} name={employee.full_name} />
                     <p className="font-medium text-content">{employee.full_name}</p>
                   </div>
                 </TableCell>

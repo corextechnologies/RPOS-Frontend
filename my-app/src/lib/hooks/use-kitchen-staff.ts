@@ -19,6 +19,9 @@ export function useKitchenStaff(page: number, enabled = true) {
     queryFn: () =>
       api.listKitchenUsers({ page, page_size: KITCHEN_STAFF_PAGE_SIZE }),
     enabled,
+    // Staff photos are signed R2 URLs that expire after ~15 min. Refetch under
+    // that window so a long-open roster keeps working URLs.
+    refetchInterval: 10 * 60_000,
     retry: (failureCount, error) =>
       !isMissingKitchenAssignment(error) && failureCount < 3,
   });

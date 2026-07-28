@@ -1,8 +1,9 @@
 "use client";
 
-import { MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { StaffAvatar } from "@/components/ui/staff-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { KitchenStaff } from "@/lib/types/kitchen";
-import { formatDate, initials } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 interface KitchenStaffTableProps {
   items?: KitchenStaff[];
@@ -115,21 +116,7 @@ export function KitchenStaffTable({
               >
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    {staff.image_url ? (
-                      <img
-                        src={staff.image_url}
-                        alt=""
-                        className="size-9 shrink-0 rounded-full border border-line object-cover"
-                      />
-                    ) : (
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-xs font-medium text-faint">
-                        {staff.full_name ? (
-                          initials(staff.full_name)
-                        ) : (
-                          <UserRound className="size-4" aria-hidden />
-                        )}
-                      </span>
-                    )}
+                    <StaffAvatar imageUrl={staff.image_url} name={staff.full_name} />
                     <p className="font-medium text-content">{staff.full_name || "-"}</p>
                   </div>
                 </TableCell>

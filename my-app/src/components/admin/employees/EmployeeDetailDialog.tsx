@@ -1,6 +1,5 @@
 "use client";
 
-import { UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -8,8 +7,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { StaffAvatar } from "@/components/ui/staff-avatar";
 import type { Employee } from "@/lib/types/admin";
-import { formatDate, formatRole, initials } from "@/lib/utils";
+import { formatDate, formatRole } from "@/lib/utils";
 
 interface EmployeeDetailDialogProps {
   employee: Employee | null;
@@ -46,21 +46,7 @@ export function EmployeeDetailDialog({
           <>
             <DialogHeader>
               <div className="flex items-center gap-3 text-left">
-                {employee.image_url ? (
-                  <img
-                    src={employee.image_url}
-                    alt=""
-                    className="size-12 shrink-0 rounded-full border border-line object-cover"
-                  />
-                ) : (
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full border border-line bg-surface-2 text-sm font-medium text-faint">
-                    {employee.full_name ? (
-                      initials(employee.full_name)
-                    ) : (
-                      <UserRound className="size-5" aria-hidden />
-                    )}
-                  </span>
-                )}
+                <StaffAvatar imageUrl={employee.image_url} name={employee.full_name} size="lg" />
                 <div className="space-y-1">
                   <DialogTitle>{employee.full_name}</DialogTitle>
                   <div className="flex flex-wrap items-center gap-2">

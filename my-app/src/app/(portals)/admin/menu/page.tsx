@@ -19,7 +19,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { posAdminApi } from "@/lib/api/pos-admin.api";
 import { usePublishedMenu, useSellableProducts } from "@/lib/hooks/use-pos-admin";
-import { posErrorMessage } from "@/lib/api/errors";
+import { imageUploadErrorMessage, posErrorMessage } from "@/lib/api/errors";
 import { minorToDecimalString } from "@/lib/money";
 import {
   publishDraft,
@@ -601,8 +601,8 @@ function ItemBuilder({
               const file = e.target.files?.[0];
               if (!file) return;
               e.target.value = "";
-              if (file.size > 2 * 1024 * 1024) {
-                toast.error("Image must be under 2 MB");
+              if (file.size > 10 * 1024 * 1024) {
+                toast.error("Image must be under 10 MB");
                 return;
               }
               setUploading(true);
@@ -610,7 +610,7 @@ function ItemBuilder({
                 const url = await posAdminApi.uploadMenuImage(file);
                 setImageUrl(url);
               } catch (err) {
-                toast.error(posErrorMessage(err));
+                toast.error(imageUploadErrorMessage(err));
               } finally {
                 setUploading(false);
               }
