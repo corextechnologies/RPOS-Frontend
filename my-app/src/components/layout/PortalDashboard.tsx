@@ -15,17 +15,9 @@ const PLACEHOLDER_COPY: Record<UserRole, { title: string; description: string }>
     title: "Warehouse dashboard",
     description: "Stock overview, intake, expiry alerts, and incoming release requests.",
   },
-  WAREHOUSE_STAFF: {
-    title: "Warehouse dashboard",
-    description: "Stock overview, intake, expiry alerts, and incoming release requests.",
-  },
   KITCHEN_MANAGER: {
     title: "Kitchen dashboard",
     description: "Production queue, waste summary, and stock requests from branches.",
-  },
-  SUB_CHEF: {
-    title: "Kitchen dashboard",
-    description: "Production queue and stock on hand. Logging waste is yours; the rest is read-only.",
   },
   BRANCH_MANAGER: {
     title: "Branch dashboard",

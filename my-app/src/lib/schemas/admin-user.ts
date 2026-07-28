@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { staffProfileDefaults, staffProfileFields } from "@/lib/schemas/staff";
 import type { AdminCreatableRole } from "@/lib/types/admin";
 
 export const adminCreatableRoles = [
@@ -9,10 +10,8 @@ export const adminCreatableRoles = [
 
 export const createAdminUserSchema = z
   .object({
-    full_name: z.string().min(2, "Name must be at least 2 characters"),
-    email: z.string().email("Enter a valid email"),
-    phone_number: z.string().optional(),
-    image_url: z.string().optional(),
+    // The seven shared fields, all required — the server 422s on a partial body.
+    ...staffProfileFields,
     role: z.enum(adminCreatableRoles),
     branch_id: z.string().optional(),
     kitchen_id: z.string().optional(),
@@ -45,10 +44,7 @@ export const createAdminUserSchema = z
 export type CreateAdminUserForm = z.infer<typeof createAdminUserSchema>;
 
 export const createAdminUserDefaults: CreateAdminUserForm = {
-  full_name: "",
-  email: "",
-  phone_number: "",
-  image_url: "",
+  ...staffProfileDefaults,
   role: "BRANCH_MANAGER",
   branch_id: "",
   kitchen_id: "",
@@ -59,8 +55,13 @@ export const updateAdminUserSchema = z
   .object({
     full_name: z.string().min(2, "Name must be at least 2 characters"),
     email: z.string().email("Enter a valid email"),
+    // Edit is partial on the wire, but the record should stay complete once
+    // created — so the same fields are still validated here.
     phone_number: z.string().optional(),
+    address: z.string().optional(),
     image_url: z.string().optional(),
+    cnic_front_url: z.string().optional(),
+    cnic_back_url: z.string().optional(),
     is_active: z.boolean(),
     role: z.enum(adminCreatableRoles),
     branch_id: z.string().optional(),

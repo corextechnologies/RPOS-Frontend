@@ -1,9 +1,9 @@
 "use client";
 
-import { MoreHorizontal, Pencil, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { StaffAvatar } from "@/components/ui/staff-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,14 +29,21 @@ interface StaffTableProps {
   isLoading: boolean;
   isError: boolean;
   onRetry?: () => void;
+  onRowClick?: (staff: WarehouseStaff) => void;
   onEdit?: (staff: WarehouseStaff) => void;
-  onRevoke?: (staff: WarehouseStaff) => void;
-  onRestore?: (staff: WarehouseStaff) => void;
   onDelete?: (staff: WarehouseStaff) => void;
 }
 
-export function StaffTable({ items, isLoading, isError, onRetry, onEdit, onRevoke, onRestore, onDelete }: StaffTableProps) {
-  const showActions = Boolean(onEdit || onRevoke || onRestore || onDelete);
+export function StaffTable({
+  items,
+  isLoading,
+  isError,
+  onRetry,
+  onRowClick,
+  onEdit,
+  onDelete,
+}: StaffTableProps) {
+  const showActions = Boolean(onEdit || onDelete);
 
   if (isLoading) {
     return (
@@ -66,7 +73,7 @@ export function StaffTable({ items, isLoading, isError, onRetry, onEdit, onRevok
         <CardContent className="p-0">
           <EmptyState
             title="No staff yet"
-            description="Staff you add will appear here, alongside anyone else assigned to your warehouse."
+            description="Staff you add to the warehouse roster appear here."
           />
         </CardContent>
       </Card>
@@ -80,29 +87,54 @@ export function StaffTable({ items, isLoading, isError, onRetry, onEdit, onRevok
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Role</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>Phone</TableHead>
               <TableHead>Added</TableHead>
               {showActions && <TableHead className="w-[72px]" />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((staff) => (
-              <TableRow key={staff.id}>
+              <TableRow
+                key={staff.id}
+                role={onRowClick ? "button" : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-label={onRowClick ? `View ${staff.full_name || staff.email}` : undefined}
+                className={onRowClick ? "cursor-pointer" : undefined}
+                onClick={onRowClick ? () => onRowClick(staff) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onRowClick(staff);
+                        }
+                      }
+                    : undefined
+                }
+              >
                 <TableCell>
-                  <p className="font-medium text-content">{staff.full_name || "-"}</p>
+                  <div className="flex items-center gap-3">
+                    <StaffAvatar imageUrl={staff.image_url} name={staff.full_name} />
+                    <p className="font-medium text-content">{staff.full_name || "-"}</p>
+                  </div>
                 </TableCell>
+                <TableCell className="text-muted">{staff.job_title || "-"}</TableCell>
                 <TableCell className="text-muted">{staff.email}</TableCell>
-                <TableCell>
-                  <Badge variant={staff.is_active ? "success" : "secondary"}>
-                    {staff.is_active ? "Active" : "Inactive"}
-                  </Badge>
+                <TableCell className="text-muted tabular-nums">
+                  {staff.phone_number || "-"}
                 </TableCell>
                 <TableCell className="text-muted">
                   {staff.created_at ? formatDate(staff.created_at) : "-"}
                 </TableCell>
                 {showActions && (
-                  <TableCell className="text-right">
+                  // Stop propagation so opening the menu doesn't also open the
+                  // detail dialog behind it.
+                  <TableCell
+                    className="text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" aria-label="Actions">
@@ -115,27 +147,14 @@ export function StaffTable({ items, isLoading, isError, onRetry, onEdit, onRevok
                             <Pencil className="mr-2 h-4 w-4" /> Edit
                           </DropdownMenuItem>
                         )}
-                        {onEdit && (onRevoke || onRestore) && <DropdownMenuSeparator />}
-                        {onRevoke && staff.is_active && (
-                          <DropdownMenuItem onClick={() => onRevoke(staff)}>
-                            <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
-                          </DropdownMenuItem>
-                        )}
-                        {onRestore && !staff.is_active && (
-                          <DropdownMenuItem onClick={() => onRestore(staff)}>
-                            <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
-                          </DropdownMenuItem>
-                        )}
+                        {onEdit && onDelete && <DropdownMenuSeparator />}
                         {onDelete && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-danger"
-                              onClick={() => onDelete(staff)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                          </>
+                          <DropdownMenuItem
+                            className="text-danger"
+                            onClick={() => onDelete(staff)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                          </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, queryKeys } from "@/lib/api";
+import { STAFF_STALE_TIME_MS } from "@/lib/types/staff";
 import type { CreateAdminUserInput, UpdateAdminUserInput } from "@/lib/types/admin";
 import { toast } from "sonner";
 
@@ -9,6 +10,13 @@ export function useEmployees(page = 1) {
   return useQuery({
     queryKey: queryKeys.employees(page),
     queryFn: () => api.listEmployees({ page, page_size: 20 }),
+    // Avatars and CNIC scans are signed URLs that expire after ~15 min, so
+    // cached rows go stale in a way a normal list never does. Refetch inside
+    // that window, and again whenever the tab regains focus — coming back after
+    // lunch is exactly the case that would otherwise render dead links.
+    staleTime: STAFF_STALE_TIME_MS,
+    refetchInterval: STAFF_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
   });
 }
 

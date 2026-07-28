@@ -28,6 +28,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
+import { StaffDocumentField } from "@/components/staff/StaffDocumentField";
+import { api } from "@/lib/api";
 import { useEmployees, useUpdateEmployee } from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import {
@@ -67,7 +69,10 @@ export default function EditEmployeePage() {
       full_name: "",
       email: "",
       phone_number: "",
+      address: "",
       image_url: "",
+      cnic_front_url: "",
+      cnic_back_url: "",
       is_active: true,
       role,
       branch_id: "",
@@ -82,7 +87,10 @@ export default function EditEmployeePage() {
       full_name: employee.full_name,
       email: employee.email,
       phone_number: employee.phone_number ?? "",
+      address: employee.address ?? "",
       image_url: employee.image_url ?? "",
+      cnic_front_url: employee.cnic_front_url ?? "",
+      cnic_back_url: employee.cnic_back_url ?? "",
       is_active: employee.is_active,
       role: employee.role as AdminCreatableRole,
       branch_id: employee.branch_id ?? "",
@@ -117,9 +125,12 @@ export default function EditEmployeePage() {
     const body: UpdateAdminUserInput = {
       full_name: values.full_name.trim(),
       email: values.email.trim(),
-      // Sent even when blank so a manager can clear a phone/photo.
+      // Sent even when blank so a manager can clear a field.
       phone_number: values.phone_number?.trim() ?? "",
+      address: values.address?.trim() ?? "",
       image_url: values.image_url ?? "",
+      cnic_front_url: values.cnic_front_url ?? "",
+      cnic_back_url: values.cnic_back_url ?? "",
       is_active: values.is_active,
     };
     if (values.role === "BRANCH_MANAGER") body.branch_id = values.branch_id;
@@ -247,7 +258,7 @@ export default function EditEmployeePage() {
                 name="phone_number"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone (optional)</FormLabel>
+                    <FormLabel>Phone number</FormLabel>
                     <FormControl>
                       <Input
                         type="tel"
@@ -263,14 +274,69 @@ export default function EditEmployeePage() {
 
               <FormField
                 control={form.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="12 Mall Road, Lahore"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="image_url"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Photo (optional)</FormLabel>
+                    <FormLabel>Photo</FormLabel>
                     <FormControl>
                       <EmployeeImageField
                         value={field.value ?? ""}
                         onChange={field.onChange}
+                        upload={(file) => api.uploadStaffDocument(file, "personal")}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="cnic_front_url"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CNIC — front</FormLabel>
+                    <FormControl>
+                      <StaffDocumentField
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        label="CNIC front"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="cnic_back_url"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CNIC — back</FormLabel>
+                    <FormControl>
+                      <StaffDocumentField
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        label="CNIC back"
                       />
                     </FormControl>
                     <FormMessage />

@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus } from "lucide-react";
-import { AddSubChefDialog } from "@/components/kitchen/staff/AddSubChefDialog";
-import { SubChefTable } from "@/components/kitchen/staff/SubChefTable";
+import { AddKitchenStaffDialog } from "@/components/kitchen/staff/AddKitchenStaffDialog";
+import { KitchenStaffDetailDialog } from "@/components/kitchen/staff/KitchenStaffDetailDialog";
+import { KitchenStaffTable } from "@/components/kitchen/staff/KitchenStaffTable";
+import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
+import { StaffDocumentField } from "@/components/staff/StaffDocumentField";
 import { KitchenNoAccess } from "@/components/kitchen/KitchenNoAccess";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
 import { Button } from "@/components/ui/button";
@@ -26,8 +29,7 @@ import {
   useKitchenStaff,
 } from "@/lib/hooks/use-kitchen-staff";
 import type { CreateKitchenStaffForm } from "@/lib/schemas/kitchen-staff";
-import type { KitchenStaff } from "@/lib/types/kitchen";
-import type { UpdateKitchenStaffInput } from "@/lib/types/kitchen";
+import type { KitchenStaff, UpdateKitchenStaffInput } from "@/lib/types/kitchen";
 import { isMissingKitchenAssignment } from "@/lib/types/kitchen";
 import { toast } from "sonner";
 
@@ -40,30 +42,13 @@ export default function KitchenStaffPage() {
   const staff = useKitchenStaff(page, allowed);
   const createStaff = useCreateKitchenStaff();
   const [editing, setEditing] = useState<KitchenStaff | null>(null);
-  const [confirm, setConfirm] = useState<{
-    type: "revoke" | "delete";
-    staff: KitchenStaff;
-  } | null>(null);
+  const [detail, setDetail] = useState<KitchenStaff | null>(null);
+  const [confirm, setConfirm] = useState<{ staff: KitchenStaff } | null>(null);
 
   const unassigned = isMissingKitchenAssignment(staff.error);
   const total = staff.data?.total ?? 0;
   const pageSize = staff.data?.page_size ?? 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-  const revokeMut = useMutation({
-    mutationFn: (id: string) => api.revokeKitchenUser(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["kitchen-staff"] });
-      setConfirm(null);
-    },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't revoke access"),
-  });
-
-  const restoreMut = useMutation({
-    mutationFn: (id: string) => api.restoreKitchenUser(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["kitchen-staff"] }),
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't restore access"),
-  });
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.deleteKitchenUser(id),
@@ -81,24 +66,28 @@ export default function KitchenStaffPage() {
       qc.invalidateQueries({ queryKey: ["kitchen-staff"] });
       setEditing(null);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't update sub-chef"),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn't update staff"),
   });
 
   const handleAdd = async (values: CreateKitchenStaffForm) => {
+    // Every field is required by the form, so send them all — the server 422s
+    // on a partial create body.
     await createStaff.mutateAsync({
       email: values.email,
-      full_name: values.full_name || undefined,
+      full_name: values.full_name,
+      job_title: values.job_title,
+      phone_number: values.phone_number,
+      address: values.address,
+      image_url: values.image_url,
+      cnic_front_url: values.cnic_front_url,
+      cnic_back_url: values.cnic_back_url,
     });
     setAdding(false);
   };
 
   const handleConfirm = async () => {
     if (!confirm) return;
-    if (confirm.type === "revoke") {
-      await revokeMut.mutateAsync(confirm.staff.id);
-    } else {
-      await deleteMut.mutateAsync(confirm.staff.id);
-    }
+    await deleteMut.mutateAsync(confirm.staff.id);
   };
 
   return (
@@ -106,16 +95,16 @@ export default function KitchenStaffPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-            Sub-chefs
+            Kitchen staff
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Everyone in your kitchen.
+            Everyone on your kitchen roster.
           </p>
         </div>
         {allowed && !unassigned && can("kitchen-staff:create") && (
           <Button type="button" onClick={() => setAdding(true)}>
             <Plus className="h-4 w-4" />
-            Add sub-chef
+            Add staff member
           </Button>
         )}
       </div>
@@ -126,15 +115,14 @@ export default function KitchenStaffPage() {
         <KitchenUnassigned />
       ) : (
         <>
-          <SubChefTable
+          <KitchenStaffTable
             items={staff.data?.items}
             isLoading={staff.isLoading}
             isError={staff.isError}
             onRetry={() => staff.refetch()}
+            onRowClick={(s) => setDetail(s)}
             onEdit={(s) => setEditing(s)}
-            onRevoke={(s) => setConfirm({ type: "revoke", staff: s })}
-            onRestore={(s) => restoreMut.mutate(s.id)}
-            onDelete={(s) => setConfirm({ type: "delete", staff: s })}
+            onDelete={(s) => setConfirm({ staff: s })}
           />
 
           {total > pageSize && (
@@ -163,11 +151,17 @@ export default function KitchenStaffPage() {
         </>
       )}
 
-      <AddSubChefDialog
+      <AddKitchenStaffDialog
         open={adding}
         onOpenChange={setAdding}
         onSubmit={handleAdd}
         isSubmitting={createStaff.isPending}
+      />
+
+      <KitchenStaffDetailDialog
+        staff={detail}
+        open={detail !== null}
+        onOpenChange={(o) => { if (!o) setDetail(null); }}
       />
 
       <EditKitchenStaffDialog
@@ -180,17 +174,15 @@ export default function KitchenStaffPage() {
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(o) => { if (!o) setConfirm(null); }}
-        title={confirm?.type === "delete" ? "Delete sub-chef?" : "Revoke access?"}
+        title="Delete staff member?"
         description={
-          confirm?.type === "delete"
-            ? `Permanently delete "${confirm.staff.full_name || confirm.staff.email}"? This cannot be undone.`
-            : confirm
-              ? `Revoke login access for "${confirm.staff.full_name || confirm.staff.email}"? They will not be able to sign in until restored.`
-              : ""
+          confirm
+            ? `Permanently delete “${confirm.staff.full_name || confirm.staff.email}”? This erases the record and cannot be undone.`
+            : ""
         }
-        confirmLabel={confirm?.type === "delete" ? "Delete" : "Revoke access"}
+        confirmLabel="Delete"
         destructive
-        loading={revokeMut.isPending || deleteMut.isPending}
+        loading={deleteMut.isPending}
         onConfirm={handleConfirm}
       />
     </div>
@@ -210,6 +202,12 @@ function EditKitchenStaffDialog({
 }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [cnicFront, setCnicFront] = useState("");
+  const [cnicBack, setCnicBack] = useState("");
 
   const staffId = staff?.id;
   const [prevId, setPrevId] = useState<string | undefined>();
@@ -218,6 +216,12 @@ function EditKitchenStaffDialog({
     if (staff) {
       setEmail(staff.email);
       setName(staff.full_name ?? "");
+      setJobTitle(staff.job_title ?? "");
+      setPhone(staff.phone_number ?? "");
+      setAddress(staff.address ?? "");
+      setImageUrl(staff.image_url ?? "");
+      setCnicFront(staff.cnic_front_url ?? "");
+      setCnicBack(staff.cnic_back_url ?? "");
     }
   }
 
@@ -229,7 +233,7 @@ function EditKitchenStaffDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="size-4 text-brand" aria-hidden />
-            Edit sub-chef
+            Edit staff member
           </DialogTitle>
           <DialogDescription>
             Update details for {staff?.full_name || staff?.email || "this person"}.
@@ -238,22 +242,79 @@ function EditKitchenStaffDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
+            <Label>Photo</Label>
+            <EmployeeImageField
+              value={imageUrl}
+              onChange={setImageUrl}
+              upload={api.uploadKitchenStaffImage}
+              allowSvg
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-kitchen-staff-name">Full name</Label>
+            <Input
+              id="edit-kitchen-staff-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-kitchen-staff-role">Role</Label>
+            <Input
+              id="edit-kitchen-staff-role"
+              placeholder="Head Chef"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="edit-kitchen-staff-email">Email</Label>
             <Input
               id="edit-kitchen-staff-email"
               type="email"
-              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-kitchen-staff-name">Name</Label>
+            <Label htmlFor="edit-kitchen-staff-phone">Phone number</Label>
             <Input
-              id="edit-kitchen-staff-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              id="edit-kitchen-staff-phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-kitchen-staff-address">Address</Label>
+            <Input
+              id="edit-kitchen-staff-address"
+              placeholder="12 Mall Road, Lahore"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — front</Label>
+            <StaffDocumentField
+              value={cnicFront}
+              onChange={setCnicFront}
+              label="CNIC front"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — back</Label>
+            <StaffDocumentField
+              value={cnicBack}
+              onChange={setCnicBack}
+              label="CNIC back"
             />
           </div>
         </div>
@@ -271,6 +332,15 @@ function EditKitchenStaffDialog({
               if (trimmedEmail !== staff.email) body.email = trimmedEmail;
               const trimmedName = name.trim();
               if (trimmedName !== (staff.full_name ?? "")) body.full_name = trimmedName;
+              const trimmedRole = jobTitle.trim();
+              if (trimmedRole !== (staff.job_title ?? "")) body.job_title = trimmedRole;
+              const trimmedPhone = phone.trim();
+              if (trimmedPhone !== (staff.phone_number ?? "")) body.phone_number = trimmedPhone;
+              const trimmedAddress = address.trim();
+              if (trimmedAddress !== (staff.address ?? "")) body.address = trimmedAddress;
+              if (imageUrl !== (staff.image_url ?? "")) body.image_url = imageUrl;
+              if (cnicFront !== (staff.cnic_front_url ?? "")) body.cnic_front_url = cnicFront;
+              if (cnicBack !== (staff.cnic_back_url ?? "")) body.cnic_back_url = cnicBack;
               onSave(staff.id, body);
             }}
           >

@@ -1,35 +1,35 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { UserRound, X } from "lucide-react";
+import { IdCard, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { imageUploadErrorMessage } from "@/lib/api/errors";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const ACCEPT_DEFAULT = "image/jpeg,image/png,image/webp";
-const ACCEPT_WITH_SVG = "image/jpeg,image/png,image/webp,image/svg+xml";
+const ACCEPT = "image/jpeg,image/png,image/webp";
 
 /**
- * Avatar picker for the employee/staff create/edit forms. Uploads via the
- * supplied `upload` fn (defaults to `api.uploadEmployeeImage`) and hands the
- * returned URL back via `onChange` — the form only ever stores the URL string,
- * never the File, so a form can treat `image_url` like any other field. The
- * server resizes and converts to WebP, so the guardrail here is just the 10 MB
- * ceiling. Pass `allowSvg` for surfaces whose upload endpoint accepts SVG (e.g.
- * the kitchen staff-image route).
+ * CNIC scan picker — the ID-card sibling of `EmployeeImageField`.
+ *
+ * Kept separate rather than parameterising the avatar field because the two
+ * differ in more than a label: an ID card is uploaded with `kind: "cnic"` (the
+ * server keeps it at 1600px so the number stays readable), and it previews as a
+ * wide card rather than a round avatar. The form only ever stores the returned
+ * URL string, never the File.
+ *
+ * That URL is signed and expires (~15 min). It is fine to render here — it was
+ * just minted — but never persist it; re-fetch the record instead.
  */
-export function EmployeeImageField({
+export function StaffDocumentField({
   value,
   onChange,
-  upload = api.uploadEmployeeImage,
-  allowSvg = false,
+  label,
 }: {
   value: string;
   onChange: (url: string) => void;
-  upload?: (file: File) => Promise<string>;
-  allowSvg?: boolean;
+  label: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -41,7 +41,7 @@ export function EmployeeImageField({
     }
     setUploading(true);
     try {
-      const url = await upload(file);
+      const url = await api.uploadStaffDocument(file, "cnic");
       onChange(url);
     } catch (err) {
       toast.error(imageUploadErrorMessage(err));
@@ -56,12 +56,12 @@ export function EmployeeImageField({
         {value ? (
           <img
             src={value}
-            alt="Employee avatar"
-            className="size-16 rounded-full border border-line object-cover"
+            alt={label}
+            className="h-16 w-28 rounded-lg border border-line object-cover"
           />
         ) : (
-          <div className="flex size-16 items-center justify-center rounded-full border border-line bg-surface-2 text-faint">
-            <UserRound className="size-6" aria-hidden />
+          <div className="flex h-16 w-28 items-center justify-center rounded-lg border border-dashed border-line bg-surface-2 text-faint">
+            <IdCard className="size-6" aria-hidden />
           </div>
         )}
         {value && (
@@ -69,7 +69,7 @@ export function EmployeeImageField({
             type="button"
             onClick={() => onChange("")}
             className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-danger text-white shadow-soft"
-            aria-label="Remove image"
+            aria-label={`Remove ${label}`}
           >
             <X className="size-3" />
           </button>
@@ -80,7 +80,7 @@ export function EmployeeImageField({
         <input
           ref={inputRef}
           type="file"
-          accept={allowSvg ? ACCEPT_WITH_SVG : ACCEPT_DEFAULT}
+          accept={ACCEPT}
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -95,11 +95,9 @@ export function EmployeeImageField({
           disabled={uploading}
           onClick={() => inputRef.current?.click()}
         >
-          {uploading ? "Uploading…" : value ? "Change photo" : "Upload photo"}
+          {uploading ? "Uploading…" : value ? "Change scan" : "Upload scan"}
         </Button>
-        <p className="text-xs text-faint">
-          {allowSvg ? "JPEG, PNG, WebP, or SVG" : "JPEG, PNG, or WebP"} · up to 10 MB.
-        </p>
+        <p className="text-xs text-faint">JPEG, PNG, or WebP · up to 10 MB.</p>
       </div>
     </div>
   );

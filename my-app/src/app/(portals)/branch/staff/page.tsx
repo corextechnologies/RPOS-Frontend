@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, Pencil, Plus, ShieldCheck, ShieldOff, Trash2, TriangleAlert, UserRound } from "lucide-react";
+import { Pencil, Plus, UserRound } from "lucide-react";
 import { api } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
@@ -18,23 +18,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { PageState } from "@/components/ui/page-state";
+import { BranchStaffTable } from "@/components/branch/staff/BranchStaffTable";
+import { BranchStaffDetailDialog } from "@/components/branch/staff/BranchStaffDetailDialog";
 import { CredentialsDialog } from "@/components/ui/credentials-dialog";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
+import { StaffDocumentField } from "@/components/staff/StaffDocumentField";
+import { StaffFormFields } from "@/components/staff/StaffFormFields";
+import { STAFF_STALE_TIME_MS } from "@/lib/types/staff";
+import {
+  createBranchStaffDefaults,
+  createBranchStaffSchema,
+  type CreateBranchStaffForm,
+} from "@/lib/schemas/branch-staff";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { BranchPosition } from "@/lib/types/super-admin";
@@ -71,6 +74,7 @@ export default function BranchStaffPage() {
   const [open, setOpen] = useState(false);
   const [created, setCreated] = useState<CreateBranchStaffResult | null>(null);
   const [editing, setEditing] = useState<BranchStaff | null>(null);
+  const [detail, setDetail] = useState<BranchStaff | null>(null);
   const [confirm, setConfirm] = useState<{
     type: "revoke" | "delete";
     staff: BranchStaff;
@@ -79,6 +83,12 @@ export default function BranchStaffPage() {
   const staff = useQuery({
     queryKey: ["branch-staff"],
     queryFn: () => api.listBranchStaff(),
+    // Photos and CNIC scans are signed URLs that expire after ~15 min, so
+    // cached rows go stale in a way a normal list never does. Refetch inside
+    // that window, and again on tab focus.
+    staleTime: STAFF_STALE_TIME_MS,
+    refetchInterval: STAFF_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
   });
 
   const revokeMut = useMutation({
@@ -152,83 +162,24 @@ export default function BranchStaffPage() {
         emptyDescription="Add someone, then they can unlock a till with their PIN."
       >
         {(rows) => (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Position</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[72px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((person) => (
-                    <TableRow key={person.id}>
-                      <TableCell className="text-content">
-                        {person.full_name || <span className="text-faint">—</span>}
-                      </TableCell>
-                      <TableCell className="text-muted">{person.email}</TableCell>
-                      <TableCell>
-                        {person.position ? (
-                          <Badge variant="secondary">
-                            {person.position.toLowerCase().replace(/_/g, " ")}
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="gap-1">
-                            <TriangleAlert className="size-3" aria-hidden />
-                            none — can&apos;t use a till
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={person.is_active ? "secondary" : "outline"}>
-                          {person.is_active ? "active" : "revoked"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" aria-label="Actions">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setEditing(person)}>
-                              <Pencil className="mr-2 h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {person.is_active ? (
-                              <DropdownMenuItem onClick={() => setConfirm({ type: "revoke", staff: person })}>
-                                <ShieldOff className="mr-2 h-4 w-4" /> Revoke access
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => restoreMut.mutate(person.id)}>
-                                <ShieldCheck className="mr-2 h-4 w-4" /> Restore access
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-danger"
-                              onClick={() => setConfirm({ type: "delete", staff: person })}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <BranchStaffTable
+            items={rows}
+            onRowClick={(person) => setDetail(person)}
+            onEdit={(person) => setEditing(person)}
+            onRevoke={(person) => setConfirm({ type: "revoke", staff: person })}
+            onRestore={(person) => restoreMut.mutate(person.id)}
+            onDelete={(person) => setConfirm({ type: "delete", staff: person })}
+          />
         )}
       </PageState>
 
       <AddStaffDialog open={open} onOpenChange={setOpen} onCreated={setCreated} />
+
+      <BranchStaffDetailDialog
+        staff={detail}
+        open={detail !== null}
+        onOpenChange={(o) => { if (!o) setDetail(null); }}
+      />
 
       <EditBranchStaffDialog
         staff={editing}
@@ -280,9 +231,14 @@ function AddStaffDialog({
   onCreated: (result: CreateBranchStaffResult) => void;
 }) {
   const qc = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [position, setPosition] = useState<BranchPosition>("CASHIER");
+  const form = useForm<CreateBranchStaffForm>({
+    resolver: zodResolver(createBranchStaffSchema),
+    defaultValues: createBranchStaffDefaults,
+  });
+
+  useEffect(() => {
+    if (open) form.reset(createBranchStaffDefaults);
+  }, [open, form]);
 
   const create = useMutation({
     mutationFn: (input: CreateBranchStaffInput) => api.createBranchStaff(input),
@@ -290,19 +246,16 @@ function AddStaffDialog({
       qc.invalidateQueries({ queryKey: ["branch-staff"] });
       onCreated(result);
       onOpenChange(false);
-      setEmail("");
-      setName("");
-      setPosition("CASHIER");
     },
     onError: (err) =>
       toast.error(err instanceof Error ? err.message : "Couldn't add this person"),
   });
 
-  const valid = /\S+@\S+\.\S+/.test(email);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      {/* Eight fields including three uploads — scrollable so the footer stays
+          reachable on a laptop screen. */}
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserRound className="size-4 text-brand" aria-hidden />
@@ -311,63 +264,76 @@ function AddStaffDialog({
           <DialogDescription>They&apos;ll be added to this branch.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="staff-email">Email</Label>
-            <Input
-              id="staff-email"
-              type="email"
-              autoFocus
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="staff-name">Name</Label>
-            <Input id="staff-name" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Position</Label>
-            <div className="space-y-2">
-              {POSITIONS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setPosition(p.value)}
-                  className={cn(
-                    "w-full rounded-xl border p-3 text-left transition",
-                    position === p.value
-                      ? "border-brand bg-brand/10"
-                      : "border-line bg-surface hover:border-brand/50",
-                  )}
-                >
-                  <span className="text-sm font-medium text-content">{p.label}</span>
-                  <span className="mt-0.5 block text-xs text-faint">{p.hint}</span>
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-faint">
-              Decides what they can do on a till. A curbside tablet has no drawer, so it refuses
-              cash whatever the position.
-            </p>
-          </div>
-        </div>
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!valid || create.isPending}
-            onClick={() =>
-              create.mutate({ email: email.trim(), full_name: name.trim() || undefined, position })
-            }
+        <Form {...form}>
+          <form
+            className="space-y-5"
+            onSubmit={form.handleSubmit((values) =>
+              // Every field is required by the form and the server (422 on a
+              // partial body), so send them all.
+              create.mutate({
+                email: values.email.trim(),
+                full_name: values.full_name.trim(),
+                phone_number: values.phone_number.trim(),
+                address: values.address.trim(),
+                image_url: values.image_url,
+                cnic_front_url: values.cnic_front_url,
+                cnic_back_url: values.cnic_back_url,
+                position: values.position,
+              }),
+            )}
           >
-            Add
-          </Button>
-        </DialogFooter>
+            <StaffFormFields
+              control={form.control}
+              namePlaceholder="Sara Khan"
+              emailPlaceholder="sara@restaurant.com"
+              roleField={
+                <FormField
+                  control={form.control}
+                  name="position"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Position</FormLabel>
+                      {/* A fixed picker, never free text — the till derives its
+                          capability list from this value. */}
+                      <div className="space-y-2">
+                        {POSITIONS.map((p) => (
+                          <button
+                            key={p.value}
+                            type="button"
+                            onClick={() => field.onChange(p.value)}
+                            className={cn(
+                              "w-full rounded-xl border p-3 text-left transition",
+                              field.value === p.value
+                                ? "border-brand bg-brand/10"
+                                : "border-line bg-surface hover:border-brand/50",
+                            )}
+                          >
+                            <span className="text-sm font-medium text-content">{p.label}</span>
+                            <span className="mt-0.5 block text-xs text-faint">{p.hint}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-faint">
+                        Decides what they can do on a till. A curbside tablet has no drawer, so
+                        it refuses cash whatever the position.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              }
+            />
+
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={create.isPending}>
+                {create.isPending ? "Adding…" : "Add"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   );
@@ -387,6 +353,11 @@ function EditBranchStaffDialog({
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [position, setPosition] = useState<BranchPosition>("CASHIER");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [cnicFront, setCnicFront] = useState("");
+  const [cnicBack, setCnicBack] = useState("");
 
   const staffId = staff?.id;
   const [prevId, setPrevId] = useState<string | undefined>();
@@ -396,6 +367,11 @@ function EditBranchStaffDialog({
       setEmail(staff.email);
       setName(staff.full_name ?? "");
       setPosition(staff.position ?? "CASHIER");
+      setPhone(staff.phone_number ?? "");
+      setAddress(staff.address ?? "");
+      setImageUrl(staff.image_url ?? "");
+      setCnicFront(staff.cnic_front_url ?? "");
+      setCnicBack(staff.cnic_back_url ?? "");
     }
   }
 
@@ -403,7 +379,7 @@ function EditBranchStaffDialog({
 
   return (
     <Dialog open={staff !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="size-4 text-brand" aria-hidden />
@@ -416,22 +392,52 @@ function EditBranchStaffDialog({
 
         <div className="space-y-4">
           <div className="space-y-2">
+            <Label>Photo</Label>
+            <EmployeeImageField
+              value={imageUrl}
+              onChange={setImageUrl}
+              upload={(file) => api.uploadStaffDocument(file, "personal")}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-staff-name">Full name</Label>
+            <Input
+              id="edit-staff-name"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="edit-staff-email">Email</Label>
             <Input
               id="edit-staff-email"
               type="email"
-              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="edit-staff-name">Name</Label>
+            <Label htmlFor="edit-staff-phone">Phone number</Label>
             <Input
-              id="edit-staff-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              id="edit-staff-phone"
+              type="tel"
+              placeholder="+92 300 1234567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="edit-staff-address">Address</Label>
+            <Input
+              id="edit-staff-address"
+              placeholder="12 Mall Road, Lahore"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
             />
           </div>
 
@@ -456,6 +462,24 @@ function EditBranchStaffDialog({
               ))}
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — front</Label>
+            <StaffDocumentField
+              value={cnicFront}
+              onChange={setCnicFront}
+              label="CNIC front"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>CNIC — back</Label>
+            <StaffDocumentField
+              value={cnicBack}
+              onChange={setCnicBack}
+              label="CNIC back"
+            />
+          </div>
         </div>
 
         <DialogFooter className="gap-2">
@@ -472,6 +496,13 @@ function EditBranchStaffDialog({
               const trimmedName = name.trim();
               if (trimmedName !== (staff.full_name ?? "")) body.full_name = trimmedName;
               if (position !== staff.position) body.position = position;
+              const trimmedPhone = phone.trim();
+              if (trimmedPhone !== (staff.phone_number ?? "")) body.phone_number = trimmedPhone;
+              const trimmedAddress = address.trim();
+              if (trimmedAddress !== (staff.address ?? "")) body.address = trimmedAddress;
+              if (imageUrl !== (staff.image_url ?? "")) body.image_url = imageUrl;
+              if (cnicFront !== (staff.cnic_front_url ?? "")) body.cnic_front_url = cnicFront;
+              if (cnicBack !== (staff.cnic_back_url ?? "")) body.cnic_back_url = cnicBack;
               onSave(staff.id, body);
             }}
           >

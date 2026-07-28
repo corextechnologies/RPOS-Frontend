@@ -27,6 +27,7 @@ import type {
   UpdateWasteEventInput,
 } from "@/lib/types/waste";
 import { request, requestEnvelope } from "./client";
+import { staffProfileBody } from "./staff-body";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
 /** Backend ids are numeric; normalize a waste record to the app's string ids. */
@@ -82,6 +83,13 @@ function normalizeStaff(staff: WarehouseStaff): WarehouseStaff {
     ...staff,
     id: String(staff.id),
     warehouse_id: String(staff.warehouse_id),
+    full_name: staff.full_name ?? null,
+    job_title: staff.job_title ?? null,
+    phone_number: staff.phone_number ?? null,
+    address: staff.address ?? null,
+    image_url: staff.image_url ?? null,
+    cnic_front_url: staff.cnic_front_url ?? null,
+    cnic_back_url: staff.cnic_back_url ?? null,
   };
 }
 
@@ -347,8 +355,9 @@ export const warehouseApi = {
     const data = await request<CreateWarehouseStaffResult>("/warehouse/users", {
       method: "POST",
       body: JSON.stringify({
+        ...staffProfileBody(body),
         email: body.email.trim(),
-        full_name: optionalText(body.full_name),
+        job_title: body.job_title?.trim() ?? "",
       }),
     });
     return {
@@ -358,15 +367,8 @@ export const warehouseApi = {
     };
   },
 
-  async revokeWarehouseUser(id: string): Promise<WarehouseStaff> {
-    const data = await request<WarehouseStaff>(`/warehouse/users/${id}/revoke`, { method: "POST" });
-    return normalizeStaff(data);
-  },
-
-  async restoreWarehouseUser(id: string): Promise<WarehouseStaff> {
-    const data = await request<WarehouseStaff>(`/warehouse/users/${id}/restore`, { method: "POST" });
-    return normalizeStaff(data);
-  },
+  // No revoke/restore: warehouse staff cannot sign in, so there is no access to
+  // revoke — those routes 404.
 
   async deleteWarehouseUser(id: string): Promise<void> {
     await request<{ detail: string }>(`/warehouse/users/${id}`, { method: "DELETE" });

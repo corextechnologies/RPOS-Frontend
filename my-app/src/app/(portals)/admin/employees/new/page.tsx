@@ -17,7 +17,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -25,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
+import { StaffFormFields } from "@/components/staff/StaffFormFields";
 import { useCreateUser } from "@/lib/hooks/use-employees";
 import { useBranches, useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import {
@@ -102,13 +101,18 @@ export default function NewEmployeePage() {
   const onSubmit = async (values: CreateAdminUserForm) => {
     setErrorMessage(undefined);
 
+    // All eight fields are required by the form and by the server (422 on a
+    // partial body), so send them all rather than conditionally.
     const body: CreateAdminUserInput = {
       full_name: values.full_name.trim(),
       email: values.email.trim(),
+      phone_number: values.phone_number.trim(),
+      address: values.address.trim(),
+      image_url: values.image_url,
+      cnic_front_url: values.cnic_front_url,
+      cnic_back_url: values.cnic_back_url,
       role: values.role,
     };
-    if (values.phone_number?.trim()) body.phone_number = values.phone_number.trim();
-    if (values.image_url) body.image_url = values.image_url;
     if (values.role === "BRANCH_MANAGER") body.branch_id = values.branch_id;
     if (values.role === "KITCHEN_MANAGER") body.kitchen_id = values.kitchen_id;
     if (values.role === "WAREHOUSE_MANAGER") body.warehouse_id = values.warehouse_id;
@@ -171,70 +175,12 @@ export default function NewEmployeePage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-              <FormField
+              <StaffFormFields
                 control={form.control}
-                name="full_name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Full name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Sam Warehouse" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email (login)</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder="manager@restaurant.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="phone_number"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phone (optional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="tel"
-                        placeholder="+92 300 1234567"
-                        {...field}
-                        value={field.value ?? ""}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="image_url"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Photo (optional)</FormLabel>
-                    <FormControl>
-                      <EmployeeImageField
-                        value={field.value ?? ""}
-                        onChange={field.onChange}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
+                namePlaceholder="Sam Warehouse"
+                emailPlaceholder="manager@restaurant.com"
+                roleField={
+                  <>
               <FormField
                 control={form.control}
                 name="role"
@@ -293,6 +239,9 @@ export default function NewEmployeePage() {
                     <FormMessage />
                   </FormItem>
                 )}
+              />
+                  </>
+                }
               />
 
               {errorMessage && <p className="text-sm text-danger">{errorMessage}</p>}

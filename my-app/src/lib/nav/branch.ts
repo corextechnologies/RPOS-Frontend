@@ -17,7 +17,7 @@ import type { NavSection } from "./types";
 
 /**
  * One nav for both BRANCH_MANAGER and BRANCH_STAFF — `visibleNavItems` narrows
- * it by action, exactly as the Kitchen portal does for SUB_CHEF. A staff member
+ * it by action. A staff member
  * simply never sees Waste, Sub-kitchen, Requests or Planning.
  */
 export const BRANCH_NAV: NavSection[] = [

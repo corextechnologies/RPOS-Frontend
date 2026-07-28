@@ -65,8 +65,7 @@ export type AuthAction =
   | "kitchen-branch-requests:read"
   | "kitchen-requests:update"
   // Daily production targets — set by Admin, read + progressed by the Kitchen
-  // manager (acknowledge/complete). Manager-only: the endpoints require
-  // KITCHEN_MANAGER, so a sub-chef never sees these.
+  // manager (acknowledge/complete). The endpoints require KITCHEN_MANAGER.
   | "kitchen-production-targets:read"
   | "kitchen-production-targets:update"
   // Branch (Phase 5). Namespaced away from Kitchen/Warehouse for the same
@@ -153,21 +152,6 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     // Same operation name as Admin's, scoped by this role's own transition map.
     "requests:update",
   ],
-  /**
-   * Same warehouse operations as the manager, minus staff provisioning.
-   * `POST /warehouse/users` answers 403 for this role; nav hides Staff via
-   * `staff:read`, and the staff page also gates on that action.
-   */
-  WAREHOUSE_STAFF: [
-    "inventory:read",
-    "stock:receive",
-    "stock:adjust",
-    "stock:waste",
-    "po:read",
-    "po:create",
-    "kitchen-requests:read",
-    "requests:update",
-  ],
   KITCHEN_MANAGER: [
     "kitchen-inventory:read",
     "kitchen-labels:read",
@@ -182,21 +166,6 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "kitchen-requests:update",
     "kitchen-production-targets:read",
     "kitchen-production-targets:update",
-  ],
-  /**
-   * Read-only, plus logging waste. No approvals, transitions, stock requests,
-   * counts, or user creation — and note that stock counts are manager-only to
-   * *read* as well, since a count is an inventory rewrite rather than a report.
-   *
-   * This mirrors the server, which enforces the same split independently and
-   * answers 403. Treat what is hidden here as convenience, not security.
-   */
-  SUB_CHEF: [
-    "kitchen-inventory:read",
-    "kitchen-labels:read",
-    "kitchen-stock:waste",
-    "kitchen-warehouse-requests:read",
-    "kitchen-branch-requests:read",
   ],
   BRANCH_MANAGER: [
     "branch-orders:read",

@@ -2,6 +2,7 @@
 // Kept separate from super-admin.ts. Do NOT modify Super Admin types.
 
 import type { BranchPosition } from "@/lib/types/super-admin";
+import type { StaffProfileFields, StaffProfileRecord } from "@/lib/types/staff";
 import type { StockUnit } from "@/lib/stock-unit";
 
 // ---- Locations ----
@@ -45,17 +46,21 @@ export type AdminCreatableRole =
   | "KITCHEN_MANAGER"
   | "WAREHOUSE_MANAGER";
 
-export interface CreateAdminUserInput {
+/**
+ * Body for `POST /admin/users` (managers).
+ *
+ * The seven shared profile fields are all REQUIRED — a partial body is a 422 —
+ * plus `role` and exactly the one location id matching it (409
+ * `missing_location` otherwise). They stay optional in `StaffProfileFields`
+ * because PATCH reuses the shape; the create FORM enforces "all required".
+ */
+export interface CreateAdminUserInput extends StaffProfileFields {
   email: string;
   full_name: string;
   role: AdminCreatableRole;
   branch_id?: string;
   kitchen_id?: string;
   warehouse_id?: string;
-  /** Optional contact number, free-form (the backend does not normalize it). */
-  phone_number?: string;
-  /** Absolute URL from `uploadEmployeeImage`; omit for no avatar. */
-  image_url?: string;
 }
 
 export interface CreateAdminUserResult {
@@ -66,12 +71,8 @@ export interface CreateAdminUserResult {
   temporary_password?: string;
 }
 
-export interface UpdateAdminUserInput {
-  full_name?: string;
-  /** Now editable. A clash with another user's email returns 409 `conflict`. */
-  email?: string;
-  phone_number?: string;
-  image_url?: string;
+/** Partial — send only what changed; an omitted field means "unchanged". */
+export interface UpdateAdminUserInput extends StaffProfileFields {
   is_active?: boolean;
   branch_id?: string;
   kitchen_id?: string;
@@ -136,7 +137,7 @@ export interface SalesSummaryFilters {
   branch_id?: string;
 }
 
-export interface Employee {
+export interface Employee extends StaffProfileRecord {
   id: string;
   email: string;
   full_name: string;
@@ -151,10 +152,8 @@ export interface Employee {
    * `POST /v1/branch/users`.
    */
   position?: BranchPosition | null;
-  /** Optional contact number, shown on the employee list and edit form. */
-  phone_number?: string | null;
-  /** Absolute avatar URL, or null when none was uploaded. */
-  image_url?: string | null;
+  /** Free-text job title for location staff; managers use `role` instead. */
+  job_title?: string | null;
   created_at?: string;
 }
 

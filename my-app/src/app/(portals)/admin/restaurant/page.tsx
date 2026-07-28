@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { imageUploadErrorMessage } from "@/lib/api/errors";
 import { useAuth } from "@/lib/auth";
 import { useMyRestaurant, useUpdateMyRestaurant } from "@/lib/hooks/use-admin-restaurant";
 import {
@@ -97,8 +98,8 @@ export default function AdminRestaurantPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Logo must be under 2 MB");
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Logo must be under 10 MB");
       return;
     }
     setUploading(true);
@@ -106,7 +107,7 @@ export default function AdminRestaurantPage() {
       const url = await api.uploadRestaurantLogo(file);
       form.setValue("logo_url", url, { shouldDirty: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not upload logo");
+      toast.error(imageUploadErrorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -250,7 +251,7 @@ export default function AdminRestaurantPage() {
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-faint"> <strong>Accepted formats are:</strong> PNG, JPG, WEBP, or SVG. Max 2 MB.</p>
+                <p className="text-xs text-faint"> <strong>Accepted formats are:</strong> PNG, JPG, WEBP, or SVG. Max 10 MB.</p>
               </div>
 
               <FormField

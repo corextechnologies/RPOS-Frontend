@@ -7,6 +7,7 @@
  */
 
 import type { BranchPosition } from "@/lib/types/super-admin";
+import type { StaffProfileFields, StaffProfileRecord } from "@/lib/types/staff";
 import type { StockLocationType, StockMovementType } from "@/lib/types/warehouse";
 import type { StockUnit } from "@/lib/stock-unit";
 import type { WasteReason } from "@/lib/stock/waste-reason";
@@ -30,18 +31,19 @@ export const INVALID_PRODUCTION_RUN = "invalid_production_run";
  * the token, and the role is BRANCH_STAFF by construction — this endpoint only
  * makes one kind of user.
  */
-export interface CreateBranchStaffInput {
+export interface CreateBranchStaffInput extends StaffProfileFields {
   email: string;
-  full_name?: string;
   /**
    * The whole point. Position resolves server-side into the capability list the
    * till gates on, and a staff member without one has an empty capability set —
-   * i.e. 403 on everything.
+   * i.e. 403 on everything. This is why branch keeps a fixed dropdown while
+   * kitchen and warehouse take free-text job titles: a typed value here would
+   * grant nothing.
    */
   position: BranchPosition;
 }
 
-export interface BranchStaff {
+export interface BranchStaff extends StaffProfileRecord {
   id: string;
   email: string;
   full_name: string | null;
@@ -51,10 +53,8 @@ export interface BranchStaff {
   created_at?: string;
 }
 
-/** Server-generated on create — the only time it is ever shown. */
-export interface UpdateBranchStaffInput {
-  email?: string;
-  full_name?: string;
+/** Partial — send only what changed; an omitted field means "unchanged". */
+export interface UpdateBranchStaffInput extends StaffProfileFields {
   position?: BranchPosition;
 }
 

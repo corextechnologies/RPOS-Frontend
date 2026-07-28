@@ -63,10 +63,8 @@ function requestLink(id: string, role: UserRole): string | null {
     case "ADMIN":
       return `/admin/requests/${id}`;
     case "WAREHOUSE_MANAGER":
-    case "WAREHOUSE_STAFF":
       return `/warehouse/requests/${id}`;
     case "KITCHEN_MANAGER":
-    case "SUB_CHEF":
       return `/kitchen/requests/${id}`;
     default:
       return null;

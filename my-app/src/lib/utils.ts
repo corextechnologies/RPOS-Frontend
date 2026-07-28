@@ -20,6 +20,14 @@ export function titleCase(s: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** `WAREHOUSE_MANAGER` → `Warehouse Manager`. Used wherever a role is shown. */
+export function formatRole(role: string): string {
+  return role
+    .split("_")
+    .map((part) => titleCase(part.toLowerCase()))
+    .join(" ");
+}
+
 /**
  * Naive English pluralizer, good enough for the location nouns this app shows:
  * branch → branches, kitchen → kitchens, warehouse → warehouses. Handles the

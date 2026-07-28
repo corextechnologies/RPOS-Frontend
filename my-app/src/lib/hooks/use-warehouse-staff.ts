@@ -5,6 +5,7 @@ import { api, queryKeys } from "@/lib/api";
 import type { CreateWarehouseStaffInput } from "@/lib/types/warehouse";
 import { isMissingWarehouseAssignment } from "@/lib/types/warehouse";
 import { ApiError } from "@/lib/types/super-admin";
+import { STAFF_STALE_TIME_MS } from "@/lib/types/staff";
 import { toast } from "sonner";
 
 export const WAREHOUSE_STAFF_PAGE_SIZE = 20;
@@ -19,6 +20,13 @@ export function useWarehouseStaff(page = 1, enabled = true) {
     queryFn: () =>
       api.listWarehouseUsers({ page, page_size: WAREHOUSE_STAFF_PAGE_SIZE }),
     enabled,
+    // Staff photos and CNIC scans are signed URLs that expire after ~15 min, so
+    // cached rows go stale in a way a normal list never does. Refetch inside
+    // that window, and again whenever the tab regains focus — coming back after
+    // lunch is exactly the case that would otherwise render dead links.
+    staleTime: STAFF_STALE_TIME_MS,
+    refetchInterval: STAFF_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
     retry: (failureCount, error) =>
       !isMissingWarehouseAssignment(error) && failureCount < 3,
   });
@@ -31,15 +39,8 @@ export function useCreateWarehouseStaff() {
     mutationFn: (body: CreateWarehouseStaffInput) => api.createWarehouseUser(body),
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["warehouse-staff"] });
-      // The API only emails credentials, so the invite is the whole outcome —
-      // say plainly when it did not go out.
-      if (result.credential_email_sent) {
-        toast.success(`Invite emailed to ${result.email}`);
-      } else {
-        toast.warning(
-          `Account created, but the invite email to ${result.email} could not be sent.`,
-        );
-      }
+      // No invite to send: warehouse staff are personnel records, not accounts.
+      toast.success(`${result.full_name || result.email} added to the roster`);
     },
     onError: (err) => {
       if (err instanceof ApiError && err.code === "conflict") {
