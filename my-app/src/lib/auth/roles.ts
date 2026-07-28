@@ -6,7 +6,6 @@ export const PORTAL_HOME: Record<UserRole, string> = {
   WAREHOUSE_MANAGER: "/warehouse/dashboard",
   WAREHOUSE_STAFF: "/warehouse/dashboard",
   KITCHEN_MANAGER: "/kitchen/dashboard",
-  SUB_CHEF: "/kitchen/dashboard",
   BRANCH_MANAGER: "/branch/dashboard",
   BRANCH_STAFF: "/pos",
 };
@@ -17,7 +16,6 @@ export const PORTAL_PREFIX: Record<UserRole, string> = {
   WAREHOUSE_MANAGER: "/warehouse",
   WAREHOUSE_STAFF: "/warehouse",
   KITCHEN_MANAGER: "/kitchen",
-  SUB_CHEF: "/kitchen",
   BRANCH_MANAGER: "/branch",
   BRANCH_STAFF: "/pos",
 };
@@ -28,7 +26,6 @@ export const PORTAL_LABEL: Record<UserRole, string> = {
   WAREHOUSE_MANAGER: "Warehouse",
   WAREHOUSE_STAFF: "Warehouse",
   KITCHEN_MANAGER: "Kitchen",
-  SUB_CHEF: "Kitchen",
   BRANCH_MANAGER: "Branch",
   BRANCH_STAFF: "POS",
 };
@@ -51,11 +48,10 @@ export function portalPathForRole(role: UserRole): string {
 }
 
 /**
- * Note that KITCHEN_MANAGER/SUB_CHEF share `/kitchen`, so this resolves those
- * paths to the manager of
- * each pair — whichever key `PORTAL_PREFIX` lists first. Callers wanting the
- * signed-in user's actual role should read it from the user, not infer it from
- * the URL.
+ * Note that WAREHOUSE_MANAGER/WAREHOUSE_STAFF share `/warehouse`, so this
+ * resolves that path to whichever key `PORTAL_PREFIX` lists first. Callers
+ * wanting the signed-in user's actual role should read it from the user, not
+ * infer it from the URL.
  */
 export function roleForPortalPath(pathname: string): UserRole | null {
   const entry = (Object.entries(PORTAL_PREFIX) as [UserRole, string][]).find(
@@ -65,9 +61,9 @@ export function roleForPortalPath(pathname: string): UserRole | null {
 }
 
 /**
- * A portal admits one role or several. Kitchen (manager + sub-chef) and
- * Warehouse (manager + staff) share screens; which actions are offered is
- * decided per-action by `canPerform`, not here.
+ * A portal admits one role or several. Warehouse (manager + staff) shares
+ * screens; which actions are offered is decided per-action by `canPerform`,
+ * not here.
  */
 export function isRoleAllowed(
   role: UserRole | undefined,

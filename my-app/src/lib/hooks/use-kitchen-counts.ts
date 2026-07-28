@@ -14,8 +14,8 @@ import { toast } from "sonner";
 export const KITCHEN_COUNTS_PAGE_SIZE = 20;
 
 /**
- * Counts are manager-only. Pass `enabled: false` for a sub-chef rather than
- * letting the query fire and 403 — the caller already knows the answer.
+ * Counts are manager-only. Pass `enabled: false` when the caller cannot read
+ * them rather than letting the query fire and 403 — the caller already knows.
  */
 export function useKitchenCounts(page: number, enabled = true) {
   return useQuery({

@@ -324,10 +324,12 @@ export interface ApiClient {
   createKitchenUser(
     body: CreateKitchenStaffInput,
   ): Promise<CreateKitchenStaffResult>;
-  revokeKitchenUser(id: string): Promise<KitchenStaff>;
-  restoreKitchenUser(id: string): Promise<KitchenStaff>;
   deleteKitchenUser(id: string): Promise<void>;
   updateKitchenUser(id: string, body: UpdateKitchenStaffInput): Promise<KitchenStaff>;
+  // Uploads a kitchen staff photo and returns its absolute URL, passed as
+  // `image_url` on create/update. Kitchen-specific route — the ADMIN
+  // employee-image endpoint 403s for a kitchen manager.
+  uploadKitchenStaffImage(file: File): Promise<string>;
   listKitchenWarehouses(): Promise<KitchenWarehouse[]>;
   createKitchenWarehouseRequest(
     body: CreateKitchenWarehouseRequestInput,

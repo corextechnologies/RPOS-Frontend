@@ -23,10 +23,6 @@ const PLACEHOLDER_COPY: Record<UserRole, { title: string; description: string }>
     title: "Kitchen dashboard",
     description: "Production queue, waste summary, and stock requests from branches.",
   },
-  SUB_CHEF: {
-    title: "Kitchen dashboard",
-    description: "Production queue and stock on hand. Logging waste is yours; the rest is read-only.",
-  },
   BRANCH_MANAGER: {
     title: "Branch dashboard",
     description: "Today's sales, pending requests, and branch inventory at a glance.",

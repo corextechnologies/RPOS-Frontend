@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { api } from "@/lib/api";
+import { EmployeeImageField } from "@/components/admin/employees/EmployeeImageField";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,19 +29,19 @@ import {
   type CreateKitchenStaffForm,
 } from "@/lib/schemas/kitchen-staff";
 
-interface AddSubChefDialogProps {
+interface AddKitchenStaffDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: CreateKitchenStaffForm) => Promise<void>;
   isSubmitting: boolean;
 }
 
-export function AddSubChefDialog({
+export function AddKitchenStaffDialog({
   open,
   onOpenChange,
   onSubmit,
   isSubmitting,
-}: AddSubChefDialogProps) {
+}: AddKitchenStaffDialogProps) {
   const form = useForm<CreateKitchenStaffForm>({
     resolver: zodResolver(createKitchenStaffSchema),
     defaultValues: createKitchenStaffDefaults,
@@ -53,11 +55,10 @@ export function AddSubChefDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add sub-chef</DialogTitle>
+          <DialogTitle>Add staff member</DialogTitle>
           <DialogDescription>
-            They join your kitchen with read-only access plus the ability to log
-            waste, and sign in with credentials emailed to them. No password is
-            shown here.
+            A roster record for someone in your kitchen. They cannot sign in —
+            this is just their details.
           </DialogDescription>
         </DialogHeader>
 
@@ -65,15 +66,16 @@ export function AddSubChefDialog({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
-              name="email"
+              name="image_url"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>Photo</FormLabel>
                   <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="chef@restaurant.com"
-                      {...field}
+                    <EmployeeImageField
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      upload={api.uploadKitchenStaffImage}
+                      allowSvg
                     />
                   </FormControl>
                   <FormMessage />
@@ -95,6 +97,52 @@ export function AddSubChefDialog({
               )}
             />
 
+            <FormField
+              control={form.control}
+              name="job_title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Role</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Head Chef" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="chef@restaurant.com"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="phone_number"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone number</FormLabel>
+                  <FormControl>
+                    <Input placeholder="+92 300 1234567" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             <DialogFooter>
               <Button
                 type="button"
@@ -105,7 +153,7 @@ export function AddSubChefDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Adding…" : "Add sub-chef"}
+                {isSubmitting ? "Adding…" : "Add staff member"}
               </Button>
             </DialogFooter>
           </form>

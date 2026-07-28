@@ -32,7 +32,8 @@ import type {
   ProductionTarget,
 } from "@/lib/types/production-target";
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
-import { request, requestEnvelope } from "./client";
+import { request, requestEnvelope, requestUpload } from "./client";
+import { apiConfig } from "./config";
 import { normalizeProductionTarget } from "./admin.api";
 import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 
@@ -73,6 +74,10 @@ function normalizeStaff(staff: KitchenStaff): KitchenStaff {
     ...staff,
     id: String(staff.id),
     kitchen_id: String(staff.kitchen_id),
+    full_name: staff.full_name ?? null,
+    job_title: staff.job_title ?? null,
+    phone_number: staff.phone_number ?? null,
+    image_url: staff.image_url ?? null,
   };
 }
 
@@ -299,6 +304,9 @@ export const kitchenApi = {
       body: JSON.stringify({
         email: body.email.trim(),
         full_name: optionalText(body.full_name),
+        phone_number: optionalText(body.phone_number),
+        image_url: optionalText(body.image_url),
+        job_title: optionalText(body.job_title),
       }),
     });
     return {
@@ -306,16 +314,6 @@ export const kitchenApi = {
       user_id: String(data.user_id),
       kitchen_id: String(data.kitchen_id),
     };
-  },
-
-  async revokeKitchenUser(id: string): Promise<KitchenStaff> {
-    const data = await request<KitchenStaff>(`/kitchen/users/${id}/revoke`, { method: "POST" });
-    return normalizeStaff(data);
-  },
-
-  async restoreKitchenUser(id: string): Promise<KitchenStaff> {
-    const data = await request<KitchenStaff>(`/kitchen/users/${id}/restore`, { method: "POST" });
-    return normalizeStaff(data);
   },
 
   async deleteKitchenUser(id: string): Promise<void> {
@@ -328,6 +326,24 @@ export const kitchenApi = {
       body: JSON.stringify(body),
     });
     return normalizeStaff(data);
+  },
+
+  // Absolute-izes a relative upload URL against the API origin so the <img>
+  // works wherever the app is served. Mirrors `uploadEmployeeImage`, but hits
+  // the kitchen-specific route (the ADMIN one 403s for a kitchen manager).
+  async uploadKitchenStaffImage(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    const data = await requestUpload<{ url: string }>(
+      "/kitchen/upload/staff-image",
+      form,
+    );
+    const url = data.url;
+    if (url.startsWith("/")) {
+      const origin = apiConfig.baseUrl.replace(/\/v1$/, "");
+      return `${origin}${url}`;
+    }
+    return url;
   },
 
   async listKitchenWarehouses(): Promise<KitchenWarehouse[]> {

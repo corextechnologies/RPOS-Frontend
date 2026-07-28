@@ -156,48 +156,71 @@ export interface KitchenCountFilters {
 // ---- Staff ----
 
 /**
- * A sub-chef created by the signed-in kitchen manager.
+ * A kitchen staff member — a personnel record on the kitchen roster, NOT a user
+ * account. They have no portal and cannot sign in: no password is created, none
+ * is emailed, and the login endpoint rejects them. The manager maintains this
+ * roster (names, contact details, photos, free-text job titles).
  *
- * `GET /kitchen/users` is creator-scoped: it returns only the staff this manager
- * created, never everyone attached to the kitchen. Another manager seeing an
- * empty list is correct. UI copy must not imply otherwise.
+ * `GET /kitchen/users` is location-scoped: any manager of the kitchen sees every
+ * staff member, regardless of who created them.
+ *
+ * `role` is the system permission level and always reads `"KITCHEN_STAFF"` —
+ * it is read-only and never sent. The human-facing "Role" (Head Chef, Baker,
+ * Dishwasher…) is free text carried on `job_title`. `is_active` is always
+ * `true`; there is no suspend, so it is safe to ignore.
  */
 export interface KitchenStaff {
   id: string;
   email: string;
   full_name: string | null;
+  /** Free-text job title, shown as "Role" in the UI. */
+  job_title?: string | null;
+  phone_number?: string | null;
+  image_url?: string | null;
   role: string;
   is_active: boolean;
   kitchen_id: string;
   created_at?: string;
 }
 
-/** Body for `PATCH /kitchen/users/{id}`. */
+/**
+ * Body for `PATCH /kitchen/users/{id}`. All five fields are editable and
+ * optional — send only what changed. `role` is never sent.
+ */
 export interface UpdateKitchenStaffInput {
   email?: string;
   full_name?: string;
+  phone_number?: string;
+  image_url?: string;
+  job_title?: string;
 }
 
 /** Body for `POST /kitchen/users`. */
 export interface CreateKitchenStaffInput {
   email: string;
   full_name?: string;
+  phone_number?: string;
+  image_url?: string;
+  job_title?: string;
 }
 
 /**
- * Result of `POST /kitchen/users`.
+ * Result of `POST /kitchen/users` — the created roster record.
  *
- * There is no password here — the endpoint emails the credentials and never
- * returns them. Never surface a credentials dialog for this flow; there is
- * nothing to show. When `credential_email_sent` is false the user still exists,
- * and there is no resend endpoint to offer.
+ * There is no password and no email: these are personnel records, not accounts.
+ * Never surface a credentials dialog for this flow. Note the id arrives under
+ * `user_id` here but `id` on list/edit rows — the same value, different key,
+ * a backend inconsistency the client normalizes on read.
  */
 export interface CreateKitchenStaffResult {
   user_id: string;
   email: string;
+  full_name?: string | null;
+  phone_number?: string | null;
+  image_url?: string | null;
+  job_title?: string | null;
   role: string;
   kitchen_id: string;
-  credential_email_sent: boolean;
 }
 
 // ---- Requests ----

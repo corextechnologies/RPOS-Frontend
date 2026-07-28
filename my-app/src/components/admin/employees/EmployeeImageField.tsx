@@ -7,21 +7,27 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const MAX_BYTES = 2 * 1024 * 1024;
-const ACCEPT = "image/jpeg,image/png,image/webp";
+const ACCEPT_DEFAULT = "image/jpeg,image/png,image/webp";
+const ACCEPT_WITH_SVG = "image/jpeg,image/png,image/webp,image/svg+xml";
 
 /**
- * Avatar picker for the employee create/edit forms. Uploads straight to the
- * backend (`api.uploadEmployeeImage`) and hands the returned URL back via
- * `onChange` — the form only ever stores the URL string, never the File, so the
- * two forms can treat `image_url` like any other field. Mirrors the menu-image
- * uploader's 2 MB / JPEG-PNG-WebP guardrails.
+ * Avatar picker for the employee/staff create/edit forms. Uploads via the
+ * supplied `upload` fn (defaults to `api.uploadEmployeeImage`) and hands the
+ * returned URL back via `onChange` — the form only ever stores the URL string,
+ * never the File, so a form can treat `image_url` like any other field. Mirrors
+ * the menu-image uploader's 2 MB guardrail. Pass `allowSvg` for surfaces whose
+ * upload endpoint accepts SVG (e.g. the kitchen staff-image route).
  */
 export function EmployeeImageField({
   value,
   onChange,
+  upload = api.uploadEmployeeImage,
+  allowSvg = false,
 }: {
   value: string;
   onChange: (url: string) => void;
+  upload?: (file: File) => Promise<string>;
+  allowSvg?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -33,7 +39,7 @@ export function EmployeeImageField({
     }
     setUploading(true);
     try {
-      const url = await api.uploadEmployeeImage(file);
+      const url = await upload(file);
       onChange(url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't upload the image");
@@ -72,7 +78,7 @@ export function EmployeeImageField({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT}
+          accept={allowSvg ? ACCEPT_WITH_SVG : ACCEPT_DEFAULT}
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -89,7 +95,9 @@ export function EmployeeImageField({
         >
           {uploading ? "Uploading…" : value ? "Change photo" : "Upload photo"}
         </Button>
-        <p className="text-xs text-faint">JPEG, PNG, or WebP · up to 2 MB.</p>
+        <p className="text-xs text-faint">
+          {allowSvg ? "JPEG, PNG, WebP, or SVG" : "JPEG, PNG, or WebP"} · up to 2 MB.
+        </p>
       </div>
     </div>
   );

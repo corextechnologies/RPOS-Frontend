@@ -16,10 +16,9 @@ import {
 import type { NavSection } from "./types";
 
 /**
- * Shared by KITCHEN_MANAGER and SUB_CHEF. Every business item carries an
- * `action`, so a sub-chef's nav narrows itself through `visibleNavItems` — and
- * the Product counts and People entries disappear, taking the People section
- * header with them, since an empty section renders nothing.
+ * The Kitchen portal is manager-only. Every business item still carries an
+ * `action` and is filtered through `visibleNavItems`, so a manager missing a
+ * capability simply never sees that entry (an empty section renders nothing).
  */
 export const KITCHEN_NAV: NavSection[] = [
   {
@@ -122,7 +121,7 @@ export const KITCHEN_NAV: NavSection[] = [
     title: "People",
     items: [
       {
-        label: "Sub-chefs",
+        label: "Kitchen staff",
         href: "/kitchen/staff",
         icon: Users,
         action: "kitchen-staff:read",

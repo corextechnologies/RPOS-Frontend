@@ -105,13 +105,17 @@ describe("warehouse staff roster is shared across managers", () => {
 });
 
 describe("kitchen staff roster is shared across managers", () => {
-  it("a co-manager sees a sub-chef the original manager created", async () => {
-    // Original manager hires a sub-chef.
+  it("a co-manager sees a staff member the original manager added", async () => {
+    // Original manager adds a roster record (with the new fields).
     await mockClient.login(KITCHEN_MANAGER, PASSWORD);
-    await mockClient.createKitchenUser({
-      email: "sub-chef@test.ros",
-      full_name: "Sub Chef",
+    const created = await mockClient.createKitchenUser({
+      email: "kitchen-staff@test.ros",
+      full_name: "Priya Sharma",
+      job_title: "Head Chef",
+      phone_number: "+92 300 1234567",
     });
+    // Roster records are personnel, not accounts: role is always KITCHEN_STAFF.
+    expect(created.role).toBe("KITCHEN_STAFF");
     await mockClient.logout();
 
     // A different manager assigned to the same kitchen now inherits them.
@@ -122,7 +126,10 @@ describe("kitchen staff roster is shared across managers", () => {
     });
 
     const page = await mockClient.listKitchenUsers();
-    expect(page.items.map((s) => s.email)).toContain("sub-chef@test.ros");
+    const row = page.items.find((s) => s.email === "kitchen-staff@test.ros");
+    expect(row).toBeDefined();
+    expect(row?.job_title).toBe("Head Chef");
+    expect(row?.role).toBe("KITCHEN_STAFF");
     expect(page.items.every((s) => s.kitchen_id === "kit-001")).toBe(true);
   });
 });
