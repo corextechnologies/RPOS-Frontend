@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
+import { EmployeeDetailDialog } from "@/components/admin/employees/EmployeeDetailDialog";
 import { EmployeeList } from "@/components/admin/employees/EmployeeList";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -52,6 +53,7 @@ export default function AdminEmployeesPage() {
   const restoreEmployee = useRestoreEmployee();
   const canManage = can("users:create");
   const [confirm, setConfirm] = useState<{ employee: Employee } | null>(null);
+  const [detail, setDetail] = useState<Employee | null>(null);
 
   const locationLabel = useMemo(() => {
     const branchNames = new Map((branches.data ?? []).map((b) => [b.id, b.name]));
@@ -141,6 +143,7 @@ export default function AdminEmployeesPage() {
         isError={employees.isError}
         onRetry={() => employees.refetch()}
         locationLabel={locationLabel}
+        onRowClick={setDetail}
         onEdit={
           canManage ? (id) => router.push(`/admin/employees/${id}/edit`) : undefined
         }
@@ -204,6 +207,7 @@ export default function AdminEmployeesPage() {
         isError={employees.isError}
         onRetry={() => employees.refetch()}
         locationLabel={locationLabel}
+        onRowClick={setDetail}
         emptyTitle="No sub-staff yet"
         emptyDescription="Staff members created by managers will appear here."
       />
@@ -231,6 +235,15 @@ export default function AdminEmployeesPage() {
           </Button>
         </div>
       )}
+
+      <EmployeeDetailDialog
+        employee={detail}
+        open={detail !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetail(null);
+        }}
+        locationLabel={locationLabel}
+      />
 
       <ConfirmDialog
         open={confirm !== null}

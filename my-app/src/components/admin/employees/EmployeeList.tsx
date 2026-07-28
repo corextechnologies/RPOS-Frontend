@@ -22,7 +22,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Employee } from "@/lib/types/admin";
-import { formatDate, initials, titleCase } from "@/lib/utils";
+import { formatDate, formatRole, initials } from "@/lib/utils";
 
 interface EmployeeListProps {
   items?: Employee[];
@@ -30,6 +30,7 @@ interface EmployeeListProps {
   isError: boolean;
   onRetry?: () => void;
   locationLabel: (employee: Employee) => string;
+  onRowClick?: (employee: Employee) => void;
   onEdit?: (id: string) => void;
   onRevoke?: (employee: Employee) => void;
   onRestore?: (employee: Employee) => void;
@@ -44,6 +45,7 @@ export function EmployeeList({
   isError,
   onRetry,
   locationLabel,
+  onRowClick,
   onEdit,
   onRevoke,
   onRestore,
@@ -105,7 +107,24 @@ export function EmployeeList({
           </TableHeader>
           <TableBody>
             {items.map((employee) => (
-              <TableRow key={employee.id}>
+              <TableRow
+                key={employee.id}
+                role={onRowClick ? "button" : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-label={onRowClick ? `View ${employee.full_name}` : undefined}
+                className={onRowClick ? "cursor-pointer" : undefined}
+                onClick={onRowClick ? () => onRowClick(employee) : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onRowClick(employee);
+                        }
+                      }
+                    : undefined
+                }
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     {employee.image_url ? (
@@ -145,7 +164,10 @@ export function EmployeeList({
                   {employee.created_at ? formatDate(employee.created_at) : "-"}
                 </TableCell>
                 {showActions && (
-                  <TableCell className="text-right">
+                  <TableCell
+                    className="text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" aria-label="Actions">
@@ -193,11 +215,4 @@ export function EmployeeList({
       </CardContent>
     </Card>
   );
-}
-
-function formatRole(role: string): string {
-  return role
-    .split("_")
-    .map((part) => titleCase(part.toLowerCase()))
-    .join(" ");
 }
