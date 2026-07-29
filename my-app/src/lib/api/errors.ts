@@ -81,6 +81,25 @@ function int(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) ? value : null;
 }
 
+// ---- lines_not_all_produced ----
+
+/** The branch-request PRODUCED gate: some lines haven't been made yet. */
+export const LINES_NOT_ALL_PRODUCED = "lines_not_all_produced";
+
+/**
+ * Line ids the server says still need producing, from a `lines_not_all_produced`
+ * 409, as strings to match the app's id convention. Empty for a different code
+ * or when the payload carries no usable ids.
+ */
+export function unproducedLineIds(err: unknown): string[] {
+  if (!isApiCode(err, LINES_NOT_ALL_PRODUCED)) return [];
+  const ids = record(err.details)?.unproduced_line_ids;
+  if (!Array.isArray(ids)) return [];
+  return ids
+    .map((id) => (typeof id === "number" || typeof id === "string" ? String(id) : null))
+    .filter((id): id is string => id !== null);
+}
+
 // ---- price_mismatch ----
 
 /**

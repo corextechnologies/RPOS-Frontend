@@ -339,6 +339,11 @@ export interface RequestLineItem {
   product_name: string;
   quantity_requested: number;
   quantity_approved?: number | null;
+  /**
+   * Per-line "made" flag for a branch request the kitchen is producing.
+   * Meaningful from IN_PRODUCTION onward; the kitchen gates PRODUCED on it.
+   */
+  produced?: boolean;
   /** Null until a PO is reported or received. */
   quantity_received?: number | null;
   /** What was wrong with this line, set by a warehouse report. */

@@ -371,7 +371,13 @@ export interface ApiClient {
   createKitchenRecipe(body: CreateKitchenRecipeInput): Promise<KitchenRecipe>;
   listKitchenProduction(): Promise<ProductionRun[]>;
   getKitchenProductionRun(id: string): Promise<ProductionRun>;
-  produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun>;
+  // `idempotencyKey` (optional) is sent as the `Idempotency-Key` header so a
+  // retried "Mark made" replays the original run instead of producing twice.
+  // Callers mint one key per produce intent and reuse it across retries.
+  produceKitchenProduct(
+    body: KitchenProduceInput,
+    idempotencyKey?: string,
+  ): Promise<ProductionRun>;
 
   listKitchenProductionTargets(
     filters?: KitchenProductionTargetFilters,
@@ -397,6 +403,13 @@ export interface ApiClient {
   updateKitchenRequestStatus(
     requestId: string,
     body: UpdateKitchenRequestStatusInput,
+  ): Promise<KitchenRequest>;
+  // Marks one line of a BRANCH_TO_ADMIN request produced (IN_PRODUCTION only).
+  // Mirrors `markProductionTargetLineProduced`; idempotent server-side (marking
+  // an already-produced line is a no-op 200). Returns the full updated request.
+  markKitchenRequestLineProduced(
+    requestId: string,
+    lineId: string,
   ): Promise<KitchenRequest>;
 
   // Branch (Phase 5) — auto-scoped to the caller's branch.

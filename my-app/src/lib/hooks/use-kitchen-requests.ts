@@ -121,6 +121,25 @@ export function useCreateKitchenWarehouseRequest() {
   });
 }
 
+/**
+ * Marks one line of a branch request produced. The server is idempotent (marking
+ * an already-produced line is a no-op 200), so a tick-only retry after a failed
+ * tick is always safe. Errors are surfaced by the caller so it can keep the line
+ * in a "retry" state; we only refresh the caches here.
+ */
+export function useMarkKitchenRequestLineProduced(requestId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: (lineId: string) =>
+      api.markKitchenRequestLineProduced(requestId, lineId),
+    onSuccess: (updated) => {
+      qc.setQueryData(queryKeys.kitchenRequest(requestId), updated);
+      qc.invalidateQueries({ queryKey: ["kitchen-branch-requests"] });
+    },
+  });
+}
+
 export function useUpdateKitchenRequestStatus(requestId: string) {
   const qc = useQueryClient();
 

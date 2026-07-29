@@ -120,6 +120,9 @@ function normalizeKitchenRequest(req: KitchenRequest): KitchenRequest {
       // value meaning "no partial approval on this type", not missing data.
       quantity_approved:
         line.quantity_approved == null ? null : Number(line.quantity_approved),
+      // New per-line production tracking on branch requests; coerce to a plain
+      // boolean so the UI never has to test for undefined.
+      produced: Boolean(line.produced),
     })),
     // Dispatch requests carry the per-branch split; normalize its integer ids to
     // the app's string convention. Undefined for other request types.
@@ -422,6 +425,17 @@ export const kitchenApi = {
     return normalizeKitchenRequest(data);
   },
 
+  async markKitchenRequestLineProduced(
+    requestId: string,
+    lineId: string,
+  ): Promise<KitchenRequest> {
+    const data = await request<KitchenRequest>(
+      `/kitchen/requests/${requestId}/lines/${lineId}/produced`,
+      { method: "POST" },
+    );
+    return normalizeKitchenRequest(data);
+  },
+
   async updateKitchenRequestStatus(
     requestId: string,
     body: UpdateKitchenRequestStatusInput,
@@ -512,10 +526,16 @@ export const kitchenApi = {
    * stock and credits the finished goods back to it — components first, so a
    * shortfall can never mint stock from nothing.
    */
-  async produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun> {
+  async produceKitchenProduct(
+    body: KitchenProduceInput,
+    idempotencyKey?: string,
+  ): Promise<ProductionRun> {
     return normalizeRun(
       await request<ProductionRun>("/kitchen/production", {
         method: "POST",
+        // When present, the server replays the original run on a retry instead
+        // of producing (and crediting stock) again.
+        headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
         body: JSON.stringify({
           product_id: body.product_id,
           quantity: body.quantity,
