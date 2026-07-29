@@ -1,18 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Factory, Plus, TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import { ArrowDown, ArrowUp, Factory, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -21,19 +11,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageState } from "@/components/ui/page-state";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/state";
+import { ProduceDialog } from "@/components/kitchen/ProduceDialog";
+import { ProductionTargetProduceCard } from "@/components/kitchen/ProductionTargetProduceCard";
 import { useAuth } from "@/lib/auth";
-import {
-  useKitchenCatalogue,
-  useKitchenProduction,
-  useKitchenRecipes,
-  useProduceKitchenProduct,
-} from "@/lib/hooks/use-kitchen-recipes";
-import { useKitchenInventory } from "@/lib/hooks/use-kitchen-inventory";
+import { useKitchenProduction } from "@/lib/hooks/use-kitchen-recipes";
+import { useKitchenProductionTargets } from "@/lib/hooks/use-production-targets";
 import { formatDate } from "@/lib/utils";
-import { formatStockQty, type StockUnit } from "@/lib/stock-unit";
-import { tryConvertQty } from "@/lib/unit-convert";
-import { toast } from "sonner";
 import type { ProductionLineRole } from "@/lib/types/branch";
+
+type ProductionView = "target" | "extra" | "made";
+
+const VIEW_OPTIONS: { value: ProductionView; label: string }[] = [
+  { value: "target", label: "Production target" },
+  { value: "extra", label: "Make something extra" },
+  { value: "made", label: "What we made" },
+];
 
 /**
  * Making things.
@@ -42,15 +36,12 @@ import type { ProductionLineRole } from "@/lib/types/branch";
  * it do something. Producing 10 burgers consumes 20 buns and 10 patties from
  * *kitchen* stock and credits 10 burgers back to it.
  *
- * Note where this happens: the kitchen, not the branch. The branch receives
- * finished burgers and sells them 1:1 — it never holds the buns, which is why
- * exploding a recipe at the branch would have failed hunting for components it
- * was never allocated.
+ * Three views behind one dropdown: work today's forwarded production targets,
+ * make something extra off-target, or review what was made.
  */
 export default function KitchenProductionPage() {
   const { can } = useAuth();
-  const runs = useKitchenProduction();
-  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<ProductionView>("target");
 
   const isManager = can("kitchen-staff:create");
 
@@ -65,50 +56,130 @@ export default function KitchenProductionPage() {
             What this kitchen made, and what it used up doing it.
           </p>
         </div>
-        {isManager && (
+        <Select value={view} onValueChange={(v) => setView(v as ProductionView)}>
+          <SelectTrigger className="sm:w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {VIEW_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {view === "target" && <ProductionTargetsView allowed={isManager} />}
+      {view === "extra" && <MakeSomethingExtraView canMake={isManager} />}
+      {view === "made" && <WhatWeMadeView />}
+    </div>
+  );
+}
+
+/** In-production targets, each a collapsible card worked line by line. */
+function ProductionTargetsView({ allowed }: { allowed: boolean }) {
+  const targets = useKitchenProductionTargets(undefined, allowed);
+  const inProduction = (targets.data ?? []).filter(
+    (t) => t.status === "IN_PRODUCTION",
+  );
+
+  return (
+    <PageState
+      isLoading={targets.isLoading}
+      isError={targets.isError}
+      data={inProduction}
+      isEmpty={(rows) => rows.length === 0}
+      errorTitle="Couldn't load targets"
+      errorDescription={targets.error instanceof Error ? targets.error.message : undefined}
+      onRetry={() => targets.refetch()}
+      emptyTitle="Nothing in production"
+      emptyDescription="Start a production target to work it here. Targets Admin forwards appear under Production targets."
+    >
+      {(rows) => (
+        <div className="space-y-3">
+          {rows.map((target) => (
+            <ProductionTargetProduceCard key={target.id} target={target} />
+          ))}
+        </div>
+      )}
+    </PageState>
+  );
+}
+
+/** Ad-hoc production not tied to a target. */
+function MakeSomethingExtraView({ canMake }: { canMake: boolean }) {
+  const [open, setOpen] = useState(false);
+
+  if (!canMake) {
+    return (
+      <Card>
+        <CardContent className="p-0">
+          <EmptyState
+            title="Not available"
+            description="Your role can't start off-target production."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+          <p className="text-sm text-muted">
+            Make an item off-target — a one-off batch outside today&apos;s targets.
+          </p>
           <Button onClick={() => setOpen(true)}>
             <Plus className="mr-1.5 size-4" aria-hidden />
             Make something
           </Button>
-        )}
-      </div>
-
-      <PageState
-        isLoading={runs.isLoading}
-        isError={!!runs.error}
-        data={runs.data}
-        isEmpty={(rows) => rows.length === 0}
-        errorTitle="Couldn't load production"
-        errorDescription={runs.error instanceof Error ? runs.error.message : undefined}
-        emptyTitle="Nothing made yet"
-        emptyDescription="Producing an item consumes its recipe's ingredients from kitchen stock."
-      >
-        {(rows) => (
-          <ul className="space-y-3">
-            {rows.map((run) => {
-              const output = run.lines.find((l) => l.role === "OUTPUT");
-              return (
-                <li key={run.id} className="rounded-2xl border border-line bg-surface p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-sm font-medium text-content">
-                      <Factory className="size-4 text-brand" aria-hidden />
-                      {output ? `${output.quantity}× ${output.product_name}` : "Run"}
-                    </p>
-                    <p className="text-xs text-muted">{formatDate(run.created_at)}</p>
-                  </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <LineGroup title="Used" role="INPUT" lines={run.lines} />
-                    <LineGroup title="Made" role="OUTPUT" lines={run.lines} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </PageState>
-
+        </CardContent>
+      </Card>
       <ProduceDialog open={open} onOpenChange={setOpen} />
-    </div>
+    </>
+  );
+}
+
+/** Every production run, with what it consumed and what it made. */
+function WhatWeMadeView() {
+  const runs = useKitchenProduction();
+
+  return (
+    <PageState
+      isLoading={runs.isLoading}
+      isError={!!runs.error}
+      data={runs.data}
+      isEmpty={(rows) => rows.length === 0}
+      errorTitle="Couldn't load production"
+      errorDescription={runs.error instanceof Error ? runs.error.message : undefined}
+      emptyTitle="Nothing made yet"
+      emptyDescription="Producing an item consumes its recipe's ingredients from kitchen stock."
+    >
+      {(rows) => (
+        <ul className="space-y-3">
+          {rows.map((run) => {
+            const output = run.lines.find((l) => l.role === "OUTPUT");
+            return (
+              <li key={run.id} className="rounded-2xl border border-line bg-surface p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-sm font-medium text-content">
+                    <Factory className="size-4 text-brand" aria-hidden />
+                    {output ? `${output.quantity}× ${output.product_name}` : "Run"}
+                  </p>
+                  <p className="text-xs text-muted">{formatDate(run.created_at)}</p>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <LineGroup title="Used" role="INPUT" lines={run.lines} />
+                  <LineGroup title="Made" role="OUTPUT" lines={run.lines} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </PageState>
   );
 }
 
@@ -139,232 +210,5 @@ function LineGroup({
         ))}
       </ul>
     </div>
-  );
-}
-
-function ProduceDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const catalogue = useKitchenCatalogue();
-  const recipes = useKitchenRecipes();
-  const inventory = useKitchenInventory();
-  const produce = useProduceKitchenProduct();
-
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
-  const [batchCode, setBatchCode] = useState("");
-  const [expiryDate, setExpiryDate] = useState("");
-
-  const picked = (catalogue.data ?? []).find((p) => p.id === productId);
-  // Producing something with no recipe is 409 `no_active_recipe`. Saying so
-  // before they hit the button beats an error toast afterwards.
-  const noRecipe = picked && picked.has_recipe === false;
-  // Batch code and expiry are both required — a kitchen-made batch needs both to
-  // be traceable and to flow into near-expiry/waste tracking.
-  const valid =
-    !!productId &&
-    Number(quantity) > 0 &&
-    !noRecipe &&
-    batchCode.trim().length > 0 &&
-    !!expiryDate;
-
-  // What producing this many will draw from stock — one line per component,
-  // converted into the ingredient's stock unit and multiplied by the batch
-  // count, so the chef sees "10 buns → 1 kg flour" before committing.
-  const qtyNum = Number(quantity);
-  const activeRecipe = picked
-    ? (recipes.data ?? []).find((r) => r.is_active && r.product_name === picked.name)
-    : undefined;
-  // Keyed by the numeric portion of the product id ("prod-001" → 1), because a
-  // recipe component references it as a number while inventory rows carry the
-  // string id. Also remember each product's stock_unit so a recipe response that
-  // omits it (or an older cached row) still converts kg↔g correctly.
-  const onHandById = useMemo(() => {
-    const totals = new Map<number, number>();
-    const units = new Map<number, StockUnit>();
-    for (const item of inventory.data ?? []) {
-      const key = Number(item.product_id.replace(/\D/g, "")) || 0;
-      totals.set(key, (totals.get(key) ?? 0) + item.quantity);
-      if (item.product.stock_unit) units.set(key, item.product.stock_unit);
-    }
-    return { totals, units };
-  }, [inventory.data]);
-  const projection =
-    activeRecipe && Number.isFinite(qtyNum) && qtyNum > 0
-      ? (() => {
-          const batches = Math.ceil(qtyNum / (activeRecipe.yield_qty || 1));
-          return activeRecipe.components.map((c) => {
-            const from = c.unit ?? c.stock_unit ?? "EACH";
-            // Prefer recipe.stock_unit, then inventory product, then entry unit.
-            const to =
-              c.stock_unit ??
-              onHandById.units.get(c.component_product_id) ??
-              from;
-            const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
-            const needed = perBatch * batches;
-            const onHand = onHandById.totals.get(c.component_product_id);
-            return {
-              id: c.component_product_id,
-              name: c.component_name ?? `#${c.component_product_id}`,
-              needed,
-              unit: to,
-              onHand,
-              short: onHand != null && onHand < needed,
-            };
-          });
-        })()
-      : [];
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Make something</DialogTitle>
-          <DialogDescription>
-            Ingredients come out of kitchen stock before the output goes in.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Item</Label>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger className="h-10">
-                <SelectValue placeholder="Choose…" />
-              </SelectTrigger>
-              <SelectContent>
-                {(catalogue.data ?? []).map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                    {p.has_recipe === false && " — no recipe"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {noRecipe && (
-            <p className="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
-              <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
-              No recipe yet, so there&apos;s nothing to consume. Add one first.
-            </p>
-          )}
-
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="prod-qty">
-              How many
-            </Label>
-            <Input
-              id="prod-qty"
-              className="h-12 text-center text-xl tabular-nums"
-              inputMode="numeric"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value.replace(/\D/g, ""))}
-            />
-          </div>
-
-          {projection.length > 0 && (
-            <div className="space-y-1.5 rounded-lg border border-line bg-surface-2/50 px-3 py-2.5">
-              <p className="text-xs font-medium uppercase tracking-wide text-faint">
-                Will use
-              </p>
-              <ul className="space-y-1">
-                {projection.map((p) => (
-                  <li key={p.id} className="flex justify-between gap-2 text-sm">
-                    <span className="truncate text-content">{p.name}</span>
-                    <span
-                      className={
-                        p.short
-                          ? "shrink-0 tabular-nums text-warning"
-                          : "shrink-0 tabular-nums text-muted"
-                      }
-                    >
-                      {formatStockQty(p.needed, p.unit)}
-                      {p.onHand != null && (
-                        <span className="text-faint">
-                          {" "}
-                          / {formatStockQty(p.onHand, p.unit)}
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {projection.some((p) => p.short) && (
-                <p className="flex items-start gap-1.5 text-xs text-warning">
-                  <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
-                  Not enough stock for this many.
-                </p>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="prod-batch">
-              Batch code
-            </Label>
-            <Input
-              id="prod-batch"
-              className="h-10"
-              placeholder="e.g. BUN-0724"
-              value={batchCode}
-              onChange={(e) => setBatchCode(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs" htmlFor="prod-expiry">
-              Expiry date
-            </Label>
-            <Input
-              id="prod-expiry"
-              type="date"
-              className="h-10"
-              value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!valid || produce.isPending}
-            onClick={() => {
-              const numericId = Number(productId.replace(/\D/g, ""));
-              if (!numericId) {
-                toast.error("Couldn't resolve this product's id");
-                return;
-              }
-              produce.mutate(
-                {
-                  product_id: numericId,
-                  quantity: Number(quantity),
-                  batch_code: batchCode.trim(),
-                  expiry_date: expiryDate || null,
-                },
-                {
-                  onSuccess: () => {
-                    onOpenChange(false);
-                    setProductId("");
-                    setQuantity("1");
-                    setBatchCode("");
-                    setExpiryDate("");
-                  },
-                },
-              );
-            }}
-          >
-            Make
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
