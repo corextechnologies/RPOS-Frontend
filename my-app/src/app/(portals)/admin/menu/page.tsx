@@ -2,10 +2,10 @@
 
 import { useRef, useState } from "react";
 import {
-  CopyPlus,
   ImagePlus,
   Layers,
   Lock,
+  Pencil,
   Plus,
   Send,
   Trash2,
@@ -17,6 +17,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -76,28 +84,47 @@ export default function AdminMenuPage() {
 
   const [draft, setDraft] = useState<MenuDraft>({ groups: [], items: [] });
   const [confirmPublish, setConfirmPublish] = useState(false);
-  const [confirmLoad, setConfirmLoad] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // tempId of the draft item currently open in the edit dialog.
+  const [editingTempId, setEditingTempId] = useState<string | null>(null);
 
   const errors = draft.items.length ? validateDraft(draft) : [];
   const canPublish = draft.items.length > 0 && errors.length === 0;
-  const liveHasItems = (live.data?.items.length ?? 0) > 0;
+  const editingItem = editingTempId
+    ? (draft.items.find((i) => i.tempId === editingTempId) ?? null)
+    : null;
 
-  /** Seed the draft from the live menu so a small change doesn't mean retyping. */
-  function loadFromLive() {
-    if (!live.data) return;
-    setDraft(draftFromMenu(live.data));
-    setConfirmLoad(false);
-    toast.success("Loaded the live menu — edit or add items, then publish.");
+  /** Replace one staged item in place — the fix for edits duplicating items. */
+  function saveEditedItem(updated: DraftItem) {
+    setDraft((d) => ({
+      ...d,
+      items: d.items.map((i) => (i.tempId === updated.tempId ? updated : i)),
+    }));
+    setEditingTempId(null);
+    toast.success("Item updated — publish to apply it.");
   }
 
-  /** Guard against silently discarding staged work. */
-  function startFromLive() {
-    if (draft.items.length > 0 || draft.groups.length > 0) {
-      setConfirmLoad(true);
-    } else {
-      loadFromLive();
+  /**
+   * Edit a live (published) item. Publishing replaces the whole menu with the
+   * draft, so the draft must hold the entire live menu first — otherwise the
+   * rest of the menu would be dropped. Seed it once (keeping any custom staged
+   * items), then open the dialog on that item's draft counterpart.
+   */
+  function editLiveItem(itemId: number) {
+    if (!live.data) return;
+    const tempId = `item-${itemId}`;
+    if (draft.items.some((i) => i.tempId === tempId)) {
+      setEditingTempId(tempId);
+      return;
     }
+    const seeded = draftFromMenu(live.data);
+    const customItems = draft.items.filter((i) => !i.tempId.startsWith("item-"));
+    const customGroups = draft.groups.filter((g) => !g.tempId.startsWith("group-"));
+    setDraft({
+      groups: [...seeded.groups, ...customGroups],
+      items: [...seeded.items, ...customItems],
+    });
+    setEditingTempId(tempId);
   }
 
   async function publish() {
@@ -129,36 +156,15 @@ export default function AdminMenuPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <LiveMenu live={live} />
+        <LiveMenu live={live} onEditItem={editLiveItem} />
 
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">Next version</CardTitle>
-                  <CardDescription>
-                    Staged here and published all at once. Nothing goes live until you publish.
-                  </CardDescription>
-                </div>
-                {liveHasItems && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={startFromLive}
-                  >
-                    <CopyPlus className="mr-1.5 size-3.5" aria-hidden />
-                    Start from live menu
-                  </Button>
-                )}
-              </div>
-              {liveHasItems && (
-                <p className="mt-2 text-xs text-faint">
-                  To edit the live menu or add a few items, load it here, make your changes, then
-                  publish a new version.
-                </p>
-              )}
+              <CardTitle className="text-base">Next version</CardTitle>
+              <CardDescription>
+                Staged here and published all at once. Nothing goes live until you publish.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <GroupBuilder
@@ -170,6 +176,7 @@ export default function AdminMenuPage() {
                 draft={draft}
                 products={products.data ?? []}
                 onChange={(items) => setDraft((d) => ({ ...d, items }))}
+                onEditItem={setEditingTempId}
               />
 
               {errors.length > 0 && (
@@ -206,19 +213,24 @@ export default function AdminMenuPage() {
         onConfirm={publish}
       />
 
-      <ConfirmDialog
-        open={confirmLoad}
-        onOpenChange={setConfirmLoad}
-        title="Replace staged items?"
-        description="Loading the live menu will replace what you've staged so far. This can't be undone."
-        confirmLabel="Load live menu"
-        onConfirm={loadFromLive}
-      />
+      {editingItem && (
+        <ItemEditDialog
+          item={editingItem}
+          onSave={saveEditedItem}
+          onClose={() => setEditingTempId(null)}
+        />
+      )}
     </div>
   );
 }
 
-function LiveMenu({ live }: { live: ReturnType<typeof usePublishedMenu> }) {
+function LiveMenu({
+  live,
+  onEditItem,
+}: {
+  live: ReturnType<typeof usePublishedMenu>;
+  onEditItem: (itemId: number) => void;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -257,6 +269,7 @@ function LiveMenu({ live }: { live: ReturnType<typeof usePublishedMenu> }) {
                 <TableHead>Item</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Price</TableHead>
+                <TableHead className="w-12 text-right">Edit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -289,6 +302,16 @@ function LiveMenu({ live }: { live: ReturnType<typeof usePublishedMenu> }) {
                   <TableCell className="text-muted">{item.category ?? "-"}</TableCell>
                   <TableCell className="text-right tabular-nums text-content">
                     {minorToDecimalString(item.price_minor)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => onEditItem(item.id)}
+                      className="text-faint transition hover:text-brand"
+                      aria-label={`Edit ${item.name}`}
+                    >
+                      <Pencil className="size-4" aria-hidden />
+                    </button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -455,10 +478,12 @@ function ItemBuilder({
   draft,
   products,
   onChange,
+  onEditItem,
 }: {
   draft: MenuDraft;
   products: SellableProduct[];
   onChange: (items: DraftItem[]) => void;
+  onEditItem: (tempId: string) => void;
 }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -553,6 +578,14 @@ function ItemBuilder({
                 </p>
               </div>
               <span className="shrink-0 text-sm tabular-nums text-muted">{item.price}</span>
+              <button
+                type="button"
+                className="text-faint transition hover:text-brand"
+                onClick={() => onEditItem(item.tempId)}
+                aria-label={`Edit ${item.name}`}
+              >
+                <Pencil className="size-4" aria-hidden />
+              </button>
               <button
                 type="button"
                 className="text-faint hover:text-danger"
@@ -823,6 +856,222 @@ function ItemBuilder({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Edit one staged item in place. Combo components and option groups are carried
+ * over untouched — this dialog covers the everyday fields (name, price, the
+ * public detail fields, image).
+ */
+function ItemEditDialog({
+  item,
+  onSave,
+  onClose,
+}: {
+  item: DraftItem;
+  onSave: (item: DraftItem) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(item.name);
+  const [price, setPrice] = useState(item.price);
+  const [category, setCategory] = useState(item.category ?? "");
+  const [description, setDescription] = useState(item.description ?? "");
+  const [calories, setCalories] = useState(item.calories != null ? String(item.calories) : "");
+  const [prepTime, setPrepTime] = useState(
+    item.prep_time_minutes != null ? String(item.prep_time_minutes) : "",
+  );
+  const [imageUrl, setImageUrl] = useState(item.image_url ?? "");
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function save() {
+    if (!name.trim() || !/^\d+(\.\d{1,2})?$/.test(price)) {
+      toast.error("An item needs a name and a price like 250.00");
+      return;
+    }
+    onSave({
+      ...item,
+      name: name.trim(),
+      price,
+      category: category.trim() || undefined,
+      image_url: imageUrl.trim() || undefined,
+      description: description.trim() || undefined,
+      calories: calories.trim() ? Number(calories) : null,
+      prep_time_minutes: prepTime.trim() ? Number(prepTime) : null,
+    });
+  }
+
+  const preview = resolveImageUrl(imageUrl) ?? imageUrl;
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit item</DialogTitle>
+          <DialogDescription>Changes apply when you publish the next version.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          {item.is_combo && (
+            <p className="rounded-lg border border-line bg-surface-2 p-2 text-xs text-faint">
+              This is a combo — its components and option groups are kept as they are.
+            </p>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs" htmlFor="edit-name">
+                Name
+              </Label>
+              <Input
+                id="edit-name"
+                className="h-9"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs" htmlFor="edit-price">
+                Price
+              </Label>
+              <Input
+                id="edit-price"
+                className="h-9"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="edit-category">
+              Category
+            </Label>
+            <Input
+              id="edit-category"
+              className="h-9"
+              placeholder="Mains"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs" htmlFor="edit-description">
+              Description <span className="text-faint">(optional)</span>
+            </Label>
+            <Textarea
+              id="edit-description"
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs" htmlFor="edit-calories">
+                Calories <span className="text-faint">(optional)</span>
+              </Label>
+              <Input
+                id="edit-calories"
+                className="h-9"
+                inputMode="numeric"
+                placeholder="580"
+                value={calories}
+                onChange={(e) => setCalories(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs" htmlFor="edit-prep-time">
+                Prep time <span className="text-faint">(optional)</span>
+              </Label>
+              <Input
+                id="edit-prep-time"
+                className="h-9"
+                inputMode="numeric"
+                placeholder="25"
+                value={prepTime}
+                onChange={(e) => setPrepTime(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Product image</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                e.target.value = "";
+                if (file.size > 10 * 1024 * 1024) {
+                  toast.error("Image must be under 10 MB");
+                  return;
+                }
+                setUploading(true);
+                try {
+                  setImageUrl(await posAdminApi.uploadMenuImage(file));
+                } catch (err) {
+                  toast.error(imageUploadErrorMessage(err));
+                } finally {
+                  setUploading(false);
+                }
+              }}
+            />
+            {imageUrl ? (
+              <div className="relative inline-block">
+                <img
+                  src={preview}
+                  alt="Preview"
+                  className="h-20 w-20 rounded-xl border border-line object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setImageUrl("")}
+                  className="absolute -top-1.5 -right-1.5 flex size-5 items-center justify-center rounded-full bg-danger text-white shadow-soft"
+                  aria-label="Remove image"
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-20 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface-2 text-sm text-muted transition hover:border-brand/50 hover:text-content disabled:opacity-50"
+              >
+                {uploading ? (
+                  <>
+                    <span className="size-4 animate-spin rounded-full border-2 border-muted border-t-brand" />
+                    Uploading…
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="size-4" />
+                    Upload image
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save}>Save changes</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
