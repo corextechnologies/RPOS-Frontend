@@ -55,7 +55,12 @@ export function KotDialog({
             <div className="text-center">
               <p className="text-base font-semibold text-content">{kot.order_no}</p>
               <p className="text-xs uppercase text-muted">
-                {kot.order_type.replace(/_/g, " ")} · {kot.channel.toLowerCase()}
+                {/* Both are display-only labels; the server can omit either, and
+                    a missing one must not take the whole ticket down. Drop the
+                    separator cleanly when only one is present. */}
+                {[kot.order_type?.replace(/_/g, " "), kot.channel?.toLowerCase()]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             </div>
 

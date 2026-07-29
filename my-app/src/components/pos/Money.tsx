@@ -16,11 +16,17 @@ export function Money({
   className,
   emphasis = false,
 }: {
-  minor: Minor;
+  minor: Minor | null | undefined;
   className?: string;
   emphasis?: boolean;
 }) {
   const { currency, minorUnits } = usePosCurrency();
+  // A missing amount is a not-yet-priced order (tax isn't known until the
+  // tender is chosen), not a float leak — degrade to a dash rather than let
+  // `formatMinor`'s integer assertion tear down the surrounding screen.
+  const text = Number.isInteger(minor)
+    ? formatMinor(minor as Minor, currency, minorUnits)
+    : "—";
   return (
     <span
       className={cn(
@@ -29,7 +35,7 @@ export function Money({
         className,
       )}
     >
-      {formatMinor(minor, currency, minorUnits)}
+      {text}
     </span>
   );
 }

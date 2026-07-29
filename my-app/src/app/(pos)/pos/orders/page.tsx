@@ -151,7 +151,7 @@ function OrderRow({
         className="min-w-0 flex-1 text-left"
         aria-label={`Open ${order.order_no}`}
       >
-        <p className="flex items-center gap-2 text-sm font-medium text-content">
+        <div className="flex items-center gap-2 text-sm font-medium text-content">
           <span className="truncate font-mono text-xs">{order.order_no}</span>
           <Badge variant={order.status === "SENT" ? "secondary" : "outline"}>
             {order.status.toLowerCase()}
@@ -162,7 +162,7 @@ function OrderRow({
               flagged
             </Badge>
           )}
-        </p>
+        </div>
         <p className="text-xs text-muted">
           {order.lines.filter((l) => l.parent_line_id === null).length} item(s) ·{" "}
           {formatDate(order.created_at)}

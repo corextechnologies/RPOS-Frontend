@@ -82,7 +82,12 @@ export function TenderDialog({
 
   // `dueOverride` is the server's own correction from a 409 `overpayment` — it
   // outranks our arithmetic by definition.
-  const due = dueOverride ?? quote.data?.total_minor ?? order.due_minor ?? order.total_minor;
+  // Every fallback here is typed non-null, but the server can still send a null
+  // `*_minor` on a partially-priced order. Coalesce to 0 so the value handed to
+  // `minorToDecimalString`/`formatMinor` below is always an integer — those
+  // throw on undefined/null rather than degrade.
+  const due =
+    dueOverride ?? quote.data?.total_minor ?? order.due_minor ?? order.total_minor ?? 0;
 
   let tenderedMinor: number | null = null;
   try {
@@ -114,8 +119,11 @@ export function TenderDialog({
         },
       });
 
-      if (res.change_minor > 0) {
-        setChange(res.change_minor);
+      // `change_minor` is null for card / non-cash tenders — coalesce before it
+      // reaches the change screen, which formats it.
+      const changeMinor = res.change_minor ?? 0;
+      if (changeMinor > 0) {
+        setChange(changeMinor);
         return; // hold the dialog open on the change screen
       }
       toast.success("Paid");

@@ -392,8 +392,8 @@ export interface KotLine {
 /** Deliberately carries no prices — the kitchen makes food, not money. */
 export interface KotPayload {
   order_no: string;
-  order_type: OrderType;
-  channel: OrderChannel;
+  order_type?: OrderType | null;
+  channel?: OrderChannel | null;
   lines: KotLine[];
   vehicle_plate?: string | null;
   vehicle_colour?: string | null;
@@ -436,7 +436,13 @@ export interface PaymentResult {
   order_id: number;
   method: PaymentMethod;
   amount_minor: Minor;
-  change_minor: Minor;
+  /**
+   * Nullable by server design: `null` for card / non-cash tenders, or before a
+   * cash amount is entered. Handle the null at the boundary — never feed it
+   * straight into `formatMinor`/`minorToDecimalString`, which throw on non-integers.
+   */
+  tendered_minor?: Minor | null;
+  change_minor: Minor | null;
   status: "CAPTURED" | "VOIDED" | (string & {});
   created_at: string;
 }

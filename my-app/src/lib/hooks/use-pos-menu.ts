@@ -80,10 +80,19 @@ export function useResolvedMenu(version?: number) {
     );
     return (menu.data?.items ?? []).map((item) => {
       const live = rows.get(item.id);
+      // Zero on-hand means out of stock, full stop — even if the row still says
+      // `is_available: true`. Sending such a line 409s at the server; catching it
+      // here greys the tile out before it can be added, instead of after. `null`
+      // on_hand means "not stock-tracked" (combos, made-to-order) — left alone.
+      const soldOut = live?.on_hand === 0;
       return {
         ...item,
-        available: live ? live.is_available : item.is_available,
-        reason: live ? live.reason : item.unavailable_reason,
+        available: soldOut ? false : live ? live.is_available : item.is_available,
+        reason: soldOut
+          ? (live?.reason ?? "Out of stock")
+          : live
+            ? live.reason
+            : item.unavailable_reason,
         onHand: live?.on_hand ?? null,
       };
     });
