@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Send, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import {
   useCompleteProductionTarget,
   useMarkProductionLineProduced,
 } from "@/lib/hooks/use-production-targets";
+import { newIdempotencyKey } from "@/lib/pos/idempotency";
 import { allLinesProduced, isMadeLine } from "@/lib/production-targets/lifecycle";
 import { PRODUCT_KIND_LABEL, productKindBadgeVariant } from "@/lib/product-kind";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,12 @@ export function ProductionTargetProduceCard({ target }: { target: ProductionTarg
 
   const [expanded, setExpanded] = useState(false);
   const [producingLine, setProducingLine] = useState<ProductionTargetLine | null>(null);
+  // The key for the line currently in the dialog — held in state (set on open) so
+  // render never reads a ref.
+  const [producingKey, setProducingKey] = useState<string | undefined>(undefined);
+  // Per-line produce Idempotency-Keys, stable across retries so a retried "Mark
+  // made" replays the run instead of crediting stock twice.
+  const lineKeys = useRef<Record<string, string>>({});
 
   const ready = allLinesProduced(target.lines);
   const madeCount = target.lines.filter((l) => l.produced).length;
@@ -102,7 +109,12 @@ export function ProductionTargetProduceCard({ target }: { target: ProductionTarg
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setProducingLine(line)}
+                      onClick={() => {
+                        const key = lineKeys.current[line.id] ?? newIdempotencyKey();
+                        lineKeys.current[line.id] = key;
+                        setProducingKey(key);
+                        setProducingLine(line);
+                      }}
                     >
                       Mark made
                     </Button>
@@ -149,6 +161,7 @@ export function ProductionTargetProduceCard({ target }: { target: ProductionTarg
         initialQuantity={producingLine?.quantity}
         initialProductName={producingLine?.product_name}
         lockProduct
+        idempotencyKey={producingKey}
         onProduced={() => {
           if (producingLine) markReady(producingLine.id);
           setProducingLine(null);

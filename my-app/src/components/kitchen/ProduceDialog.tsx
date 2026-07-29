@@ -47,6 +47,12 @@ interface ProduceDialogProps {
   initialProductName?: string;
   /** Hide the item picker and fix production to `initialProductId`. */
   lockProduct?: boolean;
+  /**
+   * Sent as the produce `Idempotency-Key`. Mint one per produce intent and reuse
+   * it across retries so a retried "Mark made" replays instead of producing
+   * twice. Omit for surfaces that don't need retry protection.
+   */
+  idempotencyKey?: string;
   /** Called after a successful production run — e.g. to mark a target line ready. */
   onProduced?: (run: ProductionRun) => void;
   title?: string;
@@ -68,6 +74,7 @@ export function ProduceDialog({
   initialQuantity,
   initialProductName,
   lockProduct = false,
+  idempotencyKey,
   onProduced,
   title = "Make something",
   description = "Ingredients come out of kitchen stock before the output goes in.",
@@ -262,9 +269,12 @@ export function ProduceDialog({
               }
               produce.mutate(
                 {
-                  product_id: numericId,
-                  quantity: Number(quantity),
-                  expiry_date: expiryDate || null,
+                  body: {
+                    product_id: numericId,
+                    quantity: Number(quantity),
+                    expiry_date: expiryDate || null,
+                  },
+                  idempotencyKey,
                 },
                 {
                   onSuccess: (run) => {

@@ -18,6 +18,7 @@ import { ProductionTargetProduceCard } from "@/components/kitchen/ProductionTarg
 import { useAuth } from "@/lib/auth";
 import { useKitchenProduction } from "@/lib/hooks/use-kitchen-recipes";
 import { useKitchenProductionTargets } from "@/lib/hooks/use-production-targets";
+import { newIdempotencyKey } from "@/lib/pos/idempotency";
 import { formatDate } from "@/lib/utils";
 import type { ProductionLineRole } from "@/lib/types/branch";
 
@@ -110,6 +111,9 @@ function ProductionTargetsView({ allowed }: { allowed: boolean }) {
 /** Ad-hoc production not tied to a target. */
 function MakeSomethingExtraView({ canMake }: { canMake: boolean }) {
   const [open, setOpen] = useState(false);
+  // One key per opening of the dialog (one batch), so a retried produce replays
+  // instead of double-crediting; a fresh open mints a fresh key for a new batch.
+  const [produceKey, setProduceKey] = useState(() => newIdempotencyKey());
 
   if (!canMake) {
     return (
@@ -131,13 +135,18 @@ function MakeSomethingExtraView({ canMake }: { canMake: boolean }) {
           <p className="text-sm text-muted">
             Make an item off-target — a one-off batch outside today&apos;s targets.
           </p>
-          <Button onClick={() => setOpen(true)}>
+          <Button
+            onClick={() => {
+              setProduceKey(newIdempotencyKey());
+              setOpen(true);
+            }}
+          >
             <Plus className="mr-1.5 size-4" aria-hidden />
             Make something
           </Button>
         </CardContent>
       </Card>
-      <ProduceDialog open={open} onOpenChange={setOpen} />
+      <ProduceDialog open={open} onOpenChange={setOpen} idempotencyKey={produceKey} />
     </>
   );
 }

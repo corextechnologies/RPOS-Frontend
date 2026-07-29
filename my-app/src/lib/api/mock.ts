@@ -73,7 +73,9 @@ import type {
 } from "@/lib/types/kitchen";
 import {
   KITCHEN_DUPLICATE_COUNT_LINE,
+  KITCHEN_INVALID_REQUEST_TYPE,
   KITCHEN_INVALID_TRANSITION,
+  KITCHEN_LINES_NOT_ALL_PRODUCED,
   MISSING_KITCHEN_ASSIGNMENT,
 } from "@/lib/types/kitchen";
 import type {
@@ -214,6 +216,13 @@ const SESSION_KEY = "ros-super-admin-session";
  */
 const matchesProductId = (storedId: string, wireId: number | string): boolean =>
   Number(String(storedId).replace(/\D/g, "")) === Number(wireId);
+
+/**
+ * Idempotency-Key → the run it first produced. Session-scoped (a plain Map, not
+ * persisted) — enough to mirror the live replay so a retried "Mark made" returns
+ * the original run instead of producing and crediting stock twice.
+ */
+const producedByIdempotencyKey = new Map<string, ProductionRun>();
 /**
  * Bump this whenever `MockDb`'s SHAPE changes, not just its contents — an
  * existing database in localStorage is reseeded only on a version change, so a
@@ -224,7 +233,7 @@ const matchesProductId = (storedId: string, wireId: number | string): boolean =>
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 26;
+const SEED_VERSION = 27;
 
 interface MockInvoiceRecord {
   id: number;
@@ -2242,7 +2251,7 @@ function toPublicStockCount(count: MockStockCount): KitchenStockCount {
  * Only ever called for requests already filtered to kitchen-visible ones, so the
  * narrowing is safe: a warehouse PO never reaches it.
  */
-function toPublicKitchenRequest(req: MockStockRequest): KitchenRequest {
+function toPublicKitchenRequest(req: MockStockRequest, db: MockDb): KitchenRequest {
   return {
     id: req.id,
     restaurant_id: req.restaurant_id,
@@ -2263,6 +2272,9 @@ function toPublicKitchenRequest(req: MockStockRequest): KitchenRequest {
       product_name: line.product_name,
       quantity_requested: line.quantity_requested,
       quantity_approved: line.quantity_approved ?? null,
+      produced: Boolean(line.produced),
+      // The line's product decides made-vs-resale for the kitchen's checklist.
+      kind: db.products.find((p) => p.id === line.product_id)?.kind ?? "FINISHED_GOOD",
     })),
     // Only a dispatch request carries these — the per-branch split the kitchen
     // dispatches against.
@@ -2276,6 +2288,7 @@ function toPublicKitchenRequest(req: MockStockRequest): KitchenRequest {
  */
 function paginateKitchenRequests(
   source: MockStockRequest[],
+  db: MockDb,
   filters?: KitchenRequestFilters,
 ): Paginated<KitchenRequest> {
   const page = filters?.page ?? 1;
@@ -2292,7 +2305,7 @@ function paginateKitchenRequests(
 
   const start = (page - 1) * page_size;
   return {
-    items: all.slice(start, start + page_size).map(toPublicKitchenRequest),
+    items: all.slice(start, start + page_size).map((r) => toPublicKitchenRequest(r, db)),
     page,
     page_size,
     total: all.length,
@@ -5752,7 +5765,7 @@ export const mockClient: ApiClient = {
     db.requests.push(created);
 
     saveDb(db);
-    return delay(toPublicKitchenRequest(created));
+    return delay(toPublicKitchenRequest(created, db));
   },
 
   async listKitchenWarehouseRequests(filters?: KitchenRequestFilters) {
@@ -5765,6 +5778,7 @@ export const mockClient: ApiClient = {
           (r) =>
             r.type === "KITCHEN_TO_WAREHOUSE" && r.source_location_id === kitchen.id,
         ),
+        db,
         filters,
       ),
     );
@@ -5784,6 +5798,7 @@ export const mockClient: ApiClient = {
             r.target_location_type === "KITCHEN" &&
             r.target_location_id === kitchen.id,
         ),
+        db,
         filters,
       ),
     );
@@ -5858,7 +5873,7 @@ export const mockClient: ApiClient = {
     db.requests.push(created);
 
     saveDb(db);
-    return delay(toPublicKitchenRequest(created));
+    return delay(toPublicKitchenRequest(created, db));
   },
 
   async listKitchenDispatchRequests(filters?: KitchenRequestFilters) {
@@ -5871,6 +5886,7 @@ export const mockClient: ApiClient = {
           (r) =>
             r.type === "KITCHEN_TO_ADMIN" && r.source_location_id === kitchen.id,
         ),
+        db,
         filters,
       ),
     );
@@ -5905,7 +5921,7 @@ export const mockClient: ApiClient = {
     }));
     found.updated_at = now();
     saveDb(db);
-    return delay(toPublicKitchenRequest(found));
+    return delay(toPublicKitchenRequest(found, db));
   },
 
   async getKitchenRequest(requestId: string) {
@@ -5913,7 +5929,35 @@ export const mockClient: ApiClient = {
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
     const found = findKitchenVisibleRequest(db, kitchen, requestId);
-    return delay(toPublicKitchenRequest(found));
+    return delay(toPublicKitchenRequest(found, db));
+  },
+
+  async markKitchenRequestLineProduced(requestId: string, lineId: string) {
+    const me = requireAuth();
+    requireKitchenManager(me);
+    const db = loadDb();
+    const kitchen = resolveMyKitchen(db, me);
+    const found = findKitchenVisibleRequest(db, kitchen, requestId);
+
+    if (found.type !== "BRANCH_TO_ADMIN") {
+      throw new ApiError("Not a branch request", 409, KITCHEN_INVALID_REQUEST_TYPE);
+    }
+    if (found.status !== "IN_PRODUCTION") {
+      throw new ApiError(
+        "Request isn't in production.",
+        409,
+        KITCHEN_INVALID_TRANSITION,
+      );
+    }
+    const line = found.line_items.find((l) => l.id === lineId);
+    if (!line) throw new ApiError("Line not found", 404);
+
+    // Idempotent: marking an already-produced line is a safe no-op, so a
+    // tick-only retry after a failed tick always succeeds.
+    line.produced = true;
+    found.updated_at = now();
+    saveDb(db);
+    return delay(toPublicKitchenRequest(found, db));
   },
 
   async updateKitchenRequestStatus(
@@ -5938,9 +5982,28 @@ export const mockClient: ApiClient = {
       );
     }
 
-    // DISPATCHED (branch refill) is the kitchen move that touches stock.
-    // IN_PRODUCTION and PRODUCED are markers: there is no recipe/BOM yet,
-    // so producing consumes nothing. If stock is short the status must not move.
+    // Branch requests now require every non-exempt line to be produced before
+    // they can advance to PRODUCED — the kitchen makes each line in place. A
+    // line zeroed by partial approval is exempt (it can't be produced).
+    if (body.to_status === "PRODUCED" && found.type === "BRANCH_TO_ADMIN") {
+      const unproduced = found.line_items.filter(
+        (line) => line.quantity_approved !== 0 && !line.produced,
+      );
+      if (unproduced.length > 0) {
+        throw new ApiError(
+          "Every line must be marked produced before the request can advance.",
+          409,
+          KITCHEN_LINES_NOT_ALL_PRODUCED,
+          {
+            unproduced_line_ids: unproduced.map((line) => line.id),
+            unproduced_count: unproduced.length,
+          },
+        );
+      }
+    }
+
+    // DISPATCHED (branch refill) is the kitchen move that touches stock. If stock
+    // is short the status must not move.
     if (body.to_status === "DISPATCHED" && found.type === "BRANCH_TO_ADMIN") {
       applyAllocationToKitchenStock(db, kitchen, found);
     }
@@ -5956,7 +6019,7 @@ export const mockClient: ApiClient = {
     found.updated_at = now();
 
     saveDb(db);
-    return delay(toPublicKitchenRequest(found));
+    return delay(toPublicKitchenRequest(found, db));
   },
 
   // ---- Kitchen: finished goods, recipes, production ----
@@ -6132,11 +6195,20 @@ export const mockClient: ApiClient = {
     return delay(found);
   },
 
-  async produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun> {
+  async produceKitchenProduct(
+    body: KitchenProduceInput,
+    idempotencyKey?: string,
+  ): Promise<ProductionRun> {
     const me = requireAuth();
     requireKitchenManager(me);
     const db = loadDb();
     const kitchen = resolveMyKitchen(db, me);
+
+    // Replay: a repeated key returns the original run and moves no stock.
+    if (idempotencyKey) {
+      const prior = producedByIdempotencyKey.get(idempotencyKey);
+      if (prior) return delay(prior);
+    }
 
     const product = db.products.find((p) => matchesProductId(p.id, body.product_id));
     if (!product) throw new ApiError("Product not found", 404);
@@ -6258,6 +6330,7 @@ export const mockClient: ApiClient = {
 
     db.production_runs.push(run);
     saveDb(db);
+    if (idempotencyKey) producedByIdempotencyKey.set(idempotencyKey, run);
     return delay(run);
   },
 

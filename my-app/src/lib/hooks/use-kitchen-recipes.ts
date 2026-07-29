@@ -72,10 +72,21 @@ export function useKitchenProduction() {
   });
 }
 
+/**
+ * `idempotencyKey` (optional) rides the produce request so a retried "Mark made"
+ * replays the original run instead of double-producing. Callers mint one key per
+ * produce intent and reuse it across retries.
+ */
 export function useProduceKitchenProduct() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: KitchenProduceInput) => api.produceKitchenProduct(body),
+    mutationFn: ({
+      body,
+      idempotencyKey,
+    }: {
+      body: KitchenProduceInput;
+      idempotencyKey?: string;
+    }) => api.produceKitchenProduct(body, idempotencyKey),
     onSuccess: (run) => {
       qc.invalidateQueries({ queryKey: kitchenRecipeKeys.production });
       // A run both consumes and creates kitchen stock, so inventory moved.
