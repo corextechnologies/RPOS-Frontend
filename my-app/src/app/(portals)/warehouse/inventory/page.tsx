@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AdjustStockDialog } from "@/components/warehouse/inventory/AdjustStockDialog";
 import { EditExpiryDialog } from "@/components/warehouse/inventory/EditExpiryDialog";
 import { InventoryTable } from "@/components/warehouse/inventory/InventoryTable";
@@ -34,6 +34,14 @@ export default function WarehouseInventoryPage() {
   const [search, setSearch] = useState("");
 
   const unassigned = isMissingWarehouseAssignment(inventory.error);
+
+  // Once a product's on-hand quantity reaches zero it's out of stock, so it
+  // drops out of the inventory list rather than lingering as a 0-qty row. The
+  // catalog product still exists and can be restocked via stock receipt.
+  const inStock = useMemo(
+    () => inventory.data?.filter((item) => item.quantity > 0),
+    [inventory.data],
+  );
 
   const handleAdjust = async (values: AdjustStockForm) => {
     if (!adjusting) return;
@@ -114,7 +122,7 @@ export default function WarehouseInventoryPage() {
         <WarehouseUnassigned />
       ) : (
         <InventoryTable
-          items={inventory.data}
+          items={inStock}
           isLoading={inventory.isLoading}
           isError={inventory.isError}
           onRetry={() => inventory.refetch()}

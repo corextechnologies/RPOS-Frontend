@@ -2,11 +2,13 @@
 
 import { useRef, useState } from "react";
 import {
+  ChevronDown,
   ImagePlus,
   Layers,
   Lock,
   Pencil,
   Plus,
+  Search,
   Send,
   Trash2,
   TriangleAlert,
@@ -26,7 +28,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -87,6 +88,10 @@ export default function AdminMenuPage() {
   const [publishing, setPublishing] = useState(false);
   // tempId of the draft item currently open in the edit dialog.
   const [editingTempId, setEditingTempId] = useState<string | null>(null);
+  // A blank item being composed in the add dialog (null = closed).
+  const [addingItem, setAddingItem] = useState<DraftItem | null>(null);
+  // Live item pending delete-confirmation (null = no prompt).
+  const [deletingItem, setDeletingItem] = useState<{ id: number; name: string } | null>(null);
 
   const errors = draft.items.length ? validateDraft(draft) : [];
   const canPublish = draft.items.length > 0 && errors.length === 0;
@@ -94,14 +99,115 @@ export default function AdminMenuPage() {
     ? (draft.items.find((i) => i.tempId === editingTempId) ?? null)
     : null;
 
-  /** Replace one staged item in place — the fix for edits duplicating items. */
-  function saveEditedItem(updated: DraftItem) {
-    setDraft((d) => ({
-      ...d,
-      items: d.items.map((i) => (i.tempId === updated.tempId ? updated : i)),
-    }));
-    setEditingTempId(null);
-    toast.success("Item updated — publish to apply it.");
+  // The draft starts as a copy of the live menu, so adding/editing/removing an
+  // item and publishing updates the live menu instead of replacing it with just
+  // the staged item. Seed once per published version while the draft is empty
+  // (initial load, and after a publish resets it to the new live menu). Adjusting
+  // state during render — guarded against a loop — is the React-blessed way to
+  // derive state from changing props without an effect.
+  const [seededVersion, setSeededVersion] = useState<number | null>(null);
+  const liveVersion = live.data?.menu_version_id ?? null;
+  if (
+    liveVersion != null &&
+    seededVersion !== liveVersion &&
+    draft.items.length === 0 &&
+    draft.groups.length === 0
+  ) {
+    setSeededVersion(liveVersion);
+    if (live.data && live.data.items.length > 0) {
+      setDraft(draftFromMenu(live.data));
+    }
+  }
+
+  /**
+   * Apply the edit in place, then publish straight away so the change lands on
+   * the live menu. Because editLiveItem seeds the whole live menu into the draft
+   * first, publishing this draft is "the live menu with just this edit". On
+   * failure the edit stays staged so it can be retried from the Publish button.
+   */
+  async function saveEditedItem(updated: DraftItem) {
+    const nextDraft: MenuDraft = {
+      ...draft,
+      items: draft.items.map((i) => (i.tempId === updated.tempId ? updated : i)),
+    };
+    setDraft(nextDraft);
+    setPublishing(true);
+    try {
+      await publishDraft(nextDraft, posAdminApi);
+      setDraft({ groups: [], items: [] });
+      qc.invalidateQueries({ queryKey: ["pos-admin-menu"] });
+      setEditingTempId(null);
+      toast.success("Saved — the live menu is updated.");
+    } catch (err) {
+      toast.error(posErrorMessage(err));
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  /** Open the add-item dialog with a fresh blank (non-combo) item. */
+  function openAddItem() {
+    setAddingItem({
+      tempId: tempId(),
+      name: "",
+      price: "",
+      product_id: null,
+      is_combo: false,
+      componentTempIds: [],
+      groupTempIds: [],
+    });
+  }
+
+  /**
+   * Append a new item and publish. The draft already holds the live menu (it is
+   * seeded on load), so publishing lands the new item on top of the current menu
+   * rather than replacing it.
+   */
+  async function saveNewItem(newItem: DraftItem) {
+    const nextDraft: MenuDraft = { ...draft, items: [...draft.items, newItem] };
+    setDraft(nextDraft);
+    setPublishing(true);
+    try {
+      await publishDraft(nextDraft, posAdminApi);
+      setDraft({ groups: [], items: [] });
+      qc.invalidateQueries({ queryKey: ["pos-admin-menu"] });
+      setAddingItem(null);
+      toast.success("Added — the live menu is updated.");
+    } catch (err) {
+      toast.error(posErrorMessage(err));
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  /**
+   * Remove a live item and publish. The draft holds the whole live menu (seeded
+   * on load), so publishing it without this item drops just that one. Guards the
+   * last-item case via the normal publish validation.
+   */
+  async function confirmDeleteLiveItem() {
+    if (!deletingItem || !live.data) return;
+    const tempId = `item-${deletingItem.id}`;
+    const base = draft.items.some((i) => i.tempId.startsWith("item-"))
+      ? draft
+      : draftFromMenu(live.data);
+    const nextDraft: MenuDraft = {
+      ...base,
+      items: base.items.filter((i) => i.tempId !== tempId),
+    };
+    setDraft(nextDraft);
+    setPublishing(true);
+    try {
+      await publishDraft(nextDraft, posAdminApi);
+      setDraft({ groups: [], items: [] });
+      qc.invalidateQueries({ queryKey: ["pos-admin-menu"] });
+      setDeletingItem(null);
+      toast.success("Removed — the live menu is updated.");
+    } catch (err) {
+      toast.error(posErrorMessage(err));
+    } finally {
+      setPublishing(false);
+    }
   }
 
   /**
@@ -156,14 +262,20 @@ export default function AdminMenuPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <LiveMenu live={live} onEditItem={editLiveItem} />
+        <LiveMenu
+          live={live}
+          onEditItem={editLiveItem}
+          onAddItem={openAddItem}
+          onDeleteItem={setDeletingItem}
+        />
 
         <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Next version</CardTitle>
               <CardDescription>
-                Staged here and published all at once. Nothing goes live until you publish.
+                Starts as a copy of the live menu. Add, edit, or remove items, then publish to
+                update the whole menu at once.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -176,7 +288,6 @@ export default function AdminMenuPage() {
                 draft={draft}
                 products={products.data ?? []}
                 onChange={(items) => setDraft((d) => ({ ...d, items }))}
-                onEditItem={setEditingTempId}
               />
 
               {errors.length > 0 && (
@@ -216,10 +327,34 @@ export default function AdminMenuPage() {
       {editingItem && (
         <ItemEditDialog
           item={editingItem}
+          mode="edit"
+          products={products.data ?? []}
+          saving={publishing}
           onSave={saveEditedItem}
           onClose={() => setEditingTempId(null)}
         />
       )}
+
+      {addingItem && (
+        <ItemEditDialog
+          item={addingItem}
+          mode="add"
+          products={products.data ?? []}
+          saving={publishing}
+          onSave={saveNewItem}
+          onClose={() => setAddingItem(null)}
+        />
+      )}
+
+      <ConfirmDialog
+        open={deletingItem !== null}
+        onOpenChange={(open) => !open && setDeletingItem(null)}
+        title={deletingItem ? `Remove "${deletingItem.name}"?` : "Remove item?"}
+        description="This publishes a new version of the live menu without this item."
+        confirmLabel="Remove"
+        loading={publishing}
+        onConfirm={confirmDeleteLiveItem}
+      />
     </div>
   );
 }
@@ -227,22 +362,34 @@ export default function AdminMenuPage() {
 function LiveMenu({
   live,
   onEditItem,
+  onAddItem,
+  onDeleteItem,
 }: {
   live: ReturnType<typeof usePublishedMenu>;
   onEditItem: (itemId: number) => void;
+  onAddItem: () => void;
+  onDeleteItem: (item: { id: number; name: string }) => void;
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          Live menu
-          <Lock className="size-3.5 text-faint" aria-label="Immutable" />
-        </CardTitle>
-        <CardDescription>
-          {live.data
-            ? `Version ${live.data.menu_version_id} · ${live.data.items.length} item(s)`
-            : "Nothing published yet"}
-        </CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              Live menu
+              <Lock className="size-3.5 text-faint" aria-label="Immutable" />
+            </CardTitle>
+            <CardDescription>
+              {live.data
+                ? `Version ${live.data.menu_version_id} · ${live.data.items.length} item(s)`
+                : "Nothing published yet"}
+            </CardDescription>
+          </div>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={onAddItem}>
+            <Plus className="mr-1.5 size-3.5" aria-hidden />
+            Add item
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         {live.isLoading ? (
@@ -269,7 +416,7 @@ function LiveMenu({
                 <TableHead>Item</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Price</TableHead>
-                <TableHead className="w-12 text-right">Edit</TableHead>
+                <TableHead className="w-20 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -304,14 +451,24 @@ function LiveMenu({
                     {minorToDecimalString(item.price_minor)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <button
-                      type="button"
-                      onClick={() => onEditItem(item.id)}
-                      className="text-faint transition hover:text-brand"
-                      aria-label={`Edit ${item.name}`}
-                    >
-                      <Pencil className="size-4" aria-hidden />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onEditItem(item.id)}
+                        className="text-faint transition hover:text-brand"
+                        aria-label={`Edit ${item.name}`}
+                      >
+                        <Pencil className="size-4" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteItem({ id: item.id, name: item.name })}
+                        className="text-faint transition hover:text-danger"
+                        aria-label={`Remove ${item.name}`}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -474,16 +631,121 @@ function GroupBuilder({
   );
 }
 
+/** Label for a catalogue row, e.g. "Coke (resale) — 210.00". */
+function productLabel(p: SellableProduct): string {
+  const kind = p.kind === "RESALE" ? " (resale)" : "";
+  const price = p.selling_price ? ` — ${p.selling_price}` : " — not priced";
+  return `${p.name}${kind}${price}`;
+}
+
+/**
+ * Searchable catalogue picker — a button that opens a panel with a search box
+ * and a filtered list. Replaces a native <select> so products can be filtered
+ * as the list grows. `valueId` is "" for a custom (unlinked) item.
+ */
+function ProductPicker({
+  products,
+  valueId,
+  onPick,
+}: {
+  products: SellableProduct[];
+  valueId: string;
+  onPick: (product: SellableProduct | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = products.find((p) => String(p.id) === valueId) ?? null;
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) || (p.category ?? "").toLowerCase().includes(q),
+      )
+    : products;
+
+  function choose(product: SellableProduct | null) {
+    onPick(product);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-xl border border-line bg-surface-2 px-3 text-sm text-content"
+      >
+        <span className="truncate">{selected ? productLabel(selected) : "Custom item…"}</span>
+        <ChevronDown className="size-4 shrink-0 text-faint" aria-hidden />
+      </button>
+
+      {open && (
+        <>
+          {/* Click-away layer. */}
+          <button
+            type="button"
+            aria-hidden
+            tabIndex={-1}
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-soft">
+            <div className="border-b border-line p-2">
+              <div className="flex items-center gap-2 rounded-lg bg-surface-2 px-2">
+                <Search className="size-3.5 shrink-0 text-faint" aria-hidden />
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search products…"
+                  className="h-8 w-full bg-transparent text-sm text-content outline-none placeholder:text-faint"
+                />
+              </div>
+            </div>
+            <ul className="max-h-56 overflow-y-auto p-1">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => choose(null)}
+                  className="w-full rounded-lg px-2.5 py-1.5 text-left text-sm text-muted transition hover:bg-surface-2"
+                >
+                  Custom item…
+                </button>
+              </li>
+              {filtered.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => choose(p)}
+                    className={`w-full rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-surface-2 ${
+                      String(p.id) === valueId ? "text-brand" : "text-content"
+                    }`}
+                  >
+                    {productLabel(p)}
+                  </button>
+                </li>
+              ))}
+              {filtered.length === 0 && (
+                <li className="px-2.5 py-2 text-sm text-faint">No products match.</li>
+              )}
+            </ul>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ItemBuilder({
   draft,
   products,
   onChange,
-  onEditItem,
 }: {
   draft: MenuDraft;
   products: SellableProduct[];
   onChange: (items: DraftItem[]) => void;
-  onEditItem: (tempId: string) => void;
 }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -554,50 +816,7 @@ function ItemBuilder({
 
   return (
     <div className="space-y-3">
-      <Label className="text-xs uppercase tracking-wide text-faint">Items</Label>
-
-      {draft.items.length > 0 && (
-        <ul className="divide-y divide-line rounded-xl border border-line">
-          {draft.items.map((item) => (
-            <li key={item.tempId} className="flex items-center gap-2 p-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 truncate text-sm text-content">
-                  {item.name}
-                  {item.is_combo && (
-                    <Badge variant="outline" className="gap-1 text-accent">
-                      <Layers className="size-2.5" aria-hidden />
-                      combo
-                    </Badge>
-                  )}
-                </p>
-                <p className="text-xs text-faint">
-                  {item.category ?? "No category"}
-                  {item.groupTempIds.length > 0 && ` · ${item.groupTempIds.length} group(s)`}
-                  {item.componentTempIds.length > 0 &&
-                    ` · ${item.componentTempIds.length} component(s)`}
-                </p>
-              </div>
-              <span className="shrink-0 text-sm tabular-nums text-muted">{item.price}</span>
-              <button
-                type="button"
-                className="text-faint transition hover:text-brand"
-                onClick={() => onEditItem(item.tempId)}
-                aria-label={`Edit ${item.name}`}
-              >
-                <Pencil className="size-4" aria-hidden />
-              </button>
-              <button
-                type="button"
-                className="text-faint hover:text-danger"
-                onClick={() => onChange(draft.items.filter((d) => d.tempId !== item.tempId))}
-                aria-label={`Remove ${item.name}`}
-              >
-                <Trash2 className="size-4" aria-hidden />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <Label className="text-xs uppercase tracking-wide text-faint">Add item</Label>
 
       <div className="space-y-3 rounded-xl border border-line p-3">
         <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2">
@@ -611,20 +830,11 @@ function ItemBuilder({
         {!isCombo && (
           <div className="space-y-1.5">
             <Label className="text-xs">From the catalogue</Label>
-            <select
-              value={productId}
-              onChange={(e) => pick(e.target.value)}
-              className="h-9 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm text-content"
-            >
-              <option value="">Custom item…</option>
-              {products.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.name}
-                  {p.kind === "RESALE" ? " (resale)" : ""}
-                  {p.selling_price ? ` — ${p.selling_price}` : " — not priced"}
-                </option>
-              ))}
-            </select>
+            <ProductPicker
+              products={products}
+              valueId={productId}
+              onPick={(p) => pick(p ? String(p.id) : "")}
+            />
 
             {/*
               A finished good with no recipe can go on a menu, but the kitchen
@@ -866,16 +1076,25 @@ function ItemBuilder({
  */
 function ItemEditDialog({
   item,
+  mode,
+  products,
+  saving,
   onSave,
   onClose,
 }: {
   item: DraftItem;
+  mode: "add" | "edit";
+  products: SellableProduct[];
+  saving: boolean;
   onSave: (item: DraftItem) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(item.name);
   const [price, setPrice] = useState(item.price);
   const [category, setCategory] = useState(item.category ?? "");
+  const [productId, setProductId] = useState(
+    item.product_id != null ? String(item.product_id) : "",
+  );
   const [description, setDescription] = useState(item.description ?? "");
   const [calories, setCalories] = useState(item.calories != null ? String(item.calories) : "");
   const [prepTime, setPrepTime] = useState(
@@ -894,6 +1113,7 @@ function ItemEditDialog({
       ...item,
       name: name.trim(),
       price,
+      product_id: productId ? Number(productId) : null,
       category: category.trim() || undefined,
       image_url: imageUrl.trim() || undefined,
       description: description.trim() || undefined,
@@ -902,21 +1122,47 @@ function ItemEditDialog({
     });
   }
 
+  /** Picking a catalogue product prefills its name, price, and category. */
+  function pickProduct(product: SellableProduct | null) {
+    if (!product) {
+      setProductId("");
+      return;
+    }
+    setProductId(String(product.id));
+    setName(product.name);
+    if (product.selling_price) setPrice(product.selling_price);
+    if (product.category) setCategory(product.category);
+  }
+
   const preview = resolveImageUrl(imageUrl) ?? imageUrl;
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit item</DialogTitle>
-          <DialogDescription>Changes apply when you publish the next version.</DialogDescription>
+          <DialogTitle>{mode === "add" ? "Add item" : "Edit item"}</DialogTitle>
+          <DialogDescription>
+            {mode === "add"
+              ? "The item is added and published to the live menu."
+              : "Saving publishes the change to the live menu."}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          {item.is_combo && (
+          {mode === "edit" && item.is_combo && (
             <p className="rounded-lg border border-line bg-surface-2 p-2 text-xs text-faint">
               This is a combo — its components and option groups are kept as they are.
             </p>
+          )}
+
+          {mode === "add" && products.length > 0 && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">From the catalogue</Label>
+              <ProductPicker products={products} valueId={productId} onPick={pickProduct} />
+              <p className="text-xs text-faint">
+                Pick a product to prefill and link it to stock, or fill in a custom item below.
+              </p>
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
@@ -1065,10 +1311,21 @@ function ItemEditDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={save}>Save changes</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? (
+              <>
+                <span className="mr-1.5 size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                {mode === "add" ? "Adding…" : "Saving…"}
+              </>
+            ) : mode === "add" ? (
+              "Add to menu"
+            ) : (
+              "Save changes"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
