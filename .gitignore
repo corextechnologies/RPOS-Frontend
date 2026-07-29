@@ -38,3 +38,4 @@ package-lock.json
 .claude/
 .claude/launch.json
 .claude/history.json
+my-app/BACKEND_MENU_FIELDS.md
