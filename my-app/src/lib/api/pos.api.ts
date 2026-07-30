@@ -25,6 +25,9 @@ import type {
   OpenShiftInput,
   PaymentInput,
   PaymentResult,
+  PrintResultInput,
+  SyncBatchInput,
+  SyncBatchResult,
   PosActivateInput,
   PosActivateResult,
   PosBootstrap,
@@ -205,6 +208,27 @@ export const posApi = {
   },
 
   // `GET /pos/orders/flagged` is likewise portal-token — see `pos-admin.api.ts`.
+
+  // ---- Sync (offline replay, §9) ----
+
+  /**
+   * Replay queued orders. **No `Idempotency-Key`** — dedup is by each envelope's
+   * `local_id`, so a replay days later is safe and a re-replay is a no-op. Cap
+   * the caller at 50 envelopes; over that the server returns `409 batch_too_large`.
+   * Per-element results: one bad envelope never fails the batch.
+   */
+  syncBatch(input: SyncBatchInput): Promise<SyncBatchResult> {
+    return posRequest<SyncBatchResult>("/pos/sync/batch", { method: "POST", ...json(input) });
+  },
+
+  /**
+   * Report print outcomes for jobs that already have server ids (§11 NEW·P4).
+   * `PRINTED` is terminal — re-reporting is a no-op. Offline prints report via
+   * the sync envelope's `print_results` instead.
+   */
+  printResults(results: PrintResultInput[]): Promise<unknown> {
+    return posRequest<unknown>("/pos/print/results", { method: "POST", ...json(results) });
+  },
 
   // ---- Money ----
 

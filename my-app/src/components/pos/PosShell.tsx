@@ -4,8 +4,19 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { Globe, Loader2, LogOut, Receipt, Settings, Wallet, Utensils } from "lucide-react";
+import {
+  CloudOff,
+  Globe,
+  Loader2,
+  LogOut,
+  Receipt,
+  RefreshCw,
+  Settings,
+  Wallet,
+  Utensils,
+} from "lucide-react";
 import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
+import { usePosSync } from "@/lib/hooks/use-pos-sync";
 import { POS_REGIONS, POS_ROUTES, posSession } from "@/lib/pos/session";
 import { packCountryCode } from "@/lib/pos/capabilities";
 import { cn } from "@/lib/utils";
@@ -107,6 +118,8 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
+          <SyncIndicator />
+
           <Button
             variant="ghost"
             size="icon"
@@ -129,6 +142,43 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
 
 function displayUser(user: PosBootstrapUser): string {
   return user.full_name || user.name || user.email || `User #${user.id}`;
+}
+
+/**
+ * The offline/queue affordance. Mounts `usePosSync` — the one place the drain is
+ * driven for the whole till — and shows what it's doing: a spinner while
+ * draining, the backlog count when the queue is non-empty, and an offline mark
+ * when the browser reports no connection. A tap forces a drain. Nothing here
+ * blocks selling; it is status, not a gate.
+ */
+function SyncIndicator() {
+  const { queued, syncing, offline, drain } = usePosSync();
+
+  // Nothing to say when online, idle, and empty — keep the header quiet.
+  if (!offline && !syncing && queued === 0) return null;
+
+  const label = syncing ? "Syncing…" : offline ? "Offline" : `${queued} queued`;
+  const Icon = syncing ? RefreshCw : offline ? CloudOff : RefreshCw;
+
+  return (
+    <button
+      type="button"
+      onClick={() => void drain()}
+      disabled={syncing}
+      title={queued > 0 ? `${queued} action(s) waiting to sync` : "Sync status"}
+      className={cn(
+        "flex h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-medium transition",
+        offline
+          ? "bg-warning/10 text-warning"
+          : queued > 0
+            ? "bg-accent/10 text-accent"
+            : "text-muted",
+      )}
+    >
+      <Icon className={cn("size-4", syncing && "animate-spin")} aria-hidden />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
 }
 
 /**

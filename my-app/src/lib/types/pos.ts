@@ -465,6 +465,73 @@ export interface KotPayload {
   sent_at?: string | null;
 }
 
+// ---- Sync — the offline replay path (§9) ----
+//
+// `POST /v1/pos/sync/batch` — NO `Idempotency-Key`; dedup is by `local_id`.
+// Max 50 envelopes per call (over 50 → 409 `batch_too_large`). Per-element
+// results, never all-or-nothing: a bad element must not wedge the queue.
+
+/** What already printed offline, so the kitchen doesn't re-emit on reconnect (P3). */
+export interface SyncPrintResult {
+  station_id?: number;
+  kind: "KITCHEN" | "RECEIPT";
+  state: string;
+}
+
+export interface SyncEnvelope {
+  /** The create body — include `local_id`; do NOT set `expected_total_minor`. */
+  order: PosOrderCreate;
+  /** What the device charged offline. */
+  device_total_minor: Minor;
+  /** NEW·P3 — the kitchen ticket was fired offline (server settles stock + sales). */
+  was_sent?: boolean;
+  /** NEW·P3 — advisory only; the server stamps the authoritative time. */
+  device_sent_at?: string;
+  /** NEW·P3 — what already printed offline (double-print guard). */
+  print_results?: SyncPrintResult[];
+}
+
+export interface SyncBatchInput {
+  envelopes: SyncEnvelope[];
+}
+
+export type SyncResultStatus = "accepted" | "duplicate" | "flagged" | "failed";
+
+/** Why the server flagged a sale — it accepted it anyway (accept + flag, never reject). */
+export type FlaggedReason = "PRICE_DRIFT" | "STOCK_OVERSELL" | (string & {});
+
+export interface SyncResult {
+  local_id: string;
+  status: SyncResultStatus;
+  order_id?: number | null;
+  server_total_minor?: Minor | null;
+  settled?: boolean;
+  stock_flagged?: boolean;
+  flagged_reason?: FlaggedReason | null;
+  print_jobs?: Array<{
+    id: number;
+    station_id?: number | null;
+    kind: string;
+    state: string;
+  }>;
+  error?: string | null;
+}
+
+export interface SyncBatchResult {
+  accepted: number;
+  duplicates: number;
+  flagged: number;
+  failed: number;
+  results: SyncResult[];
+}
+
+/** One print outcome reported after the fact (§11 NEW·P4). */
+export interface PrintResultInput {
+  print_job_id: number;
+  state: "PRINTED" | "FAILED";
+  error?: string | null;
+}
+
 // ---- Money / payments ----
 
 export type PaymentMethod = "CASH" | "CARD" | "WALLET" | (string & {});
