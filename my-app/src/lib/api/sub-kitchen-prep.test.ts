@@ -88,9 +88,10 @@ describe("sub-kitchen prep board", () => {
       mockClient.updatePrepStatus("prep-002", { status: "QUEUED" as never }),
     ).rejects.toMatchObject({ code: "invalid_prep_transition" });
 
-    // No recipe and no inputs → nothing to consume.
+    // A batch of a recipe-less item can't be completed without inputs.
+    const cola = await mockClient.createBatchJob({ product_id: 5, quantity: 2 });
     await expect(
-      mockClient.completePrepTicket("prep-002", {}),
+      mockClient.completePrepTicket(cola.id, {}),
     ).rejects.toMatchObject({ code: "no_active_recipe" });
 
     // Asking for more than on-hand fails all-or-nothing.

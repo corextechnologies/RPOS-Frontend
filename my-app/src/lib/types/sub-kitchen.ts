@@ -11,6 +11,8 @@
  * strings the way every other portal read model is.
  */
 
+import type { StockUnit } from "@/lib/stock-unit";
+
 // ---- Prep tickets / board ----
 
 export type PrepSource = "ORDER" | "BATCH";
@@ -93,6 +95,98 @@ export interface CompleteTicketInput {
   inputs?: CompleteInputLine[];
   batch_code?: string | null;
   expiry_date?: string | null;
+}
+
+// ---- Recipes (chef-owned; versioned, never edited in place) ----
+
+export interface SubKitchenRecipeComponentInput {
+  component_product_id: number;
+  /** Per batch, in `unit`; may be fractional. */
+  quantity: number;
+  /** Omit to use the component's own stock unit; must share dimension. */
+  unit?: StockUnit;
+  /** Expected loss in basis points (250 = 2.5%). */
+  wastage_bp?: number;
+}
+
+export interface CreateSubKitchenRecipeInput {
+  product_id: number;
+  /** How many the recipe makes per run. */
+  yield_qty?: number;
+  note?: string | null;
+  components: SubKitchenRecipeComponentInput[];
+}
+
+export interface SubKitchenRecipeComponent {
+  component_product_id: number;
+  component_name?: string;
+  quantity: number;
+  wastage_bp: number;
+  /** How the ingredient is counted on the shelf — use this against on-hand. */
+  stock_unit: StockUnit;
+  /** The unit the quantity was entered in; absent means `stock_unit`. */
+  unit?: StockUnit;
+}
+
+export interface SubKitchenRecipe {
+  id: string;
+  product_id: number;
+  product_name?: string;
+  /** Republishing bumps this and retires the previous version. */
+  version: number;
+  is_active: boolean;
+  yield_qty: number;
+  note?: string | null;
+  components: SubKitchenRecipeComponent[];
+  created_at?: string;
+}
+
+// ---- Branch near-expiry (outside the sub-kitchen namespace) ----
+
+export interface BranchNearExpiryFilters {
+  /** Rows expiring within this many days (default 7). */
+  within_days?: number;
+}
+
+// ---- Sold out (86-ing) ----
+
+export interface SubKitchenAvailabilityRow {
+  menu_item_id: string;
+  product_name?: string;
+  is_available: boolean;
+  reason: string | null;
+  on_hand: number | null;
+  auto_clear_at?: string | null;
+}
+
+/** Body for `PUT /branch/sub-kitchen/availability/{menu_item_id}`. */
+export interface SetAvailabilityInput {
+  is_available: boolean;
+  reason?: string | null;
+  /** Lets an 86 expire on its own (e.g. end of day). */
+  auto_clear_at?: string | null;
+}
+
+// ---- Stats (the sub-kitchen overview) ----
+
+export interface SubKitchenStats {
+  start: string;
+  end: string;
+  items_prepped: number;
+  tickets_completed: number;
+  waste_events: number;
+  waste_quantity: number;
+  /** Null until an order-sourced ticket has been worked. Render as minutes. */
+  avg_order_to_ready_seconds: number | null;
+  /** Live, not window-bound. */
+  open_tickets: number;
+  tickets_created: Record<PrepStatus, number>;
+}
+
+export interface SubKitchenStatsFilters {
+  /** `YYYY-MM-DD`. Defaults to the last 7 days. */
+  start?: string;
+  end?: string;
 }
 
 // ---- Error codes (409) ----

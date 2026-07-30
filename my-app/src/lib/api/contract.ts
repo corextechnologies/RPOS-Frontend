@@ -100,10 +100,17 @@ import type {
 } from "@/lib/types/notification";
 import type { StaffDocumentKind } from "@/lib/types/staff";
 import type {
+  BranchNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
+  CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepTicket,
+  SetAvailabilityInput,
+  SubKitchenAvailabilityRow,
+  SubKitchenRecipe,
+  SubKitchenStats,
+  SubKitchenStatsFilters,
   UpdatePrepStatusInput,
 } from "@/lib/types/sub-kitchen";
 import type {
@@ -466,4 +473,25 @@ export interface ApiClient {
   // finished item back, an ORDER does not.
   completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket>;
   cancelPrepTicket(id: string): Promise<PrepTicket>;
+
+  // Chef-owned recipes — versioned, never edited in place.
+  listSubKitchenRecipes(): Promise<SubKitchenRecipe[]>;
+  getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe>;
+  createSubKitchenRecipe(body: CreateSubKitchenRecipeInput): Promise<SubKitchenRecipe>;
+
+  // Waste — the same branch stock ledger, logged from the prep station.
+  logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem>;
+  listSubKitchenWaste(filters?: WasteEventFilters): Promise<WasteEvent[]>;
+
+  // Sold out (86-ing) — stops the tills selling the item immediately.
+  listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]>;
+  setSubKitchenAvailability(
+    menuItemId: string,
+    body: SetAvailabilityInput,
+  ): Promise<SubKitchenAvailabilityRow>;
+
+  getSubKitchenStats(filters?: SubKitchenStatsFilters): Promise<SubKitchenStats>;
+
+  // Branch stock nearing expiry (outside the sub-kitchen namespace).
+  listBranchNearExpiry(filters?: BranchNearExpiryFilters): Promise<BranchInventoryItem[]>;
 }

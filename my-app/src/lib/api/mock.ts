@@ -108,11 +108,18 @@ import type {
 } from "@/lib/types/branch";
 import { INVALID_PRODUCTION_RUN, MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
 import type {
+  BranchNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
+  CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepStatus,
   PrepTicket,
+  SetAvailabilityInput,
+  SubKitchenAvailabilityRow,
+  SubKitchenRecipe,
+  SubKitchenStats,
+  SubKitchenStatsFilters,
   UpdatePrepStatusInput,
 } from "@/lib/types/sub-kitchen";
 import {
@@ -373,6 +380,21 @@ interface MockPrepTicket extends PrepTicket {
   create_expiry_date: string | null;
 }
 
+interface MockSubKitchenRecipe extends SubKitchenRecipe {
+  restaurant_id: string;
+  branch_id: string;
+}
+
+/** Only 86 overrides are stored; the list is derived from sellable products. */
+interface MockAvailabilityOverride {
+  restaurant_id: string;
+  branch_id: string;
+  menu_item_id: string;
+  is_available: boolean;
+  reason: string | null;
+  auto_clear_at: string | null;
+}
+
 /** A daily production target, tenant-scoped and keyed to one kitchen. */
 interface MockProductionTarget extends ProductionTarget {
   restaurant_id: string;
@@ -406,6 +428,10 @@ interface MockDb {
   production_targets: MockProductionTarget[];
   /** Sub-kitchen prep board — one branch's prep tickets. */
   prep_tickets: MockPrepTicket[];
+  /** Chef-owned prep recipes, versioned. */
+  sub_kitchen_recipes: MockSubKitchenRecipe[];
+  /** 86 overrides — the availability list is derived from sellable products. */
+  availability_overrides: MockAvailabilityOverride[];
   /**
    * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
    * limit is compared against total on hand across every batch, so it cannot
@@ -1383,7 +1409,40 @@ function seedDb(): MockDb {
     production_runs: [],
     production_targets: seedProductionTargets(),
     prep_tickets: seedPrepTickets(),
+    sub_kitchen_recipes: seedSubKitchenRecipes(),
+    availability_overrides: [],
   };
+}
+
+/**
+ * One prep recipe so the recipe-driven completion path works on a fresh demo:
+ * a Classic Burger consumes one Mozzarella Block per unit (a stand-in — the
+ * branch's seeded stock is what matters, not culinary accuracy).
+ */
+function seedSubKitchenRecipes(): MockSubKitchenRecipe[] {
+  return [
+    {
+      id: "skr-001",
+      restaurant_id: "rest-001",
+      branch_id: "br-001",
+      product_id: 6,
+      product_name: "Classic Burger",
+      version: 1,
+      is_active: true,
+      yield_qty: 1,
+      note: null,
+      components: [
+        {
+          component_product_id: 3,
+          component_name: "Mozzarella Block",
+          quantity: 1,
+          wastage_bp: 0,
+          stock_unit: "EACH",
+        },
+      ],
+      created_at: now(),
+    },
+  ];
 }
 
 /**
@@ -1458,6 +1517,58 @@ function sortPrepTickets(a: MockPrepTicket, b: MockPrepTicket): number {
 }
 
 const OPEN_PREP_STATUSES: PrepStatus[] = ["QUEUED", "IN_PROGRESS", "READY"];
+
+/** Strip the internal scoping off a stored recipe. */
+function toPublicSkRecipe(r: MockSubKitchenRecipe): SubKitchenRecipe {
+  const { restaurant_id, branch_id, ...pub } = r;
+  void restaurant_id;
+  void branch_id;
+  return pub;
+}
+
+/** On-hand for a product at a branch, summed across batches. */
+function branchOnHand(db: MockDb, branchId: string, productId: string): number {
+  return db.inventory
+    .filter(
+      (i) =>
+        i.location_type === "BRANCH" &&
+        i.location_id === branchId &&
+        i.product_id === productId,
+    )
+    .reduce((sum, i) => sum + i.quantity, 0);
+}
+
+/** The sub-kitchen availability list is derived from sellable products + overrides. */
+function deriveAvailability(db: MockDb, branch: Branch): SubKitchenAvailabilityRow[] {
+  return db.products
+    .filter(
+      (p) =>
+        p.restaurant_id === branch.restaurant_id &&
+        (p.kind === "FINISHED_GOOD" || p.kind === "RESALE"),
+    )
+    .map((p) => {
+      const override = db.availability_overrides.find(
+        (o) => o.branch_id === branch.id && o.menu_item_id === p.id,
+      );
+      return {
+        menu_item_id: p.id,
+        product_name: p.name,
+        is_available: override ? override.is_available : true,
+        reason: override?.reason ?? null,
+        on_hand: branchOnHand(db, branch.id, p.id),
+        auto_clear_at: override?.auto_clear_at ?? null,
+      };
+    });
+}
+
+/** Inclusive `YYYY-MM-DD` stats window; defaults to the last 7 days. */
+function statsWindow(filters?: SubKitchenStatsFilters): { start: string; end: string } {
+  const end = filters?.end ?? now().slice(0, 10);
+  const start =
+    filters?.start ??
+    new Date(Date.parse(`${end}T00:00:00Z`) - 6 * 86_400_000).toISOString().slice(0, 10);
+  return { start, end };
+}
 
 /**
  * Two targets for the demo kitchen: one PENDING for today (so the kitchen has
@@ -7619,23 +7730,42 @@ export const mockClient: ApiClient = {
       throw new ApiError("This ticket is already closed.", 409, PREP_NOT_OPEN);
     }
 
-    // Recipe-driven completion arrives in a later chunk; for now a completion
-    // needs hand-stated `inputs`, else there is nothing to consume.
+    // Components come from hand-stated `inputs`, or from the product's active
+    // recipe when none are given. No recipe and no inputs → nothing to consume.
     const inputs = body?.inputs ?? [];
-    if (inputs.length === 0) {
-      throw new ApiError(
-        "No recipe and no inputs given — enter what was used.",
-        409,
-        POS_ERROR.NO_ACTIVE_RECIPE,
+    let resolved: { productId: string; name: string; quantity: number }[];
+    if (inputs.length > 0) {
+      resolved = inputs.map((line) => {
+        const product = db.products.find((p) => matchesProductId(p.id, line.product_id));
+        if (!product) throw new ApiError("Input product not found", 404);
+        return { productId: product.id, name: product.name, quantity: Number(line.quantity) };
+      });
+    } else {
+      const recipe = db.sub_kitchen_recipes.find(
+        (r) =>
+          r.branch_id === branch.id &&
+          r.is_active &&
+          matchesProductId(ticket.product_id, r.product_id),
       );
+      if (!recipe) {
+        throw new ApiError(
+          "No recipe and no inputs given — enter what was used.",
+          409,
+          POS_ERROR.NO_ACTIVE_RECIPE,
+        );
+      }
+      const batches = Math.ceil(ticket.quantity / (recipe.yield_qty || 1));
+      resolved = recipe.components.map((c) => {
+        const product = db.products.find((p) =>
+          matchesProductId(p.id, c.component_product_id),
+        );
+        if (!product) throw new ApiError("Recipe component not found", 404);
+        const from = c.unit ?? c.stock_unit ?? "EACH";
+        const to = c.stock_unit ?? from;
+        const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
+        return { productId: product.id, name: product.name, quantity: perBatch * batches };
+      });
     }
-
-    // Resolve + all-or-nothing stock check before consuming anything.
-    const resolved = inputs.map((line) => {
-      const product = db.products.find((p) => matchesProductId(p.id, line.product_id));
-      if (!product) throw new ApiError("Input product not found", 404);
-      return { productId: product.id, name: product.name, quantity: Number(line.quantity) };
-    });
     for (const line of resolved) {
       const onHand = db.inventory
         .filter(
@@ -7722,5 +7852,306 @@ export const mockClient: ApiClient = {
     ticket.cancelled_at = now();
     saveDb(db);
     return delay(toPublicPrepTicket(ticket), 300);
+  },
+
+  // ---- Sub-kitchen recipes ----
+
+  async listSubKitchenRecipes(): Promise<SubKitchenRecipe[]> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    return delay(
+      db.sub_kitchen_recipes
+        .filter((r) => r.branch_id === branch.id && r.is_active)
+        .map(toPublicSkRecipe),
+    );
+  },
+
+  async getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const recipe = db.sub_kitchen_recipes.find(
+      (r) => r.id === id && r.branch_id === branch.id,
+    );
+    if (!recipe) throw new ApiError("Recipe not found", 404);
+    return delay(toPublicSkRecipe(recipe));
+  },
+
+  async createSubKitchenRecipe(
+    body: CreateSubKitchenRecipeInput,
+  ): Promise<SubKitchenRecipe> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const product = db.products.find((p) => matchesProductId(p.id, body.product_id));
+    if (!product) throw new ApiError("Product not found", 404);
+    if (product.kind === "RAW_MATERIAL") {
+      throw new ApiError(
+        "A raw material can't have a recipe.",
+        409,
+        POS_ERROR.PRODUCT_CANNOT_HAVE_RECIPE,
+      );
+    }
+
+    // Republishing retires the current version and bumps the number.
+    const prev = db.sub_kitchen_recipes.find(
+      (r) =>
+        r.branch_id === branch.id &&
+        r.is_active &&
+        matchesProductId(product.id, r.product_id),
+    );
+    if (prev) prev.is_active = false;
+
+    const recipe: MockSubKitchenRecipe = {
+      id: `skr-${Date.now()}`,
+      restaurant_id: branch.restaurant_id,
+      branch_id: branch.id,
+      product_id: Number(String(product.id).replace(/\D/g, "")) || 0,
+      product_name: product.name,
+      version: (prev?.version ?? 0) + 1,
+      is_active: true,
+      yield_qty: Number(body.yield_qty ?? 1),
+      note: body.note ?? null,
+      components: body.components.map((c) => {
+        const comp = db.products.find((p) => matchesProductId(p.id, c.component_product_id));
+        return {
+          component_product_id: c.component_product_id,
+          component_name: comp?.name,
+          quantity: Number(c.quantity),
+          wastage_bp: Number(c.wastage_bp ?? 0),
+          stock_unit: comp?.stock_unit ?? "EACH",
+          unit: c.unit,
+        };
+      }),
+      created_at: now(),
+    };
+    db.sub_kitchen_recipes.push(recipe);
+    saveDb(db);
+    return delay(toPublicSkRecipe(recipe), 400);
+  },
+
+  // ---- Sub-kitchen waste (same branch ledger) ----
+
+  async logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const movementType = body.movement_type ?? "WASTE";
+    if (movementType !== "WASTE" && movementType !== "EXPIRY") {
+      throw new ApiError("Movement type must be WASTE or EXPIRY", 409, INVALID_MOVEMENT_TYPE);
+    }
+    const quantity = Number(body.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+    }
+
+    const batch = body.batch_code?.trim() ?? "";
+    const item = db.inventory.find(
+      (i) =>
+        i.location_type === "BRANCH" &&
+        i.location_id === branch.id &&
+        i.product_id === body.product_id &&
+        i.batch_code === batch,
+    );
+    if (!item) throw new ApiError("Stock not found", 404);
+    if (quantity > item.quantity) {
+      throw new ApiError(`Only ${item.quantity} on hand for this batch`, 409, "insufficient_stock");
+    }
+    item.quantity -= quantity;
+
+    db.waste_events.push({
+      id: `waste-${Date.now()}`,
+      restaurant_id: branch.restaurant_id,
+      product_id: item.product_id,
+      product: { id: item.product.id, name: item.product.name, sku: item.product.sku },
+      quantity,
+      movement_type: movementType,
+      waste_reason: body.waste_reason ?? null,
+      batch_code: item.batch_code,
+      notes: body.notes?.trim() || null,
+      location_type: "BRANCH",
+      location_id: branch.id,
+      created_at: now(),
+      created_by: me.full_name ?? me.email,
+    });
+    saveDb(db);
+
+    const product = db.products.find((p) => p.id === item.product_id);
+    const result: BranchInventoryItem = {
+      id: item.id,
+      product_id: item.product_id,
+      product_name: item.product.name,
+      sku: item.product.sku ?? null,
+      quantity: item.quantity,
+      batch_code: item.batch_code,
+      expiry_date: item.expiry_date ?? null,
+      stock_unit: product?.stock_unit ?? "EACH",
+      location_id: branch.id,
+    };
+    return delay(result, 300);
+  },
+
+  async listSubKitchenWaste(filters?: WasteEventFilters): Promise<WasteEvent[]> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    return delay(
+      db.waste_events
+        .filter(
+          (e) =>
+            e.restaurant_id === branch.restaurant_id &&
+            e.location_type === "BRANCH" &&
+            e.location_id === branch.id &&
+            (!filters?.movement_type || e.movement_type === filters.movement_type),
+        )
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .map(toPublicWasteEvent),
+    );
+  },
+
+  // ---- Sold out (86) ----
+
+  async listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    return delay(deriveAvailability(db, branch));
+  },
+
+  async setSubKitchenAvailability(
+    menuItemId: string,
+    body: SetAvailabilityInput,
+  ): Promise<SubKitchenAvailabilityRow> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    let override = db.availability_overrides.find(
+      (o) => o.branch_id === branch.id && o.menu_item_id === menuItemId,
+    );
+    if (!override) {
+      override = {
+        restaurant_id: branch.restaurant_id,
+        branch_id: branch.id,
+        menu_item_id: menuItemId,
+        is_available: true,
+        reason: null,
+        auto_clear_at: null,
+      };
+      db.availability_overrides.push(override);
+    }
+    override.is_available = body.is_available;
+    override.reason = body.is_available ? null : body.reason?.trim() || null;
+    override.auto_clear_at = body.is_available ? null : body.auto_clear_at ?? null;
+    saveDb(db);
+
+    const product = db.products.find((p) => p.id === menuItemId);
+    const result: SubKitchenAvailabilityRow = {
+      menu_item_id: menuItemId,
+      product_name: product?.name,
+      is_available: override.is_available,
+      reason: override.reason,
+      on_hand: branchOnHand(db, branch.id, menuItemId),
+      auto_clear_at: override.auto_clear_at,
+    };
+    return delay(result, 300);
+  },
+
+  // ---- Stats ----
+
+  async getSubKitchenStats(filters?: SubKitchenStatsFilters): Promise<SubKitchenStats> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const { start, end } = statsWindow(filters);
+    const inWindow = (iso: string | null) =>
+      !!iso && iso.slice(0, 10) >= start && iso.slice(0, 10) <= end;
+
+    const tickets = db.prep_tickets.filter((t) => t.branch_id === branch.id);
+    const completedInWindow = tickets.filter(
+      (t) => t.status === "COMPLETED" && inWindow(t.completed_at),
+    );
+    const createdInWindow = tickets.filter((t) => inWindow(t.created_at));
+
+    const tickets_created: Record<PrepStatus, number> = {
+      QUEUED: 0,
+      IN_PROGRESS: 0,
+      READY: 0,
+      COMPLETED: 0,
+      CANCELLED: 0,
+    };
+    for (const t of createdInWindow) tickets_created[t.status] += 1;
+
+    const wasteEvents = db.waste_events.filter(
+      (e) =>
+        e.location_type === "BRANCH" &&
+        e.location_id === branch.id &&
+        inWindow(e.created_at),
+    );
+
+    const stats: SubKitchenStats = {
+      start,
+      end,
+      items_prepped: completedInWindow.reduce((sum, t) => sum + t.quantity, 0),
+      tickets_completed: completedInWindow.length,
+      waste_events: wasteEvents.length,
+      waste_quantity: wasteEvents.reduce((sum, e) => sum + e.quantity, 0),
+      // Null in mock mode: order-sourced tickets only exist on the live POS path.
+      avg_order_to_ready_seconds: null,
+      open_tickets: tickets.filter((t) => OPEN_PREP_STATUSES.includes(t.status)).length,
+      tickets_created,
+    };
+    return delay(stats);
+  },
+
+  // ---- Branch near-expiry ----
+
+  async listBranchNearExpiry(
+    filters?: BranchNearExpiryFilters,
+  ): Promise<BranchInventoryItem[]> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const within = filters?.within_days ?? 7;
+    const cutoff = new Date(Date.now() + within * 86_400_000).toISOString().slice(0, 10);
+    return delay(
+      db.inventory
+        .filter(
+          (i) =>
+            i.location_type === "BRANCH" &&
+            i.location_id === branch.id &&
+            i.quantity > 0 &&
+            i.expiry_date != null &&
+            i.expiry_date <= cutoff,
+        )
+        .sort((a, b) => (a.expiry_date ?? "").localeCompare(b.expiry_date ?? ""))
+        .map((i) => {
+          const product = db.products.find((p) => p.id === i.product_id);
+          return {
+            id: i.id,
+            product_id: i.product_id,
+            product_name: i.product.name,
+            sku: i.product.sku ?? null,
+            quantity: i.quantity,
+            batch_code: i.batch_code,
+            expiry_date: i.expiry_date ?? null,
+            stock_unit: product?.stock_unit ?? "EACH",
+            location_id: branch.id,
+          };
+        }),
+    );
   },
 };
