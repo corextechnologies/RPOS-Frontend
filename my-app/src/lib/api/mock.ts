@@ -108,6 +108,23 @@ import type {
 } from "@/lib/types/branch";
 import { INVALID_PRODUCTION_RUN, MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
 import type {
+  CreateBatchInput,
+  CompleteTicketInput,
+  PrepBoardFilters,
+  PrepStatus,
+  PrepTicket,
+  UpdatePrepStatusInput,
+} from "@/lib/types/sub-kitchen";
+import {
+  PREP_INVALID_TRANSITION,
+  PREP_NOT_OPEN,
+  PREP_USE_COMPLETE_ENDPOINT,
+} from "@/lib/types/sub-kitchen";
+import {
+  isPrepOpen,
+  isPrepTransitionAllowed,
+} from "@/lib/sub-kitchen/prep-transitions";
+import type {
   AdminProductionTargetFilters,
   AllocateProductionTargetInput,
   CreateProductionTargetInput,
@@ -233,7 +250,7 @@ const producedByIdempotencyKey = new Map<string, ProductionRun>();
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 27;
+const SEED_VERSION = 28;
 
 interface MockInvoiceRecord {
   id: number;
@@ -346,6 +363,16 @@ interface MockProductionRun extends ProductionRun {
   restaurant_id: string;
 }
 
+/**
+ * A sub-kitchen prep ticket. Carries the batch_code/expiry it was created with
+ * (used at completion unless overridden) — internal, not in the public shape.
+ */
+interface MockPrepTicket extends PrepTicket {
+  restaurant_id: string;
+  create_batch_code: string | null;
+  create_expiry_date: string | null;
+}
+
 /** A daily production target, tenant-scoped and keyed to one kitchen. */
 interface MockProductionTarget extends ProductionTarget {
   restaurant_id: string;
@@ -377,6 +404,8 @@ interface MockDb {
   branch_orders: MockBranchOrder[];
   production_runs: MockProductionRun[];
   production_targets: MockProductionTarget[];
+  /** Sub-kitchen prep board — one branch's prep tickets. */
+  prep_tickets: MockPrepTicket[];
   /**
    * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
    * limit is compared against total on hand across every batch, so it cannot
@@ -1353,8 +1382,82 @@ function seedDb(): MockDb {
     branch_orders: [],
     production_runs: [],
     production_targets: seedProductionTargets(),
+    prep_tickets: seedPrepTickets(),
   };
 }
+
+/**
+ * A couple of the branch chef's own prep-ahead jobs so the sub-kitchen board
+ * isn't empty on a fresh demo. ORDER-sourced tickets are created by the live POS
+ * order path (no mock), so mock mode shows BATCH work only.
+ */
+function seedPrepTickets(): MockPrepTicket[] {
+  const created = now();
+  const base: Omit<
+    MockPrepTicket,
+    "id" | "status" | "quantity" | "note" | "priority" | "started_at"
+  > = {
+    restaurant_id: "rest-001",
+    branch_id: "br-001",
+    source: "BATCH",
+    product_id: "prod-006",
+    product_name: "Classic Burger",
+    customization_note: null,
+    order_id: null,
+    order_line_id: null,
+    production_run_id: null,
+    recipe_id: null,
+    due_at: null,
+    ready_at: null,
+    completed_at: null,
+    cancelled_at: null,
+    created_at: created,
+    create_batch_code: null,
+    create_expiry_date: null,
+  };
+  return [
+    {
+      ...base,
+      id: "prep-001",
+      status: "QUEUED",
+      quantity: 8,
+      note: "Lunch prep",
+      priority: 1,
+      started_at: null,
+    },
+    {
+      ...base,
+      id: "prep-002",
+      status: "IN_PROGRESS",
+      quantity: 4,
+      note: "Started early",
+      priority: 0,
+      started_at: created,
+    },
+  ];
+}
+
+/** Strip the internal batch/expiry carry off a stored prep ticket. */
+function toPublicPrepTicket(t: MockPrepTicket): PrepTicket {
+  const { restaurant_id, create_batch_code, create_expiry_date, ...pub } = t;
+  void restaurant_id;
+  void create_batch_code;
+  void create_expiry_date;
+  return pub;
+}
+
+/** Working-queue order: highest priority, then soonest due, then oldest. */
+function sortPrepTickets(a: MockPrepTicket, b: MockPrepTicket): number {
+  if (a.priority !== b.priority) return b.priority - a.priority;
+  if (a.due_at !== b.due_at) {
+    if (!a.due_at) return 1;
+    if (!b.due_at) return -1;
+    return a.due_at.localeCompare(b.due_at);
+  }
+  return a.created_at.localeCompare(b.created_at);
+}
+
+const OPEN_PREP_STATUSES: PrepStatus[] = ["QUEUED", "IN_PROGRESS", "READY"];
 
 /**
  * Two targets for the demo kitchen: one PENDING for today (so the kitchen has
@@ -7389,5 +7492,235 @@ export const mockClient: ApiClient = {
     db.production_runs.push(run);
     saveDb(db);
     return delay(run);
+  },
+
+  // ---- Sub-kitchen prep board ----
+
+  async listPrepBoard(filters?: PrepBoardFilters): Promise<Paginated<PrepTicket>> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 50;
+
+    const all = db.prep_tickets
+      .filter((t) => t.branch_id === branch.id)
+      .filter((t) =>
+        filters?.status
+          ? t.status === filters.status
+          : OPEN_PREP_STATUSES.includes(t.status),
+      )
+      .sort(sortPrepTickets);
+
+    const start = (page - 1) * page_size;
+    const items = all.slice(start, start + page_size).map(toPublicPrepTicket);
+    const result: Paginated<PrepTicket> = { items, page, page_size, total: all.length };
+    return delay(result);
+  },
+
+  async getPrepTicket(id: string): Promise<PrepTicket> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
+    if (!ticket) throw new ApiError("Ticket not found", 404);
+    return delay(toPublicPrepTicket(ticket));
+  },
+
+  async createBatchJob(body: CreateBatchInput): Promise<PrepTicket> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const quantity = Number(body.quantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new ApiError("Quantity must be greater than 0", 409, INVALID_QUANTITY);
+    }
+    const product = db.products.find((p) => matchesProductId(p.id, body.product_id));
+    if (!product) throw new ApiError("Product not found", 404);
+
+    const ticket: MockPrepTicket = {
+      id: `prep-${Date.now()}`,
+      restaurant_id: branch.restaurant_id,
+      branch_id: branch.id,
+      source: "BATCH",
+      status: "QUEUED",
+      product_id: product.id,
+      product_name: product.name,
+      quantity,
+      customization_note: body.customization_note?.trim() || null,
+      note: body.note?.trim() || null,
+      order_id: null,
+      order_line_id: null,
+      production_run_id: null,
+      recipe_id: null,
+      priority: Number(body.priority ?? 0),
+      due_at: body.due_at ?? null,
+      started_at: null,
+      ready_at: null,
+      completed_at: null,
+      cancelled_at: null,
+      created_at: now(),
+      create_batch_code: body.batch_code ?? null,
+      create_expiry_date: body.expiry_date ?? null,
+    };
+    db.prep_tickets.push(ticket);
+    saveDb(db);
+    return delay(toPublicPrepTicket(ticket), 300);
+  },
+
+  async updatePrepStatus(id: string, body: UpdatePrepStatusInput): Promise<PrepTicket> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
+    if (!ticket) throw new ApiError("Ticket not found", 404);
+
+    // COMPLETED moves stock — it can't be set here.
+    if ((body.status as string) === "COMPLETED") {
+      throw new ApiError(
+        "Use the complete action to finish a ticket.",
+        409,
+        PREP_USE_COMPLETE_ENDPOINT,
+      );
+    }
+    if (!isPrepOpen(ticket.status)) {
+      throw new ApiError("This ticket is already closed.", 409, PREP_NOT_OPEN);
+    }
+    if (!isPrepTransitionAllowed(ticket.status, body.status)) {
+      throw new ApiError(
+        `Cannot move from ${ticket.status} to ${body.status}.`,
+        409,
+        PREP_INVALID_TRANSITION,
+      );
+    }
+
+    ticket.status = body.status;
+    if (body.status === "IN_PROGRESS" && !ticket.started_at) ticket.started_at = now();
+    if (body.status === "READY") ticket.ready_at = now();
+    if (body.status === "CANCELLED") ticket.cancelled_at = now();
+    saveDb(db);
+    return delay(toPublicPrepTicket(ticket), 300);
+  },
+
+  async completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
+    if (!ticket) throw new ApiError("Ticket not found", 404);
+    if (!isPrepOpen(ticket.status)) {
+      throw new ApiError("This ticket is already closed.", 409, PREP_NOT_OPEN);
+    }
+
+    // Recipe-driven completion arrives in a later chunk; for now a completion
+    // needs hand-stated `inputs`, else there is nothing to consume.
+    const inputs = body?.inputs ?? [];
+    if (inputs.length === 0) {
+      throw new ApiError(
+        "No recipe and no inputs given — enter what was used.",
+        409,
+        POS_ERROR.NO_ACTIVE_RECIPE,
+      );
+    }
+
+    // Resolve + all-or-nothing stock check before consuming anything.
+    const resolved = inputs.map((line) => {
+      const product = db.products.find((p) => matchesProductId(p.id, line.product_id));
+      if (!product) throw new ApiError("Input product not found", 404);
+      return { productId: product.id, name: product.name, quantity: Number(line.quantity) };
+    });
+    for (const line of resolved) {
+      const onHand = db.inventory
+        .filter(
+          (i) =>
+            i.location_type === "BRANCH" &&
+            i.location_id === branch.id &&
+            i.product_id === line.productId,
+        )
+        .reduce((sum, i) => sum + i.quantity, 0);
+      if (onHand < line.quantity) {
+        throw new ApiError(
+          `Not enough ${line.name} — ${onHand} on hand, ${line.quantity} needed.`,
+          409,
+          "insufficient_stock",
+        );
+      }
+    }
+    for (const line of resolved) {
+      let remaining = line.quantity;
+      for (const item of db.inventory) {
+        if (remaining <= 0) break;
+        if (
+          item.location_type !== "BRANCH" ||
+          item.location_id !== branch.id ||
+          item.product_id !== line.productId
+        ) {
+          continue;
+        }
+        const take = Math.min(item.quantity, remaining);
+        item.quantity -= take;
+        remaining -= take;
+      }
+    }
+
+    // A BATCH job adds the finished item back to branch stock; an ORDER goes to
+    // the guest, so nothing is credited.
+    if (ticket.source === "BATCH") {
+      const batchCode = body?.batch_code ?? ticket.create_batch_code ?? "";
+      const expiry = body?.expiry_date ?? ticket.create_expiry_date ?? null;
+      const existing = db.inventory.find(
+        (i) =>
+          i.location_type === "BRANCH" &&
+          i.location_id === branch.id &&
+          i.product_id === ticket.product_id &&
+          (i.batch_code || "") === batchCode &&
+          (i.expiry_date || null) === expiry,
+      );
+      if (existing) {
+        existing.quantity += ticket.quantity;
+      } else {
+        const product = db.products.find((p) => p.id === ticket.product_id);
+        db.inventory.push({
+          id: `inv-${Date.now()}-${ticket.product_id}`,
+          restaurant_id: branch.restaurant_id,
+          product_id: ticket.product_id,
+          product: { id: ticket.product_id, name: product?.name ?? ticket.product_name, sku: product?.sku ?? null },
+          quantity: ticket.quantity,
+          batch_code: batchCode,
+          expiry_date: expiry,
+          location_type: "BRANCH",
+          location_id: branch.id,
+        });
+      }
+    }
+
+    ticket.status = "COMPLETED";
+    ticket.completed_at = now();
+    ticket.production_run_id = `prod-${Date.now()}`;
+    saveDb(db);
+    return delay(toPublicPrepTicket(ticket), 400);
+  },
+
+  async cancelPrepTicket(id: string): Promise<PrepTicket> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
+    if (!ticket) throw new ApiError("Ticket not found", 404);
+    if (!isPrepOpen(ticket.status)) {
+      throw new ApiError("This ticket is already closed.", 409, PREP_NOT_OPEN);
+    }
+    ticket.status = "CANCELLED";
+    ticket.cancelled_at = now();
+    saveDb(db);
+    return delay(toPublicPrepTicket(ticket), 300);
   },
 };
