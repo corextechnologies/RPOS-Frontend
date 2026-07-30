@@ -14,13 +14,22 @@ import { PageState } from "@/components/ui/page-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/state";
 import { ProduceDialog } from "@/components/kitchen/ProduceDialog";
+import { ProductionDateFilter } from "@/components/kitchen/ProductionDateFilter";
 import { ProductionTargetProduceCard } from "@/components/kitchen/ProductionTargetProduceCard";
+import { ProductionTargetSummaryCard } from "@/components/kitchen/ProductionTargetSummaryCard";
 import { useAuth } from "@/lib/auth";
 import { useKitchenProduction } from "@/lib/hooks/use-kitchen-recipes";
 import { useKitchenProductionTargets } from "@/lib/hooks/use-production-targets";
 import { newIdempotencyKey } from "@/lib/pos/idempotency";
+import {
+  DEFAULT_DATE_FILTER,
+  isWithinRange,
+  resolveDateRange,
+  type DateFilterValue,
+  type DateRange,
+} from "@/lib/date-range";
+import { aggregateRunsByDay, type AggLine } from "@/lib/kitchen/production-summary";
 import { formatDate } from "@/lib/utils";
-import type { ProductionLineRole } from "@/lib/types/branch";
 
 type ProductionView = "target" | "extra" | "made";
 
@@ -43,8 +52,13 @@ const VIEW_OPTIONS: { value: ProductionView; label: string }[] = [
 export default function KitchenProductionPage() {
   const { can } = useAuth();
   const [view, setView] = useState<ProductionView>("target");
+  // Shared by the two data views (target + made); ignored by Make something
+  // extra, which is an action, not a list. Defaults to today.
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(DEFAULT_DATE_FILTER);
+  const range = resolveDateRange(dateFilter);
 
   const isManager = can("kitchen-staff:create");
+  const showDateFilter = view !== "extra";
 
   return (
     <div className="space-y-6">
@@ -57,51 +71,70 @@ export default function KitchenProductionPage() {
             What this kitchen made, and what it used up doing it.
           </p>
         </div>
-        <Select value={view} onValueChange={(v) => setView(v as ProductionView)}>
-          <SelectTrigger className="sm:w-56">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {VIEW_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {showDateFilter && (
+            <ProductionDateFilter value={dateFilter} onChange={setDateFilter} />
+          )}
+          <Select value={view} onValueChange={(v) => setView(v as ProductionView)}>
+            <SelectTrigger className="sm:w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {VIEW_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {view === "target" && <ProductionTargetsView allowed={isManager} />}
+      {view === "target" && <ProductionTargetsView allowed={isManager} range={range} />}
       {view === "extra" && <MakeSomethingExtraView canMake={isManager} />}
-      {view === "made" && <WhatWeMadeView />}
+      {view === "made" && <WhatWeMadeView range={range} />}
     </div>
   );
 }
 
-/** In-production targets, each a collapsible card worked line by line. */
-function ProductionTargetsView({ allowed }: { allowed: boolean }) {
+/**
+ * Targets in the selected date range, any status. In-production ones are
+ * workable cards (make each line, notify Admin); the rest are read-only summaries
+ * linking to the target's detail page.
+ */
+function ProductionTargetsView({
+  allowed,
+  range,
+}: {
+  allowed: boolean;
+  range: DateRange;
+}) {
   const targets = useKitchenProductionTargets(undefined, allowed);
-  const inProduction = (targets.data ?? []).filter(
-    (t) => t.status === "IN_PRODUCTION",
-  );
+  const inRange = (targets.data ?? [])
+    .filter((t) => isWithinRange(t.target_date, range))
+    .sort((a, b) => b.target_date.localeCompare(a.target_date));
 
   return (
     <PageState
       isLoading={targets.isLoading}
       isError={targets.isError}
-      data={inProduction}
+      data={inRange}
       isEmpty={(rows) => rows.length === 0}
       errorTitle="Couldn't load targets"
       errorDescription={targets.error instanceof Error ? targets.error.message : undefined}
       onRetry={() => targets.refetch()}
-      emptyTitle="Nothing in production"
-      emptyDescription="Start a production target to work it here. Targets Admin forwards appear under Production targets."
+      emptyTitle="No targets for this period"
+      emptyDescription="Nothing was set for these dates. Try a wider range."
     >
       {(rows) => (
         <div className="space-y-3">
-          {rows.map((target) => (
-            <ProductionTargetProduceCard key={target.id} target={target} />
-          ))}
+          {rows.map((target) =>
+            target.status === "IN_PRODUCTION" ? (
+              <ProductionTargetProduceCard key={target.id} target={target} />
+            ) : (
+              <ProductionTargetSummaryCard key={target.id} target={target} />
+            ),
+          )}
         </div>
       )}
     </PageState>
@@ -151,58 +184,78 @@ function MakeSomethingExtraView({ canMake }: { canMake: boolean }) {
   );
 }
 
-/** Every production run, with what it consumed and what it made. */
-function WhatWeMadeView() {
+/**
+ * What the kitchen made, summarised one card per production day: made products
+ * summed and ingredients used summed. Runs from any source (branch requests,
+ * production targets, make-something-extra) merge, and same-day batches — which
+ * share a made-date and so an expiry — collapse into one line each. Different
+ * days stay separate cards.
+ */
+function WhatWeMadeView({ range }: { range: DateRange }) {
   const runs = useKitchenProduction();
+  const days = runs.data
+    ? aggregateRunsByDay(
+        runs.data.filter((r) => r.created_at && isWithinRange(r.created_at, range)),
+      )
+    : undefined;
 
   return (
     <PageState
       isLoading={runs.isLoading}
       isError={!!runs.error}
-      data={runs.data}
+      data={days}
       isEmpty={(rows) => rows.length === 0}
       errorTitle="Couldn't load production"
       errorDescription={runs.error instanceof Error ? runs.error.message : undefined}
-      emptyTitle="Nothing made yet"
-      emptyDescription="Producing an item consumes its recipe's ingredients from kitchen stock."
+      emptyTitle="Nothing made in this period"
+      emptyDescription="No production runs fall in these dates. Try a wider range."
     >
       {(rows) => (
         <ul className="space-y-3">
-          {rows.map((run) => {
-            const output = run.lines.find((l) => l.role === "OUTPUT");
-            return (
-              <li key={run.id} className="rounded-2xl border border-line bg-surface p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="flex items-center gap-2 text-sm font-medium text-content">
-                    <Factory className="size-4 text-brand" aria-hidden />
-                    {output ? `${output.quantity}× ${output.product_name}` : "Run"}
-                  </p>
-                  <p className="text-xs text-muted">{formatDate(run.created_at)}</p>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <LineGroup title="Used" role="INPUT" lines={run.lines} />
-                  <LineGroup title="Made" role="OUTPUT" lines={run.lines} />
-                </div>
-              </li>
-            );
-          })}
+          {rows.map((day) => (
+            <li key={day.dateKey} className="rounded-2xl border border-line bg-surface p-4">
+              <div className="flex items-center gap-2">
+                <Factory className="size-4 text-brand" aria-hidden />
+                <p className="text-sm font-medium text-content">
+                  {formatDate(day.sampleIso)}
+                </p>
+              </div>
+              <div className="mt-3 space-y-2">
+                {day.products.map((product) => (
+                  <div key={product.productId} className="grid gap-2 sm:grid-cols-2">
+                    <SummaryGroup title="Used" kind="in" items={product.used} />
+                    <SummaryGroup
+                      title="Made"
+                      kind="out"
+                      items={[
+                        {
+                          productId: product.productId,
+                          name: product.name,
+                          quantity: product.made,
+                        },
+                      ]}
+                    />
+                  </div>
+                ))}
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </PageState>
   );
 }
 
-function LineGroup({
+function SummaryGroup({
   title,
-  role,
-  lines,
+  kind,
+  items,
 }: {
   title: string;
-  role: ProductionLineRole;
-  lines: { id: string; product_name?: string; role: ProductionLineRole; quantity: number }[];
+  kind: "in" | "out";
+  items: AggLine[];
 }) {
-  const rows = lines.filter((l) => l.role === role);
-  const Icon = role === "INPUT" ? ArrowDown : ArrowUp;
+  const Icon = kind === "in" ? ArrowDown : ArrowUp;
 
   return (
     <div className="rounded-xl bg-surface-2 p-3">
@@ -211,9 +264,9 @@ function LineGroup({
         {title}
       </p>
       <ul className="mt-1.5 space-y-1">
-        {rows.map((l) => (
-          <li key={l.id} className="flex justify-between text-sm">
-            <span className="text-content">{l.product_name ?? l.id}</span>
+        {items.map((l) => (
+          <li key={l.productId} className="flex justify-between text-sm">
+            <span className="text-content">{l.name}</span>
             <span className="tabular-nums text-muted">{l.quantity}</span>
           </li>
         ))}

@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { KitchenNoAccess } from "@/components/kitchen/KitchenNoAccess";
 import { KitchenUnassigned } from "@/components/kitchen/KitchenUnassigned";
+import { ProductionDateFilter } from "@/components/kitchen/ProductionDateFilter";
 import { ProductionTargetStatusBadge } from "@/components/production-targets/ProductionTargetStatusBadge";
-import { Input } from "@/components/ui/input";
 import { PageState } from "@/components/ui/page-state";
 import {
   Table,
@@ -17,27 +17,35 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { useKitchenProductionTargets } from "@/lib/hooks/use-production-targets";
+import {
+  DEFAULT_DATE_FILTER,
+  isWithinRange,
+  resolveDateRange,
+  type DateFilterValue,
+} from "@/lib/date-range";
 import { isMissingKitchenAssignment } from "@/lib/types/kitchen";
-import type { KitchenProductionTargetFilters } from "@/lib/types/production-target";
 
 export default function KitchenProductionTargetsPage() {
   const router = useRouter();
   const { can } = useAuth();
   const allowed = can("kitchen-production-targets:read");
-  const [date, setDate] = useState("");
-
-  const filters: KitchenProductionTargetFilters | undefined = useMemo(
-    () => (date ? { date } : undefined),
-    [date],
-  );
+  // Same date dropdown as the Production screen — defaults to Today. Presets need
+  // a range, so filtering is client-side by target_date rather than the
+  // single-date server filter.
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(DEFAULT_DATE_FILTER);
+  const range = resolveDateRange(dateFilter);
 
   const { data, isLoading, isError, error, refetch } = useKitchenProductionTargets(
-    filters,
+    undefined,
     allowed,
   );
   const unassigned = isMissingKitchenAssignment(error);
   const targets = (data ?? []).filter(
-    (t) => t.status === "PENDING" || t.status === "ACKNOWLEDGED" || t.status === "IN_PRODUCTION",
+    (t) =>
+      (t.status === "PENDING" ||
+        t.status === "ACKNOWLEDGED" ||
+        t.status === "IN_PRODUCTION") &&
+      isWithinRange(t.target_date, range),
   );
 
   if (!allowed) return <KitchenNoAccess />;
@@ -59,13 +67,7 @@ export default function KitchenProductionTargetsPage() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
-            <Input
-              type="date"
-              className="w-44"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              aria-label="Filter by date"
-            />
+            <ProductionDateFilter value={dateFilter} onChange={setDateFilter} />
           </div>
 
           <PageState
@@ -76,12 +78,8 @@ export default function KitchenProductionTargetsPage() {
             errorTitle="Couldn't load targets"
             errorDescription={error instanceof Error ? error.message : undefined}
             onRetry={() => refetch()}
-            emptyTitle={date ? "No targets for this date" : "No production targets yet"}
-            emptyDescription={
-              date
-                ? "Try a different date."
-                : "Targets Admin sets for your kitchen will appear here."
-            }
+            emptyTitle="No targets for this period"
+            emptyDescription="Nothing was set for these dates. Try a wider range."
           >
             {(rows) => (
               <div className="rounded-2xl border border-line bg-surface">
