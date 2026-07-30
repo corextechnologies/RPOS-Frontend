@@ -28,21 +28,29 @@ export interface DeviceServices {
   outbox: OutboxStore;
 
   /**
-   * Render-and-push is the app's job, never the backend's (§11). This member
-   * lands with the printing slice:
-   *
-   *   print(transport: PrintTransport, address: string, bytes: Uint8Array): Promise<void>
-   *
-   * It is intentionally absent until then rather than stubbed — a method that
-   * silently no-ops would let a "printed" ticket never reach paper. Callers gate
-   * on its presence when it arrives.
+   * Whether this build can physically reach a printer. False in the browser — a
+   * tab cannot open a `:9100` socket or a Bluetooth printer — true once wrapped
+   * in Electron/Capacitor. Callers render the ESC/POS either way but only *push*
+   * it when this is true; otherwise they fall back to the on-screen preview.
    */
+  readonly canPrint: boolean;
+
+  /**
+   * Push rendered ESC/POS bytes to a printer over its transport (§11). Present
+   * only when `canPrint` is true — deliberately absent in the web build rather
+   * than a silent no-op, because a "printed" ticket that never reached paper is
+   * the one failure a kitchen can't see. The native shell supplies it:
+   * `net.Socket` → LAN `:9100` (Electron), Bluetooth (Capacitor).
+   */
+  print?: (transport: PrintTransport, address: string, bytes: Uint8Array) => Promise<void>;
 }
 
 /**
- * The active implementation. The web/dev build wires the IndexedDB outbox; an
- * Electron/Capacitor entry point replaces this object (same shape) at startup.
+ * The active implementation. The web/dev build wires the IndexedDB outbox and
+ * cannot print; an Electron/Capacitor entry point replaces this object (same
+ * shape) at startup with `canPrint: true` and a real `print`.
  */
 export const deviceServices: DeviceServices = {
   outbox: idbOutbox,
+  canPrint: false,
 };
