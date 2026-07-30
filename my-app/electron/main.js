@@ -18,12 +18,20 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const net = require("node:net");
 const path = require("node:path");
 
+// Load the app's .env so RPOS_APP_URL (and any other native-side settings) can
+// live alongside the rest of the config. Electron's main process — unlike
+// Next.js — does not read .env on its own, so we do it explicitly. A fixed path
+// (not cwd) makes it work however the app is launched; a missing file is a
+// silent no-op, which is the normal case for a packaged build where the
+// environment is set by the installer/kiosk config instead.
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+
 /**
- * Where the POS UI is served. Defaults to the dev server (`npm run dev:pos` on
- * :3007), so `package.json` doesn't need to carry the URL. Override with
- * `RPOS_APP_URL` in production (a `next start` host or a kiosk URL).
+ * Where the POS UI is served. Set `RPOS_APP_URL` in `.env` (or the real
+ * environment); falls back to the dev server (`npm run dev:pos` on :3007) so
+ * nothing has to be configured for local development.
  */
-const APP_URL = process.env.RPOS_APP_URL || "http://localhost:3007/pos";
+const APP_URL = process.env.RPOS_APP_URL;
 /** Fail a stuck printer rather than hang the sale forever. */
 const PRINT_TIMEOUT_MS = Number(process.env.RPOS_PRINT_TIMEOUT_MS) || 8000;
 
