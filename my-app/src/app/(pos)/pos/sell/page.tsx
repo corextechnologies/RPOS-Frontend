@@ -4,12 +4,10 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { CartProvider, useCart } from "@/lib/pos/cart";
 import { useResolvedMenu, type ResolvedMenuItem } from "@/lib/hooks/use-pos-menu";
-import {
-  useCreateOrder,
-  useParkOrder,
-  useParkedOrders,
-  useSendOrder,
-} from "@/lib/hooks/use-pos-orders";
+import { useCreateOrder, useParkOrder, useParkedOrders } from "@/lib/hooks/use-pos-orders";
+import { useSubmitOrder } from "@/lib/hooks/use-pos-submit";
+import { buildLocalOrder } from "@/lib/pos/offline/local-order";
+import { isNetworkError } from "@/lib/api/pos-client";
 import { usePosCurrency, usePosSession } from "@/lib/pos/pos-session";
 import { formatMinor } from "@/lib/money";
 import { MenuGrid } from "@/components/pos/MenuGrid";
@@ -43,42 +41,38 @@ function Sell() {
   const [recallOpen, setRecallOpen] = useState(false);
 
   const createOrder = useCreateOrder();
-  const sendOrder = useSendOrder();
+  const submitOrder = useSubmitOrder();
   const parkOrder = useParkOrder();
   const { parked } = useParkedOrders();
 
-  const busy = createOrder.isPending || sendOrder.isPending || parkOrder.isPending;
+  const busy = createOrder.isPending || submitOrder.isPending || parkOrder.isPending;
 
   /**
-   * Get a server-side order for the current cart.
+   * Send the cart through the submit seam — the one place an order becomes real.
    *
-   * A recalled order already has one — re-creating it would fork one order into
-   * two. `cart.order_id` is what remembers that, and it survives a reload
-   * because the cart is persisted.
-   */
-  async function ensureOrder(acceptServerPrice: boolean): Promise<PosOrder> {
-    if (cart.cart.order_id) {
-      return { id: cart.cart.order_id } as PosOrder;
-    }
-    const input = cart.toCreateInput();
-    if (acceptServerPrice) delete input.expected_total_minor;
-
-    return createOrder.mutateAsync(input);
-  }
-
-  /**
-   * `acceptServerPrice` drops the proposal so the server prices unopposed.
-   * That's the resolution to a 409: the menu moved, the customer is waiting,
-   * and the correct answer is the server's number.
+   * `acceptServerPrice` drops the proposal so the server prices unopposed: the
+   * resolution to a 409 is the menu moved, the customer is waiting, and the
+   * correct answer is the server's number.
+   *
+   * A recalled order already has a server id (`cart.order_id`), so we send that
+   * rather than fork a second order; the seam handles create-then-send otherwise
+   * and, if the network is down, queues the whole sale and returns a local order
+   * to tender against.
    */
   async function send(acceptServerPrice = false) {
     try {
-      const order = await ensureOrder(acceptServerPrice);
-      setMismatch(null);
+      const input = cart.toCreateInput();
+      if (acceptServerPrice) delete input.expected_total_minor;
 
-      const sent = await sendOrder.mutateAsync(order.id);
+      const { order } = await submitOrder.mutateAsync({
+        create: input,
+        deviceTotalMinor: cart.subtotalMinor,
+        existingOrderId: cart.cart.order_id,
+        localOrder: buildLocalOrder(cart.cart, cart.subtotalMinor, currency),
+      });
+      setMismatch(null);
       cart.reset();
-      setTenderFor(sent);
+      setTenderFor(order);
     } catch (err) {
       if (isApiCode(err, POS_ERROR.PRICE_MISMATCH)) {
         setMismatch(err);
@@ -88,14 +82,26 @@ function Sell() {
     }
   }
 
+  /**
+   * Park is a server-side hold, so it needs a connection. The cart is persisted
+   * on-device regardless, so an offline "park" is really "it's already safe here"
+   * — say that rather than a bare network error.
+   */
   async function park() {
     try {
-      const order = await ensureOrder(false);
-      await parkOrder.mutateAsync({ id: order.id, status: "PARKED" });
+      const input = cart.toCreateInput();
+      const created = cart.cart.order_id
+        ? ({ id: cart.cart.order_id } as PosOrder)
+        : await createOrder.mutateAsync(input);
+      await parkOrder.mutateAsync({ id: created.id, status: "PARKED" });
       cart.reset();
     } catch (err) {
       if (isApiCode(err, POS_ERROR.PRICE_MISMATCH)) {
         setMismatch(err);
+        return;
+      }
+      if (isNetworkError(err)) {
+        toast.info("You're offline — this cart is saved on the device.");
         return;
       }
       toast.error(posErrorMessage(err));

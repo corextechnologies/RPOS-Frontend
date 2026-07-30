@@ -3,13 +3,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { posApi } from "@/lib/api/pos.api";
+import { isNetworkError } from "@/lib/api/pos-client";
 import { posErrorMessage } from "@/lib/api/errors";
-import { newIdempotencyKey } from "@/lib/pos/idempotency";
+import { newIdempotencyKey, newLocalId } from "@/lib/pos/idempotency";
+import { deviceServices } from "@/lib/pos/offline/device-services";
+import { buildLocalPayment } from "@/lib/pos/offline/local-order";
 import type {
   ApplyDiscountInput,
   CreateDiscountRuleInput,
   PaymentInput,
   PaymentMethod,
+  PaymentResult,
   PriceQuote,
   RefundInput,
 } from "@/lib/types/pos";
@@ -41,20 +45,54 @@ export function usePay() {
   const qc = useQueryClient();
   return useMutation({
     /**
-     * One key per call. Each tender in a split bill is a distinct user intent —
-     * "take 500 cash" then "take 600 card" are two intents, not one retried —
-     * so they must not share a key or the second would replay the first.
+     * One `client_payment_id` per tender — the forever-anchor (§10 P5). Each
+     * tender in a split bill is a distinct intent ("take 500 cash" then "600
+     * card"), so each mints its own; replaying the *same* id returns the same
+     * Payment, so no double charge on sync. Minted here (not the caller) and
+     * persisted in the outbox before the queued path returns.
      *
-     * (A retry of a *failed* call is a different matter: React Query's retry is
-     * off for this mutation precisely so a retry can't reuse this key with the
-     * server having already committed.)
+     * `orderLocalId` ties the tender to its order for the offline path, where
+     * there is no server `orderId` yet — payments drain strictly after orders
+     * (§13), and the drain resolves `local_id` → the real order.
+     *
+     * The transport `Idempotency-Key` is separate and per-attempt; React Query's
+     * retry is off so a retry can't reuse it against an already-committed charge.
      */
-    mutationFn: ({ orderId, input }: { orderId: number; input: PaymentInput }) =>
-      posApi.pay(orderId, input, newIdempotencyKey()),
+    mutationFn: async ({
+      orderId,
+      orderLocalId,
+      input,
+    }: {
+      orderId: number;
+      orderLocalId: string;
+      input: PaymentInput;
+    }): Promise<PaymentResult> => {
+      const clientPaymentId = input.client_payment_id ?? newLocalId();
+      const body: PaymentInput = { ...input, client_payment_id: clientPaymentId };
+
+      // A real server order: take the money live. Fall through to the queue only
+      // if the network is unreachable — a server rejection must still surface.
+      if (orderId > 0) {
+        try {
+          return await posApi.pay(orderId, body, newIdempotencyKey());
+        } catch (err) {
+          if (!isNetworkError(err)) throw err;
+        }
+      }
+
+      await deviceServices.outbox.enqueue({
+        kind: "payment",
+        anchor: clientPaymentId,
+        body: { order_local_id: orderLocalId, payment: body },
+      });
+      return buildLocalPayment(orderId, body);
+    },
     retry: false,
     onSuccess: (_res, vars) => {
-      qc.invalidateQueries({ queryKey: ["pos-order", vars.orderId] });
-      qc.invalidateQueries({ queryKey: ["pos-orders"] });
+      if (vars.orderId > 0) {
+        qc.invalidateQueries({ queryKey: ["pos-order", vars.orderId] });
+        qc.invalidateQueries({ queryKey: ["pos-orders"] });
+      }
     },
   });
 }

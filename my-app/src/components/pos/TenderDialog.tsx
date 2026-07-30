@@ -18,6 +18,7 @@ import { DiscountDialog } from "./DiscountDialog";
 import { Money } from "./Money";
 import { usePay, usePriceQuote } from "@/lib/hooks/use-pos-payments";
 import { usePosBootstrap, usePosCurrency } from "@/lib/pos/pos-session";
+import { isLocalOrder } from "@/lib/pos/offline/local-order";
 import { availablePaymentMethods } from "@/lib/pos/capabilities";
 import { formatMinor, minorToDecimalString, parseDecimalToMinor } from "@/lib/money";
 import { isApiCode, POS_ERROR, posErrorMessage, readDueMinor } from "@/lib/api/errors";
@@ -72,7 +73,11 @@ export function TenderDialog({
   const [discounted, setDiscounted] = useState<PosOrder | null>(null);
   const order = discounted ?? initialOrder;
 
-  const quote = usePriceQuote(order?.id ?? null, method);
+  // An offline order has no server id, so the quote (a network round-trip) can't
+  // run and the discount path (also server-side) is unavailable. The device's
+  // own totals stand; the server reconciles on sync.
+  const offline = order != null && isLocalOrder(order);
+  const quote = usePriceQuote(offline ? null : (order?.id ?? null), method);
   const pay = usePay();
 
   // There's no reset effect here on purpose: callers mount this with
@@ -103,6 +108,7 @@ export function TenderDialog({
     try {
       const res = await pay.mutateAsync({
         orderId: order.id,
+        orderLocalId: order.local_id,
         input: {
           method,
           amount_minor: due,
@@ -178,6 +184,13 @@ export function TenderDialog({
         </DialogHeader>
 
         <StubTaxBanner />
+
+        {offline && (
+          <p className="rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">
+            Offline — this sale is saved on the device and will sync when the
+            connection returns. Tax is finalised then.
+          </p>
+        )}
 
         <div className="grid grid-cols-3 gap-2">
           {methods.map((m) => {
@@ -321,7 +334,9 @@ export function TenderDialog({
             variant="ghost"
             className="text-muted"
             onClick={() => setDiscountOpen(true)}
-            disabled={pay.isPending}
+            // Discounts are priced server-side; there's no offline path for them.
+            disabled={pay.isPending || offline}
+            title={offline ? "Discounts need a connection" : undefined}
           >
             <TicketPercent className="mr-1.5 size-4" aria-hidden />
             Discount
