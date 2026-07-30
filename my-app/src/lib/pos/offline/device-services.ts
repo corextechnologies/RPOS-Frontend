@@ -19,6 +19,7 @@
  */
 
 import { idbOutbox, type OutboxStore } from "./outbox";
+import { getNative } from "./native-bridge";
 
 /** How a ticket reaches a printer. LAN = raw TCP `:9100`; BT = Bluetooth; USB later. */
 export type PrintTransport = "LAN" | "BT" | "USB";
@@ -46,11 +47,24 @@ export interface DeviceServices {
 }
 
 /**
- * The active implementation. The web/dev build wires the IndexedDB outbox and
- * cannot print; an Electron/Capacitor entry point replaces this object (same
- * shape) at startup with `canPrint: true` and a real `print`.
+ * The active implementation. The outbox is always the IndexedDB store (a bare
+ * Electron renderer persists it just fine; a SQLite-backed store can replace it
+ * later behind this same seam). Printing is wired from the native bridge when a
+ * shell is present — so the *same build* is a no-print web app in a browser and
+ * a real-printing till inside Electron, decided at runtime by what
+ * `window.rposNative` exposes.
  */
+function nativePrint(): Pick<DeviceServices, "canPrint" | "print"> {
+  const native = getNative();
+  if (!native?.canPrint) return { canPrint: false };
+  return {
+    canPrint: true,
+    print: (transport, address, bytes) =>
+      native.print(transport, address, bytes).then(() => {}),
+  };
+}
+
 export const deviceServices: DeviceServices = {
   outbox: idbOutbox,
-  canPrint: false,
+  ...nativePrint(),
 };

@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run typecheck && npm run test"
+    "verify": "npm run typecheck && npm run test",
+    "electron": "electron electron/main.js",
+    "electron:dev": "concurrently -k \"npm:dev\" \"wait-on http://localhost:3000/pos && electron electron/main.js\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -46,11 +48,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.4",
+    "electron": "^33.4.11",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^3.2.7"
+    "vitest": "^3.2.7",
+    "wait-on": "^9.1.0"
   }
 }
