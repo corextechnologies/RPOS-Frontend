@@ -11,7 +11,36 @@
  * strings the way every other portal read model is.
  */
 
+import type { ProductKind } from "@/lib/types/admin";
 import type { StockUnit } from "@/lib/stock-unit";
+
+// ---- Products (the recipe pickers' source) ----
+
+/**
+ * A product the chef can reference — the "what am I making" finished goods and
+ * the "what is it made of" raw materials. From `/branch/sub-kitchen/products`,
+ * whose `id` is a real product id (never a menu_item_id). Cost is never exposed.
+ */
+export interface SubKitchenProduct {
+  id: string;
+  name: string;
+  sku: string | null;
+  kind: ProductKind;
+  stock_unit: StockUnit;
+  units_per_pack?: number | null;
+  pack_size?: number | null;
+}
+
+export interface SubKitchenProductFilters {
+  /** `FINISHED_GOOD` for the made-item picker, `RAW_MATERIAL` for components. */
+  kind?: ProductKind;
+  /**
+   * Widen the ingredients list to the whole catalogue, for setting up a recipe
+   * before its components have ever been delivered. Only relaxes the
+   * `RAW_MATERIAL` filter — `FINISHED_GOOD` is never branch-scoped.
+   */
+  all?: boolean;
+}
 
 // ---- Prep tickets / board ----
 
@@ -128,6 +157,9 @@ export interface SubKitchenRecipeComponent {
   unit?: StockUnit;
 }
 
+/** Where a recipe was authored. The sub-kitchen only ever lists its own `BRANCH`. */
+export type RecipeMadeAt = "KITCHEN" | "BRANCH";
+
 export interface SubKitchenRecipe {
   id: string;
   product_id: number;
@@ -137,6 +169,8 @@ export interface SubKitchenRecipe {
   is_active: boolean;
   yield_qty: number;
   note?: string | null;
+  /** The server already filters the list to `BRANCH`; present for labelling. */
+  made_at?: RecipeMadeAt;
   components: SubKitchenRecipeComponent[];
   created_at?: string;
 }

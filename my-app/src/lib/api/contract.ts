@@ -108,6 +108,8 @@ import type {
   PrepTicket,
   SetAvailabilityInput,
   SubKitchenAvailabilityRow,
+  SubKitchenProduct,
+  SubKitchenProductFilters,
   SubKitchenRecipe,
   SubKitchenStats,
   SubKitchenStatsFilters,
@@ -473,6 +475,11 @@ export interface ApiClient {
   // finished item back, an ORDER does not.
   completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket>;
   cancelPrepTicket(id: string): Promise<PrepTicket>;
+
+  // Products the chef can reference — real product ids for both recipe pickers
+  // (never menu_item_ids). `kind=FINISHED_GOOD` = what's made, `RAW_MATERIAL` =
+  // what it's made of.
+  listSubKitchenProducts(filters?: SubKitchenProductFilters): Promise<SubKitchenProduct[]>;
 
   // Chef-owned recipes — versioned, never edited in place.
   listSubKitchenRecipes(): Promise<SubKitchenRecipe[]>;

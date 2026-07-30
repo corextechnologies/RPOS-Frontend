@@ -10,6 +10,8 @@ import type {
   PrepTicket,
   SetAvailabilityInput,
   SubKitchenAvailabilityRow,
+  SubKitchenProduct,
+  SubKitchenProductFilters,
   SubKitchenRecipe,
   SubKitchenStats,
   SubKitchenStatsFilters,
@@ -123,6 +125,25 @@ export const subKitchenApi = {
       { method: "POST" },
     );
     return normalizePrepTicket(data);
+  },
+
+  // ---- Products (recipe pickers) ----
+
+  async listSubKitchenProducts(
+    filters?: SubKitchenProductFilters,
+  ): Promise<SubKitchenProduct[]> {
+    const params = new URLSearchParams();
+    if (filters?.kind) params.set("kind", filters.kind);
+    if (filters?.all) params.set("all", "true");
+    const suffix = params.toString() ? `?${params}` : "";
+    const data = await request<SubKitchenProduct[]>(`/branch/sub-kitchen/products${suffix}`);
+    return (data ?? []).map((p) => ({
+      ...p,
+      id: String(p.id),
+      sku: p.sku ?? null,
+      units_per_pack: p.units_per_pack ?? null,
+      pack_size: p.pack_size ?? null,
+    }));
   },
 
   // ---- Recipes ----

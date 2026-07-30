@@ -22,8 +22,9 @@ import {
 import { useCreateBatchJob, useSubKitchenRecipes } from "@/lib/hooks/use-sub-kitchen";
 
 /**
- * Queue a prep-ahead batch. The product list comes from the station's recipes —
- * the made items it knows how to produce.
+ * Queue a prep-ahead batch. The list is the items the station has a recipe for —
+ * so completing the batch always draws ingredients automatically, never asking
+ * the chef to hand-enter what a no-recipe item consumed.
  */
 export function NewBatchDialog({
   open,
@@ -36,11 +37,11 @@ export function NewBatchDialog({
   const create = useCreateBatchJob();
 
   const products = useMemo(() => {
-    const seen = new Map<number, string>();
+    const byId = new Map<number, string>();
     for (const r of recipes.data ?? []) {
-      if (!seen.has(r.product_id)) seen.set(r.product_id, r.product_name ?? `#${r.product_id}`);
+      if (!byId.has(r.product_id)) byId.set(r.product_id, r.product_name ?? `#${r.product_id}`);
     }
-    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+    return [...byId.entries()].map(([id, name]) => ({ id, name }));
   }, [recipes.data]);
 
   const [productId, setProductId] = useState("");
@@ -84,7 +85,7 @@ export function NewBatchDialog({
             <Label className="text-xs">Item</Label>
             <Select value={productId} onValueChange={setProductId}>
               <SelectTrigger className="h-10">
-                <SelectValue placeholder={products.length ? "Choose…" : "No recipes yet"} />
+                <SelectValue placeholder={products.length ? "Choose…" : "No items"} />
               </SelectTrigger>
               <SelectContent>
                 {products.map((p) => (
@@ -94,9 +95,6 @@ export function NewBatchDialog({
                 ))}
               </SelectContent>
             </Select>
-            {products.length === 0 && (
-              <p className="text-xs text-faint">Add a recipe first to batch an item.</p>
-            )}
           </div>
 
           <div className="space-y-1.5">

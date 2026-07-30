@@ -117,6 +117,8 @@ import type {
   PrepTicket,
   SetAvailabilityInput,
   SubKitchenAvailabilityRow,
+  SubKitchenProduct,
+  SubKitchenProductFilters,
   SubKitchenRecipe,
   SubKitchenStats,
   SubKitchenStatsFilters,
@@ -257,7 +259,7 @@ const producedByIdempotencyKey = new Map<string, ProductionRun>();
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 28;
+const SEED_VERSION = 30;
 
 interface MockInvoiceRecord {
   id: number;
@@ -920,6 +922,42 @@ function seedDb(): MockDb {
       kind: "FINISHED_GOOD",
       is_sellable: true,
     },
+    /**
+     * A made-to-order finished good the branch never stocks — assembled fresh
+     * per order in the sub-kitchen. Ships with no recipe so the "New recipe"
+     * flow has something to write.
+     */
+    {
+      id: "prod-007",
+      restaurant_id: "rest-001",
+      name: "Named Cake",
+      sku: "FG-CAKE-01",
+      stock_unit: "EACH",
+      cost_price: null,
+      selling_price: "1200.00",
+      category: "Desserts",
+      is_available: true,
+      kind: "FINISHED_GOOD",
+      is_sellable: true,
+    },
+    /**
+     * A raw material that lives at the warehouse but has never been delivered to
+     * the branch. The branch-scoped ingredients picker hides it by default; it
+     * only surfaces under "show all products" — the exact case Fix 2 guards.
+     */
+    {
+      id: "prod-008",
+      restaurant_id: "rest-001",
+      name: "Baker's Flour",
+      sku: "ING-FLR-25",
+      stock_unit: "KG",
+      cost_price: "1.20",
+      selling_price: null,
+      category: null,
+      is_available: true,
+      kind: "RAW_MATERIAL",
+      is_sellable: false,
+    },
   ];
 
   const requestCreated = now();
@@ -1272,6 +1310,19 @@ function seedDb(): MockDb {
       location_type: "WAREHOUSE",
       location_id: "wh-001",
     },
+    {
+      // Flour only ever lands at the warehouse — the branch has never held it, so
+      // it stays out of the branch ingredients picker until "show all".
+      id: "inv-005",
+      restaurant_id: "rest-001",
+      product_id: "prod-008",
+      product: { id: "prod-008", name: "Baker's Flour", sku: "ING-FLR-25" },
+      quantity: 200,
+      batch_code: "B-FLR-01",
+      expiry_date: expiryInDays(120),
+      location_type: "WAREHOUSE",
+      location_id: "wh-001",
+    },
     // ---- Kitchen (Phase 4) ----
     // Two batches of the same product, so the portal's "one row per product AND
     // batch" rule is visible without setting it up by hand.
@@ -1383,6 +1434,18 @@ function seedDb(): MockDb {
       location_type: "BRANCH",
       location_id: "br-001",
     },
+    {
+      // A sub-kitchen component — cans of tomato sauce to assemble burgers.
+      id: "inv-204",
+      restaurant_id: "rest-001",
+      product_id: "prod-002",
+      product: { id: "prod-002", name: "Tomato Sauce (Can)", sku: "ING-TOM-02" },
+      quantity: 40,
+      batch_code: "",
+      expiry_date: null,
+      location_type: "BRANCH",
+      location_id: "br-001",
+    },
   ];
 
   return {
@@ -1416,8 +1479,8 @@ function seedDb(): MockDb {
 
 /**
  * One prep recipe so the recipe-driven completion path works on a fresh demo:
- * a Classic Burger consumes one Mozzarella Block per unit (a stand-in — the
- * branch's seeded stock is what matters, not culinary accuracy).
+ * a Classic Burger is assembled from a little Mozzarella and a can of tomato
+ * sauce — raw-material components off branch stock.
  */
 function seedSubKitchenRecipes(): MockSubKitchenRecipe[] {
   return [
@@ -1431,10 +1494,18 @@ function seedSubKitchenRecipes(): MockSubKitchenRecipe[] {
       is_active: true,
       yield_qty: 1,
       note: null,
+      made_at: "BRANCH",
       components: [
         {
           component_product_id: 3,
           component_name: "Mozzarella Block",
+          quantity: 0.05,
+          wastage_bp: 0,
+          stock_unit: "KG",
+        },
+        {
+          component_product_id: 2,
+          component_name: "Tomato Sauce (Can)",
           quantity: 1,
           wastage_bp: 0,
           stock_unit: "EACH",
@@ -7854,6 +7925,50 @@ export const mockClient: ApiClient = {
     return delay(toPublicPrepTicket(ticket), 300);
   },
 
+  // ---- Sub-kitchen products (recipe pickers) ----
+
+  async listSubKitchenProducts(
+    filters?: SubKitchenProductFilters,
+  ): Promise<SubKitchenProduct[]> {
+    const me = requireAuth();
+    requireBranchManager(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    // Ingredients (RAW_MATERIAL) are scoped to what the branch has actually held
+    // — offering flour it can never get would let the chef save a recipe that
+    // always fails. Finished goods are never scoped (a made-to-order dish is
+    // never stocked, so scoping would hide the very item you're writing a recipe
+    // for), and `all` widens the ingredients list to the full catalogue.
+    const bypassScope = filters?.kind === "FINISHED_GOOD" || filters?.all === true;
+    const held = new Set(
+      db.inventory
+        .filter((i) => i.location_type === "BRANCH" && i.location_id === branch.id)
+        .map((i) => i.product_id),
+    );
+
+    return delay(
+      db.products
+        .filter(
+          (p) =>
+            p.restaurant_id === branch.restaurant_id &&
+            (!filters?.kind || p.kind === filters.kind) &&
+            (bypassScope || held.has(p.id)),
+        )
+        .map((p) => ({
+          // The endpoint's `id` is a real product id — the numeric portion here,
+          // mirroring the wire's integer ids.
+          id: String(Number(String(p.id).replace(/\D/g, "")) || 0),
+          name: p.name,
+          sku: p.sku ?? null,
+          kind: p.kind,
+          stock_unit: p.stock_unit ?? "EACH",
+          units_per_pack: p.units_per_pack ?? null,
+          pack_size: null,
+        })),
+    );
+  },
+
   // ---- Sub-kitchen recipes ----
 
   async listSubKitchenRecipes(): Promise<SubKitchenRecipe[]> {
@@ -7863,7 +7978,7 @@ export const mockClient: ApiClient = {
     const branch = resolveMyBranch(db, me);
     return delay(
       db.sub_kitchen_recipes
-        .filter((r) => r.branch_id === branch.id && r.is_active)
+        .filter((r) => r.branch_id === branch.id && r.is_active && r.made_at === "BRANCH")
         .map(toPublicSkRecipe),
     );
   },
@@ -7917,6 +8032,7 @@ export const mockClient: ApiClient = {
       is_active: true,
       yield_qty: Number(body.yield_qty ?? 1),
       note: body.note ?? null,
+      made_at: "BRANCH",
       components: body.components.map((c) => {
         const comp = db.products.find((p) => matchesProductId(p.id, c.component_product_id));
         return {

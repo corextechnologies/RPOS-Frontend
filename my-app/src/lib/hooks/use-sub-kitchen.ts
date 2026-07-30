@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { subKitchenErrorMessage } from "@/lib/api/errors";
 import type { BranchWasteInput } from "@/lib/types/branch";
 import type { WasteEventFilters } from "@/lib/types/waste";
+import type { ProductKind } from "@/lib/types/admin";
 import type {
   BranchNearExpiryFilters,
   CreateBatchInput,
@@ -35,7 +36,22 @@ export const subKitchenKeys = {
     filters ? (["sub-kitchen-stats", filters] as const) : (["sub-kitchen-stats"] as const),
   nearExpiry: (filters?: BranchNearExpiryFilters) =>
     filters ? (["branch-near-expiry", filters] as const) : (["branch-near-expiry"] as const),
+  products: (kind?: ProductKind, all?: boolean) =>
+    ["sub-kitchen-products", kind ?? null, all ? "all" : "scoped"] as const,
 };
+
+/**
+ * Products for the recipe pickers — `FINISHED_GOOD` (made) or `RAW_MATERIAL`
+ * (components). `all` widens the ingredients list past what the branch stocks;
+ * it has no effect on `FINISHED_GOOD`, which the server never scopes.
+ */
+export function useSubKitchenProducts(kind?: ProductKind, opts?: { all?: boolean }) {
+  const all = opts?.all ?? false;
+  return useQuery({
+    queryKey: subKitchenKeys.products(kind, all),
+    queryFn: () => api.listSubKitchenProducts(kind || all ? { kind, all } : undefined),
+  });
+}
 
 export function usePrepBoard(filters?: PrepBoardFilters) {
   return useQuery({

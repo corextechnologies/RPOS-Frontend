@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { useCompletePrepTicket, useSubKitchenRecipes } from "@/lib/hooks/use-sub-kitchen";
 import { useBranchInventory } from "@/lib/hooks/use-branch";
+import { formatStockQty, type StockUnit } from "@/lib/stock-unit";
+import { tryConvertQty } from "@/lib/unit-convert";
 import type { PrepTicket } from "@/lib/types/sub-kitchen";
 
 const numId = (s: string) => Number(String(s).replace(/\D/g, "")) || 0;
@@ -49,11 +51,47 @@ export function CompleteTicketDialog({
   const recipes = useSubKitchenRecipes();
   const inventory = useBranchInventory();
 
-  const hasRecipe = useMemo(() => {
-    if (!ticket) return false;
+  const activeRecipe = useMemo(() => {
+    if (!ticket) return undefined;
     const pid = numId(ticket.product_id);
-    return (recipes.data ?? []).some((r) => r.product_id === pid);
+    return (recipes.data ?? []).find((r) => r.is_active && r.product_id === pid);
   }, [recipes.data, ticket]);
+  const hasRecipe = !!activeRecipe;
+
+  // Branch on-hand keyed by product, both for the projection and the picker.
+  const onHandById = useMemo(() => {
+    const totals = new Map<number, number>();
+    const units = new Map<number, StockUnit>();
+    for (const item of inventory.data ?? []) {
+      const id = numId(item.product_id);
+      totals.set(id, (totals.get(id) ?? 0) + item.quantity);
+      if (!units.has(id)) units.set(id, item.stock_unit);
+    }
+    return { totals, units };
+  }, [inventory.data]);
+  const inventoryReady = inventory.data !== undefined;
+
+  // What the recipe will draw from stock, so a shortfall shows before completing.
+  const projection = useMemo(() => {
+    if (!activeRecipe || !ticket) return [];
+    const batches = Math.ceil(ticket.quantity / (activeRecipe.yield_qty || 1));
+    return activeRecipe.components.map((c) => {
+      const from = c.unit ?? c.stock_unit ?? "EACH";
+      const to = c.stock_unit ?? onHandById.units.get(c.component_product_id) ?? from;
+      const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
+      const needed = perBatch * batches;
+      const stored = onHandById.totals.get(c.component_product_id);
+      const onHand = stored ?? (inventoryReady ? 0 : undefined);
+      return {
+        id: c.component_product_id,
+        name: c.component_name ?? `#${c.component_product_id}`,
+        needed,
+        unit: to,
+        onHand,
+        short: onHand != null && onHand < needed,
+      };
+    });
+  }, [activeRecipe, ticket, onHandById, inventoryReady]);
 
   // Distinct products on hand, for the no-recipe inputs picker.
   const stockProducts = useMemo(() => {
@@ -102,12 +140,47 @@ export function CompleteTicketDialog({
         </DialogHeader>
 
         {hasRecipe ? (
-          <p className="text-sm text-muted">
-            This will consume the recipe&apos;s ingredients from branch stock.
-            {ticket?.source === "BATCH"
-              ? " The finished item is added back to stock."
-              : " Nothing is added back — it goes to the customer."}
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-muted">
+              This will consume the recipe&apos;s ingredients from branch stock.
+              {ticket?.source === "BATCH"
+                ? " The finished item is added back to stock."
+                : " Nothing is added back — it goes to the customer."}
+            </p>
+            {projection.length > 0 && (
+              <div className="space-y-1.5 rounded-lg border border-line bg-surface-2/50 px-3 py-2.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-faint">
+                  Will use
+                </p>
+                <ul className="space-y-1">
+                  {projection.map((p) => (
+                    <li key={p.id} className="flex justify-between gap-2 text-sm">
+                      <span className="truncate text-content">{p.name}</span>
+                      <span
+                        className={
+                          p.short ? "shrink-0 tabular-nums text-warning" : "shrink-0 tabular-nums"
+                        }
+                      >
+                        {formatStockQty(p.needed, p.unit)}
+                        {p.onHand != null && (
+                          <span className="text-faint">
+                            {" "}
+                            / {formatStockQty(p.onHand, p.unit)}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {projection.some((p) => p.short) && (
+                  <p className="flex items-start gap-1.5 text-xs text-warning">
+                    <TriangleAlert className="mt-0.5 size-3 shrink-0" aria-hidden />
+                    Not enough stock for one or more ingredients — completing may fail.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
           <div className="space-y-3">
             <p className="flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs text-warning">

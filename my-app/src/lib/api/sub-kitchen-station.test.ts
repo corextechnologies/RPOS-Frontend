@@ -34,16 +34,19 @@ beforeAll(async () => {
 
 describe("sub-kitchen station", () => {
   it("completes a ticket from its recipe when no inputs are given", async () => {
-    // Seeded: prep-001 (8× Classic Burger) + recipe skr-001 (1 Mozzarella each).
+    // Seeded: prep-001 (8× Burger) + a recipe of 0.05 KG Mozzarella (prod-003)
+    // and 1 Tomato Sauce (prod-002) per burger.
     const before = await mockClient.listBranchInventory();
-    const mozBefore = onHand(before, "prod-003"); // 9
+    const mozBefore = onHand(before, "prod-003");
+    const sauceBefore = onHand(before, "prod-002");
 
     const done = await mockClient.completePrepTicket("prep-001");
     expect(done.status).toBe("COMPLETED");
 
     const after = await mockClient.listBranchInventory();
-    // 8 burgers × 1 Mozzarella = 8 consumed; 8 burgers credited.
-    expect(onHand(after, "prod-003")).toBe(mozBefore - 8);
+    // 8 burgers × (0.05 Mozzarella + 1 Tomato Sauce); 8 burgers credited.
+    expect(onHand(after, "prod-003")).toBeCloseTo(mozBefore - 0.4, 5);
+    expect(onHand(after, "prod-002")).toBe(sauceBefore - 8);
     expect(onHand(after, "prod-006")).toBe(8);
   });
 
@@ -92,5 +95,30 @@ describe("sub-kitchen station", () => {
     const ids = nearExpiry.map((r) => r.product_id);
     expect(ids).toContain("prod-003"); // Mozzarella expires in ~4 days
     expect(ids).not.toContain("prod-001"); // Coffee expires in ~28 days
+  });
+
+  it("scopes the ingredients picker to branch stock; `all` widens it", async () => {
+    // Flour (prod-008) lives at the warehouse and has never reached the branch.
+    const scoped = await mockClient.listSubKitchenProducts({ kind: "RAW_MATERIAL" });
+    const scopedIds = scoped.map((p) => p.id);
+    expect(scopedIds).toContain("3"); // Mozzarella — branch-held
+    expect(scopedIds).not.toContain("8"); // Flour — never delivered
+
+    const all = await mockClient.listSubKitchenProducts({ kind: "RAW_MATERIAL", all: true });
+    expect(all.map((p) => p.id)).toContain("8");
+  });
+
+  it("never scopes the made-item picker, even with nothing on the shelf", async () => {
+    // The branch holds no finished goods, but you still write recipes for them.
+    const goods = await mockClient.listSubKitchenProducts({ kind: "FINISHED_GOOD" });
+    const ids = goods.map((p) => p.id);
+    expect(ids).toContain("6"); // Classic Burger
+    expect(ids).toContain("7"); // Named Cake
+  });
+
+  it("lists only the branch's own (BRANCH) recipes", async () => {
+    const recipes = await mockClient.listSubKitchenRecipes();
+    expect(recipes.length).toBeGreaterThan(0);
+    expect(recipes.every((r) => r.made_at === "BRANCH")).toBe(true);
   });
 });
