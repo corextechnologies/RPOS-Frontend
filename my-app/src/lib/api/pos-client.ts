@@ -79,10 +79,29 @@ async function send(path: string, opts?: PosRequestOptions): Promise<Response> {
   });
 }
 
+/**
+ * A `fetch` that never reached the server — the connection is down, DNS failed,
+ * the request was aborted. Distinct from an `ApiError` (the server answered with
+ * a non-2xx code), because the two demand opposite responses: an `ApiError`
+ * means "the server rejected this, don't retry blindly"; a `PosNetworkError`
+ * means "we're offline — fall back to the cache and queue the mutation". The
+ * offline layer branches on exactly this class.
+ */
+export class PosNetworkError extends Error {
+  constructor(cause: unknown) {
+    super("Network error. Check the connection and try again.");
+    this.name = "PosNetworkError";
+    this.cause = cause;
+  }
+}
+
+/** True when a fetch never reached the server (offline), vs. a server rejection. */
+export function isNetworkError(err: unknown): err is PosNetworkError {
+  return err instanceof PosNetworkError;
+}
+
 function networkError(cause: unknown): Error {
-  const err = new Error("Network error. Check the connection and try again.");
-  err.cause = cause;
-  return err;
+  return new PosNetworkError(cause);
 }
 
 async function handle<T>(res: Response, wantHeaders: boolean, anonymous: boolean): Promise<T> {

@@ -276,6 +276,70 @@ export interface SetAvailabilityInput {
   auto_clear_at?: string | null;
 }
 
+// ---- Print / routing / payment config (§7 — NEW·P1) ----
+//
+// `GET /v1/pos/config`, strong ETag `"cfg-{branch_id}-{version}"`. Cached so the
+// device can route tickets, drive printers and show payment accounts entirely
+// offline. Additive: nothing here exists on the wire until backend P1, and no
+// hook fetches it yet — the shape is defined so the print controller and its
+// cache can be built and mocked against it.
+
+export type StationConnection = "LAN" | "USB" | "BT";
+export type PrinterRole = "KITCHEN" | "RECEIPT";
+export type PaymentAccountKind = "BANK" | "WALLET";
+
+export interface PosStation {
+  id: number;
+  code: string;
+  name: string;
+  sort_order: number;
+  /** The fallback station: any order line that resolves to nothing lands here. */
+  is_expo: boolean;
+}
+
+export interface PosPrinter {
+  id: number;
+  role: PrinterRole;
+  station_id: number | null;
+  connection: StationConnection;
+  /** `192.168.1.50:9100` for LAN — the raw TCP target the shell prints to. */
+  address: string;
+  model: string;
+  status?: string | null;
+}
+
+export interface PosReceiptPrinter {
+  printer_id: number;
+  connection: StationConnection;
+  address: string;
+}
+
+/**
+ * An admin-configured account the customer pays into for an ONLINE tender
+ * (§10). Shown (or rendered as a QR from `qr_payload`/`account_ref`) so the
+ * cashier can confirm receipt — there is no gateway, the confirmation is the
+ * record.
+ */
+export interface PosPaymentAccount {
+  id: number;
+  label: string;
+  kind: PaymentAccountKind;
+  account_name: string;
+  account_ref: string;
+  bank_or_wallet: string;
+  qr_payload?: string | null;
+}
+
+export interface PosConfig {
+  config_version: number;
+  stations: PosStation[];
+  printers: PosPrinter[];
+  category_map: Array<{ category: string; station_id: number }>;
+  item_overrides: Array<{ menu_item_id: number; station_id: number }>;
+  receipt_printer: PosReceiptPrinter | null;
+  payment_accounts: PosPaymentAccount[];
+}
+
 // ---- Menu authoring (Admin) ----
 
 export interface MenuVersionSummary {

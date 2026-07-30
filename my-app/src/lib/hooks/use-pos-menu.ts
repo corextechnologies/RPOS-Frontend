@@ -4,7 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { posApi } from "@/lib/api/pos.api";
 import { posAdminApi } from "@/lib/api/pos-admin.api";
+import { isNetworkError } from "@/lib/api/pos-client";
 import { posErrorMessage } from "@/lib/api/errors";
+import {
+  cacheAvailability,
+  cacheMenu,
+  readCachedAvailability,
+  readCachedMenu,
+} from "@/lib/pos/offline/pos-cache";
 import type { AvailabilityRow, MenuItem, PosMenu, SetAvailabilityInput } from "@/lib/types/pos";
 import { toast } from "sonner";
 
@@ -31,9 +38,37 @@ export function usePosMenu(version?: number) {
     retry: false,
     enabled: version === undefined || Number.isFinite(version),
     queryFn: async (): Promise<PosMenu> => {
-      const res = await posApi.menu(null, version);
-      if (res.status === 200) return res.data;
-      throw new Error("Menu unavailable");
+      // Historical versions (reprints) don't touch the sell-from cache — pull
+      // them straight and don't let them evict the published snapshot.
+      if (version !== undefined) {
+        const res = await posApi.menu(null, version);
+        if (res.status === 200) return res.data;
+        throw new Error("Menu unavailable");
+      }
+
+      // The published menu: revalidate against the cached ETag, persist on a
+      // fresh copy, and fall back to the cache when the network is unreachable.
+      // A published version is immutable, so a 304 means "cache is still exact".
+      const cached = await readCachedMenu();
+      try {
+        const res = await posApi.menu(cached?.data.etag ?? null);
+        if (res.status === 304) {
+          if (cached) return cached.data.menu;
+          // 304 with nothing cached shouldn't happen; re-ask unconditionally.
+          const fresh = await posApi.menu(null);
+          if (fresh.status === 200) {
+            void cacheMenu(fresh.data, fresh.etag);
+            return fresh.data;
+          }
+          throw new Error("Menu unavailable");
+        }
+        void cacheMenu(res.data, res.etag);
+        return res.data;
+      } catch (err) {
+        // Offline: sell from the last good menu. Any other error is real.
+        if (isNetworkError(err) && cached) return cached.data.menu;
+        throw err;
+      }
     },
   });
 }
@@ -49,7 +84,21 @@ export function usePosMenu(version?: number) {
 export function usePosAvailability(pollMs = 20_000) {
   return useQuery({
     queryKey: posMenuKeys.availability,
-    queryFn: () => posApi.availability(),
+    queryFn: async (): Promise<AvailabilityRow[]> => {
+      try {
+        const rows = await posApi.availability();
+        void cacheAvailability(rows);
+        return rows;
+      } catch (err) {
+        // Offline: keep showing the last-known 86 state rather than snapping
+        // every item back "on". A reboot mid-outage inherits it too.
+        if (isNetworkError(err)) {
+          const cached = await readCachedAvailability();
+          if (cached) return cached.data;
+        }
+        throw err;
+      }
+    },
     refetchInterval: pollMs,
     refetchOnWindowFocus: true,
     staleTime: 5_000,

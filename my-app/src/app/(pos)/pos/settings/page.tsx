@@ -10,6 +10,7 @@ import { StubTaxBanner } from "@/components/pos/StubTaxBanner";
 import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
 import { posApi } from "@/lib/api/pos.api";
 import { posSession } from "@/lib/pos/session";
+import { clearPosCache } from "@/lib/pos/offline/pos-cache";
 import { posErrorMessage } from "@/lib/api/errors";
 import { toast } from "sonner";
 
@@ -155,6 +156,9 @@ function DecommissionButton() {
     setBusy(true);
     try {
       posSession.reset();
+      // Drop the cached menu/pack/availability too — a decommissioned till must
+      // not leave a priced catalogue or branch config on the device.
+      await clearPosCache();
       window.location.reload();
     } finally {
       setBusy(false);
