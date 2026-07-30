@@ -48,12 +48,27 @@ export interface FlaggedOrder {
   flagged_at: string;
 }
 
+// A tiny in-context pub/sub so the review UI updates the instant a drain records
+// or clears a flag, instead of waiting for its poll. One JS context per device,
+// so a module-level Set is all this needs.
+const flaggedListeners = new Set<() => void>();
+
+export function subscribeFlagged(fn: () => void): () => void {
+  flaggedListeners.add(fn);
+  return () => flaggedListeners.delete(fn);
+}
+
+function notifyFlagged() {
+  for (const fn of flaggedListeners) fn();
+}
+
 export async function recordFlagged(entry: FlaggedOrder): Promise<void> {
   const list = (await kvGet<FlaggedOrder[]>(FLAGGED_KEY)) ?? [];
   // One row per order — a re-drain of the same local_id must not duplicate it.
   const next = list.filter((f) => f.local_id !== entry.local_id);
   next.push(entry);
   await kvSet(FLAGGED_KEY, next);
+  notifyFlagged();
 }
 
 export async function readFlagged(): Promise<FlaggedOrder[]> {
@@ -66,4 +81,5 @@ export async function dismissFlagged(localId: string): Promise<void> {
     FLAGGED_KEY,
     list.filter((f) => f.local_id !== localId),
   );
+  notifyFlagged();
 }

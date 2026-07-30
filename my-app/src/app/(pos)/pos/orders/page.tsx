@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Flag, Printer, Receipt, ReceiptText, RotateCcw } from "lucide-react";
+import { Loader2, Flag, Printer, Receipt, RotateCcw, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Money } from "@/components/pos/Money";
@@ -10,7 +10,9 @@ import { OrderDetailDialog } from "@/components/pos/OrderDetailDialog";
 import { KotDialog } from "@/components/pos/KotDialog";
 import { ReceiptDialog } from "@/components/pos/ReceiptDialog";
 import { TenderDialog } from "@/components/pos/TenderDialog";
+import { FlaggedReviewSheet } from "@/components/pos/FlaggedReviewSheet";
 import { usePosOrders } from "@/lib/hooks/use-pos-orders";
+import { usePosFlagged } from "@/lib/hooks/use-pos-flagged";
 import { usePosSession } from "@/lib/pos/pos-session";
 import { posErrorMessage } from "@/lib/api/errors";
 import { formatDate } from "@/lib/utils";
@@ -21,11 +23,14 @@ export default function OrdersPage() {
   const canRead = can("ORDER_READ");
   const orders = usePosOrders({ enabled: canRead });
 
+  const { flagged } = usePosFlagged();
+
   const [refundFor, setRefundFor] = useState<PosOrder | null>(null);
   const [tenderFor, setTenderFor] = useState<PosOrder | null>(null);
   const [detailFor, setDetailFor] = useState<PosOrder | null>(null);
   const [kotFor, setKotFor] = useState<number | null>(null);
   const [receiptFor, setReceiptFor] = useState<PosOrder | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   // Gated per the bootstrap capability table: ORDER_READ covers the order list.
   // An order-taker who may create but not review doesn't get a list to review.
@@ -59,6 +64,25 @@ export default function OrdersPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4">
+      {flagged.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setReviewOpen(true)}
+          className="flex w-full items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-left transition hover:bg-warning/15"
+        >
+          <ShieldAlert className="size-5 shrink-0 text-warning" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-content">
+              {flagged.length} offline {flagged.length === 1 ? "sale" : "sales"} to review
+            </p>
+            <p className="text-xs text-muted">
+              Synced with a price or stock flag — tap to reconcile.
+            </p>
+          </div>
+          <span className="text-xs font-medium text-warning">Review</span>
+        </button>
+      )}
+
       <section className="space-y-2">
         <h2 className="font-display text-sm font-semibold text-content">Today</h2>
         {items.length === 0 ? (
@@ -122,6 +146,8 @@ export default function OrdersPage() {
         onOpenChange={(open) => !open && setTenderFor(null)}
         onSettled={() => setTenderFor(null)}
       />
+
+      <FlaggedReviewSheet open={reviewOpen} onOpenChange={setReviewOpen} />
     </div>
   );
 }

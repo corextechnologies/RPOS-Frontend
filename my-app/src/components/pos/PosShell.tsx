@@ -16,7 +16,7 @@ import {
   Utensils,
 } from "lucide-react";
 import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
-import { usePosSync } from "@/lib/hooks/use-pos-sync";
+import { usePosSync, type PosSyncState } from "@/lib/hooks/use-pos-sync";
 import { POS_REGIONS, POS_ROUTES, posSession } from "@/lib/pos/session";
 import { packCountryCode } from "@/lib/pos/capabilities";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,10 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
   const { signOut } = usePosSession();
   const pathname = usePathname();
   const operator = displayUser(bootstrap.user);
+  // Mounted once, here, for the whole till — usePosSync owns the drain triggers,
+  // so a second instance would double them. The header badge and the offline
+  // strip both read this one state.
+  const sync = usePosSync();
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
@@ -118,7 +122,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <SyncIndicator />
+          <SyncIndicator sync={sync} />
 
           <Button
             variant="ghost"
@@ -132,6 +136,7 @@ function AuthenticatedShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <StubTaxBanner className="mx-4 mb-2" />
+        {sync.offline && <OfflineStrip queued={sync.queued} />}
         <RegionMismatchNotice />
       </header>
 
@@ -145,20 +150,20 @@ function displayUser(user: PosBootstrapUser): string {
 }
 
 /**
- * The offline/queue affordance. Mounts `usePosSync` — the one place the drain is
- * driven for the whole till — and shows what it's doing: a spinner while
- * draining, the backlog count when the queue is non-empty, and an offline mark
- * when the browser reports no connection. A tap forces a drain. Nothing here
- * blocks selling; it is status, not a gate.
+ * The header sync affordance — presentational; the state is owned by the one
+ * `usePosSync` in the shell. Shows a spinner while draining, the backlog count
+ * when the queue is non-empty, and an offline mark when the browser reports no
+ * connection. A tap forces a drain. Nothing here blocks selling; it is status,
+ * not a gate.
  */
-function SyncIndicator() {
-  const { queued, syncing, offline, drain } = usePosSync();
+function SyncIndicator({ sync }: { sync: PosSyncState }) {
+  const { queued, syncing, offline, drain } = sync;
 
   // Nothing to say when online, idle, and empty — keep the header quiet.
   if (!offline && !syncing && queued === 0) return null;
 
   const label = syncing ? "Syncing…" : offline ? "Offline" : `${queued} queued`;
-  const Icon = syncing ? RefreshCw : offline ? CloudOff : RefreshCw;
+  const Icon = offline && !syncing ? CloudOff : RefreshCw;
 
   return (
     <button
@@ -178,6 +183,22 @@ function SyncIndicator() {
       <Icon className={cn("size-4", syncing && "animate-spin")} aria-hidden />
       <span className="hidden sm:inline">{label}</span>
     </button>
+  );
+}
+
+/**
+ * A full-width strip so there is no doubt the till is offline. Sitting alongside
+ * the stub-tax and region banners keeps the "something to know" copy in one
+ * place. It reassures rather than warns: offline selling is a supported mode
+ * here, and the sale is already safe on the device.
+ */
+function OfflineStrip({ queued }: { queued: number }) {
+  return (
+    <div className="flex items-center gap-2 bg-warning/10 px-4 py-1.5 text-xs text-warning">
+      <CloudOff className="size-3.5 shrink-0" aria-hidden />
+      Working offline — sales are saved on this device and sync automatically.
+      {queued > 0 && <span className="font-medium">{queued} waiting.</span>}
+    </div>
   );
 }
 
