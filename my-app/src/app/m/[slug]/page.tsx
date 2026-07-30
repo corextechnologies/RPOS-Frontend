@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Clock, Flame, UtensilsCrossed } from "lucide-react";
@@ -190,8 +191,11 @@ function ItemDetailModal({
   );
 }
 
-export default function PublicMenuPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params);
+export default function PublicMenuPage() {
+  // `useParams()` (client hook) rather than the `params` promise prop: it reads
+  // identically at runtime but doesn't trip static export's page-level
+  // generateStaticParams requirement (the layout shim covers the segment).
+  const { slug } = useParams<{ slug: string }>();
   // null = "All Items"
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<PublicMenuItem | null>(null);

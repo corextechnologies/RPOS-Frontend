@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StubTaxBanner } from "@/components/pos/StubTaxBanner";
+import { PrinterTestCard } from "@/components/pos/PrinterTestCard";
 import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
 import { posApi } from "@/lib/api/pos.api";
 import { posSession } from "@/lib/pos/session";
@@ -23,6 +24,8 @@ export default function PosSettingsPage() {
       <StubTaxBanner />
 
       <SetPinCard />
+
+      <PrinterTestCard />
 
       <Card>
         <CardHeader>

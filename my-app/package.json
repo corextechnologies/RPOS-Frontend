@@ -12,8 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm run test",
+    "dev:pos": "next dev -p 3007",
     "electron": "electron electron/main.js",
-    "electron:dev": "concurrently -k \"npm:dev\" \"wait-on http://localhost:3000/pos && electron electron/main.js\""
+    "electron:dev": "concurrently -k -n next,electron \"npm:dev:pos\" \"wait-on tcp:127.0.0.1:3007 && electron electron/main.js\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

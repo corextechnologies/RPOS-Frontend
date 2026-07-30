@@ -18,8 +18,12 @@ const { app, BrowserWindow, ipcMain } = require("electron");
 const net = require("node:net");
 const path = require("node:path");
 
-/** Where the POS UI is served. Dev: `next dev`. Prod: `next start` or a kiosk URL. */
-const APP_URL = process.env.RPOS_APP_URL || "http://localhost:3000/pos";
+/**
+ * Where the POS UI is served. Defaults to the dev server (`npm run dev:pos` on
+ * :3007), so `package.json` doesn't need to carry the URL. Override with
+ * `RPOS_APP_URL` in production (a `next start` host or a kiosk URL).
+ */
+const APP_URL = process.env.RPOS_APP_URL || "http://localhost:3007/pos";
 /** Fail a stuck printer rather than hang the sale forever. */
 const PRINT_TIMEOUT_MS = Number(process.env.RPOS_PRINT_TIMEOUT_MS) || 8000;
 
