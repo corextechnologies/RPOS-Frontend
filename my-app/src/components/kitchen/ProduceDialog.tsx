@@ -47,6 +47,12 @@ interface ProduceDialogProps {
   initialProductName?: string;
   /** Hide the item picker and fix production to `initialProductId`. */
   lockProduct?: boolean;
+  /**
+   * Sent as the produce `Idempotency-Key`. Mint one per produce intent and reuse
+   * it across retries so a retried "Mark made" replays instead of producing
+   * twice. Omit for surfaces that don't need retry protection.
+   */
+  idempotencyKey?: string;
   /** Called after a successful production run — e.g. to mark a target line ready. */
   onProduced?: (run: ProductionRun) => void;
   title?: string;
@@ -68,6 +74,7 @@ export function ProduceDialog({
   initialQuantity,
   initialProductName,
   lockProduct = false,
+  idempotencyKey,
   onProduced,
   title = "Make something",
   description = "Ingredients come out of kitchen stock before the output goes in.",
@@ -123,6 +130,10 @@ export function ProduceDialog({
     }
     return { totals, units };
   }, [inventory.data]);
+  // Once inventory has loaded, a component with no stock row means zero on hand
+  // (not "unknown") — so a fully out-of-stock ingredient must read as 0 and warn,
+  // rather than silently showing no on-hand figure.
+  const inventoryReady = inventory.data !== undefined;
   const projection =
     activeRecipe && Number.isFinite(qtyNum) && qtyNum > 0
       ? (() => {
@@ -133,7 +144,8 @@ export function ProduceDialog({
               c.stock_unit ?? onHandById.units.get(c.component_product_id) ?? from;
             const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
             const needed = perBatch * batches;
-            const onHand = onHandById.totals.get(c.component_product_id);
+            const stored = onHandById.totals.get(c.component_product_id);
+            const onHand = stored ?? (inventoryReady ? 0 : undefined);
             return {
               id: c.component_product_id,
               name: c.component_name ?? `#${c.component_product_id}`,
@@ -262,9 +274,12 @@ export function ProduceDialog({
               }
               produce.mutate(
                 {
-                  product_id: numericId,
-                  quantity: Number(quantity),
-                  expiry_date: expiryDate || null,
+                  body: {
+                    product_id: numericId,
+                    quantity: Number(quantity),
+                    expiry_date: expiryDate || null,
+                  },
+                  idempotencyKey,
                 },
                 {
                   onSuccess: (run) => {

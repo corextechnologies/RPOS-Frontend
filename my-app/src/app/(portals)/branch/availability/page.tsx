@@ -2,33 +2,17 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, Flag, Loader2, RotateCcw } from "lucide-react";
+import { Flag, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { EightySixDialog } from "@/components/branch/EightySixDialog";
 import { posAdminApi } from "@/lib/api/pos-admin.api";
 import { useSetAvailability } from "@/lib/hooks/use-pos-menu";
 import { useFlaggedOrders } from "@/lib/hooks/use-pos-orders";
 import { posErrorMessage } from "@/lib/api/errors";
 import { formatDate } from "@/lib/utils";
-import { cn } from "@/lib/utils";
 import type { AvailabilityRow } from "@/lib/types/pos";
-
-const PRESETS: Array<{ label: string; hours: number | null }> = [
-  { label: "Rest of shift", hours: null },
-  { label: "1 hour", hours: 1 },
-  { label: "Until tomorrow", hours: 12 },
-];
 
 /**
  * 86-ing and the flagged-order queue — the manager's POS jobs.
@@ -41,6 +25,7 @@ const PRESETS: Array<{ label: string; hours: number | null }> = [
  */
 export default function BranchAvailabilityPage() {
   const [editing, setEditing] = useState<AvailabilityRow | null>(null);
+  const setAvailability = useSetAvailability();
 
   const availability = useQuery({
     queryKey: ["pos-availability"],
@@ -146,127 +131,27 @@ export default function BranchAvailabilityPage() {
       </Card>
 
       <EightySixDialog
-        row={editing}
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
+        title={editing ? `Item #${editing.menu_item_id}` : ""}
+        isAvailable={editing?.is_available ?? false}
+        currentReason={editing?.reason}
+        isPending={setAvailability.isPending}
+        onSubmit={(available, reason, autoClearAt) => {
+          if (!editing) return;
+          setAvailability.mutate(
+            {
+              id: editing.menu_item_id,
+              body: {
+                is_available: available,
+                reason: available ? undefined : reason || "86'd",
+                auto_clear_at: autoClearAt,
+              },
+            },
+            { onSuccess: () => setEditing(null) },
+          );
+        }}
       />
     </div>
-  );
-}
-
-function EightySixDialog({
-  row,
-  open,
-  onOpenChange,
-}: {
-  row: AvailabilityRow | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const setAvailability = useSetAvailability();
-  const [reason, setReason] = useState("");
-  const [hours, setHours] = useState<number | null>(null);
-
-  if (!row) return null;
-
-  function submit(available: boolean) {
-    if (!row) return;
-    setAvailability.mutate(
-      {
-        id: row.menu_item_id,
-        body: {
-          is_available: available,
-          reason: available ? undefined : reason.trim() || "86'd",
-          // Without an auto-clear, every 86 is permanent until a human
-          // remembers — and nobody remembers.
-          auto_clear_at:
-            available || hours === null
-              ? null
-              : new Date(Date.now() + hours * 3600_000).toISOString(),
-        },
-      },
-      {
-        onSuccess: () => {
-          setReason("");
-          setHours(null);
-          onOpenChange(false);
-        },
-      },
-    );
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Item #{row.menu_item_id}</DialogTitle>
-          <DialogDescription>
-            {row.is_available
-              ? "Take this off the menu. Staff still see it, greyed out."
-              : (row.reason ?? "Currently off the menu.")}
-          </DialogDescription>
-        </DialogHeader>
-
-        {row.is_available ? (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="86-reason">Reason</Label>
-              <Input
-                id="86-reason"
-                autoFocus
-                placeholder="Fryer down"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-              <p className="text-xs text-faint">Shown to staff on the tile.</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Bring it back</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.label}
-                    type="button"
-                    onClick={() => setHours(p.hours)}
-                    className={cn(
-                      "h-10 rounded-xl border text-xs font-medium transition",
-                      hours === p.hours
-                        ? "border-brand bg-brand/10 text-content"
-                        : "border-line bg-surface text-muted hover:border-brand/50",
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                disabled={setAvailability.isPending}
-                onClick={() => submit(false)}
-              >
-                <Ban className="mr-1.5 size-4" aria-hidden />
-                86 it
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <Button
-            className="h-11 w-full"
-            disabled={setAvailability.isPending}
-            onClick={() => submit(true)}
-          >
-            <RotateCcw className="mr-2 size-4" aria-hidden />
-            Put it back on
-          </Button>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }

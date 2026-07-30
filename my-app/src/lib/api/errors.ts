@@ -81,6 +81,25 @@ function int(value: unknown): number | null {
   return typeof value === "number" && Number.isInteger(value) ? value : null;
 }
 
+// ---- lines_not_all_produced ----
+
+/** The branch-request PRODUCED gate: some lines haven't been made yet. */
+export const LINES_NOT_ALL_PRODUCED = "lines_not_all_produced";
+
+/**
+ * Line ids the server says still need producing, from a `lines_not_all_produced`
+ * 409, as strings to match the app's id convention. Empty for a different code
+ * or when the payload carries no usable ids.
+ */
+export function unproducedLineIds(err: unknown): string[] {
+  if (!isApiCode(err, LINES_NOT_ALL_PRODUCED)) return [];
+  const ids = record(err.details)?.unproduced_line_ids;
+  if (!Array.isArray(ids)) return [];
+  return ids
+    .map((id) => (typeof id === "number" || typeof id === "string" ? String(id) : null))
+    .filter((id): id is string => id !== null);
+}
+
 // ---- price_mismatch ----
 
 /**
@@ -385,4 +404,33 @@ export function imageUploadErrorMessage(err: unknown): string {
   }
   if (err instanceof Error && err.message) return err.message;
   return "Couldn't upload the image";
+}
+
+// ---- Sub-kitchen ----
+
+/**
+ * Friendly copy for the sub-kitchen prep flow. Handles the prep-specific codes
+ * and defers to `posErrorMessage` for the shared ones (`insufficient_stock`,
+ * `no_active_recipe`, the recipe 409s). Branches on `code`, never `message`.
+ */
+export function subKitchenErrorMessage(err: unknown): string {
+  if (isApiError(err)) {
+    switch (err.code) {
+      case "use_complete_endpoint":
+        return "Finish this ticket with Complete, not by moving its status.";
+      case "invalid_prep_transition":
+        return "That isn't a valid next step for this ticket.";
+      case "prep_not_open":
+        return "This ticket is already completed or cancelled.";
+      case "position_forbidden":
+        return "Your role can't use the sub-kitchen.";
+      case "recursive_recipe":
+        return "A recipe can't include itself.";
+      case "cross_dimension_unit":
+        return "That unit can't convert to how the ingredient is stocked.";
+      case "combo_not_made_to_order":
+        return "A combo can't be made to order.";
+    }
+  }
+  return posErrorMessage(err);
 }

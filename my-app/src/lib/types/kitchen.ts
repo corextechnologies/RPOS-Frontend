@@ -280,6 +280,17 @@ export interface KitchenRequestLineItem {
    * partial approval. Display `quantity_approved ?? quantity_requested`.
    */
   quantity_approved?: number | null;
+  /**
+   * Whether the kitchen has made this line. Meaningful on a BRANCH_TO_ADMIN
+   * request from IN_PRODUCTION onward; the server gates IN_PRODUCTION → PRODUCED
+   * on every (non-zero-approved) line being `produced`. Defaults false.
+   */
+  produced?: boolean;
+  /**
+   * What the line is, so the UI shows "Mark made" (FINISHED_GOOD) vs "Set aside"
+   * (RESALE). Warehouse requests may also carry RAW_MATERIAL.
+   */
+  kind?: ProductKind;
 }
 
 export interface KitchenRequest {
@@ -347,6 +358,15 @@ export interface UpdateKitchenRequestStatusInput {
 
 /** 409 raised when a status move is not legal for that request type. */
 export const KITCHEN_INVALID_TRANSITION = "invalid_transition";
+
+/**
+ * 409 raised when a branch request can't advance to PRODUCED because some lines
+ * aren't made yet. `details.unproduced_line_ids` names the outstanding rows.
+ */
+export const KITCHEN_LINES_NOT_ALL_PRODUCED = "lines_not_all_produced";
+
+/** 409 raised when a branch-only endpoint is hit on another request type. */
+export const KITCHEN_INVALID_REQUEST_TYPE = "invalid_request_type";
 
 /**
  * 409 raised when the request moved underneath you. Expected on a shared kitchen

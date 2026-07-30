@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { BranchRequestProductionPanel } from "@/components/kitchen/requests/BranchRequestProductionPanel";
 import { KitchenRequestActionPanel } from "@/components/kitchen/requests/KitchenRequestActionPanel";
 import { KitchenRequestDetail } from "@/components/kitchen/requests/KitchenRequestDetail";
 import { KitchenDispatchDetail } from "@/components/kitchen/requests/KitchenDispatchDetail";
@@ -26,6 +27,10 @@ export default function KitchenRequestDetailPage() {
   const requestType = request.data?.request_type;
   const isWarehouseRequest = requestType === "KITCHEN_TO_WAREHOUSE";
   const isDispatchRequest = requestType === "KITCHEN_TO_ADMIN";
+  // A branch request in production gets the in-place per-line make/tick panel;
+  // every other state uses the plain transition panel (Start production, Dispatch).
+  const isBranchInProduction =
+    requestType === "BRANCH_TO_ADMIN" && request.data?.status === "IN_PRODUCTION";
   const backHref = isWarehouseRequest
     ? "/kitchen/requests/warehouse"
     : isDispatchRequest
@@ -100,6 +105,11 @@ export default function KitchenRequestDetailPage() {
 
       {isDispatchRequest ? (
         <KitchenDispatchDetail
+          request={request.data}
+          canUpdate={can("kitchen-requests:update")}
+        />
+      ) : isBranchInProduction ? (
+        <BranchRequestProductionPanel
           request={request.data}
           canUpdate={can("kitchen-requests:update")}
         />

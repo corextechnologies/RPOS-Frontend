@@ -100,6 +100,22 @@ import type {
 } from "@/lib/types/notification";
 import type { StaffDocumentKind } from "@/lib/types/staff";
 import type {
+  BranchNearExpiryFilters,
+  CreateBatchInput,
+  CompleteTicketInput,
+  CreateSubKitchenRecipeInput,
+  PrepBoardFilters,
+  PrepTicket,
+  SetAvailabilityInput,
+  SubKitchenAvailabilityRow,
+  SubKitchenProduct,
+  SubKitchenProductFilters,
+  SubKitchenRecipe,
+  SubKitchenStats,
+  SubKitchenStatsFilters,
+  UpdatePrepStatusInput,
+} from "@/lib/types/sub-kitchen";
+import type {
   BranchCustomer,
   BranchCustomerFilters,
   BranchStaff,
@@ -371,7 +387,13 @@ export interface ApiClient {
   createKitchenRecipe(body: CreateKitchenRecipeInput): Promise<KitchenRecipe>;
   listKitchenProduction(): Promise<ProductionRun[]>;
   getKitchenProductionRun(id: string): Promise<ProductionRun>;
-  produceKitchenProduct(body: KitchenProduceInput): Promise<ProductionRun>;
+  // `idempotencyKey` (optional) is sent as the `Idempotency-Key` header so a
+  // retried "Mark made" replays the original run instead of producing twice.
+  // Callers mint one key per produce intent and reuse it across retries.
+  produceKitchenProduct(
+    body: KitchenProduceInput,
+    idempotencyKey?: string,
+  ): Promise<ProductionRun>;
 
   listKitchenProductionTargets(
     filters?: KitchenProductionTargetFilters,
@@ -397,6 +419,13 @@ export interface ApiClient {
   updateKitchenRequestStatus(
     requestId: string,
     body: UpdateKitchenRequestStatusInput,
+  ): Promise<KitchenRequest>;
+  // Marks one line of a BRANCH_TO_ADMIN request produced (IN_PRODUCTION only).
+  // Mirrors `markProductionTargetLineProduced`; idempotent server-side (marking
+  // an already-produced line is a no-op 200). Returns the full updated request.
+  markKitchenRequestLineProduced(
+    requestId: string,
+    lineId: string,
   ): Promise<KitchenRequest>;
 
   // Branch (Phase 5) — auto-scoped to the caller's branch.
@@ -435,4 +464,41 @@ export interface ApiClient {
   listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
   getProductionRun(id: string): Promise<ProductionRun>;
   createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun>;
+
+  // Sub-kitchen — the branch prep station. Portal routes, caller's portal token.
+  // No `status` returns the working board (QUEUED + IN_PROGRESS + READY).
+  listPrepBoard(filters?: PrepBoardFilters): Promise<Paginated<PrepTicket>>;
+  getPrepTicket(id: string): Promise<PrepTicket>;
+  createBatchJob(body: CreateBatchInput): Promise<PrepTicket>;
+  updatePrepStatus(id: string, body: UpdatePrepStatusInput): Promise<PrepTicket>;
+  // Completing moves stock: components come off branch stock; a BATCH adds the
+  // finished item back, an ORDER does not.
+  completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket>;
+  cancelPrepTicket(id: string): Promise<PrepTicket>;
+
+  // Products the chef can reference — real product ids for both recipe pickers
+  // (never menu_item_ids). `kind=FINISHED_GOOD` = what's made, `RAW_MATERIAL` =
+  // what it's made of.
+  listSubKitchenProducts(filters?: SubKitchenProductFilters): Promise<SubKitchenProduct[]>;
+
+  // Chef-owned recipes — versioned, never edited in place.
+  listSubKitchenRecipes(): Promise<SubKitchenRecipe[]>;
+  getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe>;
+  createSubKitchenRecipe(body: CreateSubKitchenRecipeInput): Promise<SubKitchenRecipe>;
+
+  // Waste — the same branch stock ledger, logged from the prep station.
+  logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem>;
+  listSubKitchenWaste(filters?: WasteEventFilters): Promise<WasteEvent[]>;
+
+  // Sold out (86-ing) — stops the tills selling the item immediately.
+  listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]>;
+  setSubKitchenAvailability(
+    menuItemId: string,
+    body: SetAvailabilityInput,
+  ): Promise<SubKitchenAvailabilityRow>;
+
+  getSubKitchenStats(filters?: SubKitchenStatsFilters): Promise<SubKitchenStats>;
+
+  // Branch stock nearing expiry (outside the sub-kitchen namespace).
+  listBranchNearExpiry(filters?: BranchNearExpiryFilters): Promise<BranchInventoryItem[]>;
 }

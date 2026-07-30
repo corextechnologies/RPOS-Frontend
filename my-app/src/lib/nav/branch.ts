@@ -89,9 +89,9 @@ export const BRANCH_NAV: NavSection[] = [
       },
       {
         label: "Sub-kitchen",
-        href: "/branch/production",
+        href: "/branch/sub-kitchen",
         icon: ChefHat,
-        action: "branch-production:read",
+        action: "sub-kitchen:read",
         match: "prefix",
       },
       {
