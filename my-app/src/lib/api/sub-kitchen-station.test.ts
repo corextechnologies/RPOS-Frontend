@@ -121,4 +121,25 @@ describe("sub-kitchen station", () => {
     expect(recipes.length).toBeGreaterThan(0);
     expect(recipes.every((r) => r.made_at === "BRANCH")).toBe(true);
   });
+
+  it("writes off branch stock and records it in the history", async () => {
+    // Napkins (prod-004) aren't touched by the completion test above.
+    const before = await mockClient.listSubKitchenWaste();
+    const stockBefore = await mockClient.listBranchInventory();
+
+    await mockClient.logSubKitchenWaste({
+      product_id: "prod-004",
+      quantity: 5,
+      movement_type: "WASTE",
+      notes: "Damaged packs",
+    });
+
+    const after = await mockClient.listSubKitchenWaste();
+    expect(after.length).toBe(before.length + 1);
+    const logged = after.find((e) => e.product_id === "prod-004" && e.quantity === 5);
+    expect(logged).toBeTruthy();
+
+    const stockAfter = await mockClient.listBranchInventory();
+    expect(onHand(stockAfter, "prod-004")).toBe(onHand(stockBefore, "prod-004") - 5);
+  });
 });
