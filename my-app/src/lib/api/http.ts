@@ -5,6 +5,7 @@ import { incomeApi } from "./income.api";
 import { kitchenApi } from "./kitchen.api";
 import { notificationsApi } from "./notifications.api";
 import { restaurantsApi } from "./restaurants.api";
+import { subKitchenApi } from "./sub-kitchen.api";
 import { uploadsApi } from "./uploads.api";
 import { warehouseApi } from "./warehouse.api";
 import type { ApiClient } from "./contract";
@@ -24,5 +25,6 @@ export const httpClient: ApiClient = {
   ...kitchenApi,
   ...notificationsApi,
   ...branchApi,
+  ...subKitchenApi,
   ...uploadsApi,
 };

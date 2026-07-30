@@ -130,6 +130,10 @@ export function ProduceDialog({
     }
     return { totals, units };
   }, [inventory.data]);
+  // Once inventory has loaded, a component with no stock row means zero on hand
+  // (not "unknown") — so a fully out-of-stock ingredient must read as 0 and warn,
+  // rather than silently showing no on-hand figure.
+  const inventoryReady = inventory.data !== undefined;
   const projection =
     activeRecipe && Number.isFinite(qtyNum) && qtyNum > 0
       ? (() => {
@@ -140,7 +144,8 @@ export function ProduceDialog({
               c.stock_unit ?? onHandById.units.get(c.component_product_id) ?? from;
             const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
             const needed = perBatch * batches;
-            const onHand = onHandById.totals.get(c.component_product_id);
+            const stored = onHandById.totals.get(c.component_product_id);
+            const onHand = stored ?? (inventoryReady ? 0 : undefined);
             return {
               id: c.component_product_id,
               name: c.component_name ?? `#${c.component_product_id}`,

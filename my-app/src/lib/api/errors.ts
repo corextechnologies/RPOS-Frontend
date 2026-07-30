@@ -405,3 +405,32 @@ export function imageUploadErrorMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
   return "Couldn't upload the image";
 }
+
+// ---- Sub-kitchen ----
+
+/**
+ * Friendly copy for the sub-kitchen prep flow. Handles the prep-specific codes
+ * and defers to `posErrorMessage` for the shared ones (`insufficient_stock`,
+ * `no_active_recipe`, the recipe 409s). Branches on `code`, never `message`.
+ */
+export function subKitchenErrorMessage(err: unknown): string {
+  if (isApiError(err)) {
+    switch (err.code) {
+      case "use_complete_endpoint":
+        return "Finish this ticket with Complete, not by moving its status.";
+      case "invalid_prep_transition":
+        return "That isn't a valid next step for this ticket.";
+      case "prep_not_open":
+        return "This ticket is already completed or cancelled.";
+      case "position_forbidden":
+        return "Your role can't use the sub-kitchen.";
+      case "recursive_recipe":
+        return "A recipe can't include itself.";
+      case "cross_dimension_unit":
+        return "That unit can't convert to how the ingredient is stocked.";
+      case "combo_not_made_to_order":
+        return "A combo can't be made to order.";
+    }
+  }
+  return posErrorMessage(err);
+}

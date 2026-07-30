@@ -36,7 +36,7 @@ import { idOrNull, numberFromMeta, optionalText } from "./normalize";
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
 
 /** Flatten a branch inventory row (nested or flat) into the UI's flat shape. */
-function normalizeBranchInventory(i: RawBranchInventoryItem): BranchInventoryItem {
+export function normalizeBranchInventory(i: RawBranchInventoryItem): BranchInventoryItem {
   return {
     id: String(i.id),
     product_id: String(i.product_id ?? i.product?.id ?? ""),
@@ -57,7 +57,7 @@ function normalizeBranchInventory(i: RawBranchInventoryItem): BranchInventoryIte
  * the product name/sku come nested under `product` (the shared serializer),
  * rather than the flat `product_name`/`sku` the mock and UI use.
  */
-type RawBranchInventoryItem = {
+export type RawBranchInventoryItem = {
   id: string | number;
   product_id?: string | number;
   product_name?: string;

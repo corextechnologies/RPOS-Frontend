@@ -100,6 +100,22 @@ import type {
 } from "@/lib/types/notification";
 import type { StaffDocumentKind } from "@/lib/types/staff";
 import type {
+  BranchNearExpiryFilters,
+  CreateBatchInput,
+  CompleteTicketInput,
+  CreateSubKitchenRecipeInput,
+  PrepBoardFilters,
+  PrepTicket,
+  SetAvailabilityInput,
+  SubKitchenAvailabilityRow,
+  SubKitchenProduct,
+  SubKitchenProductFilters,
+  SubKitchenRecipe,
+  SubKitchenStats,
+  SubKitchenStatsFilters,
+  UpdatePrepStatusInput,
+} from "@/lib/types/sub-kitchen";
+import type {
   BranchCustomer,
   BranchCustomerFilters,
   BranchStaff,
@@ -448,4 +464,41 @@ export interface ApiClient {
   listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
   getProductionRun(id: string): Promise<ProductionRun>;
   createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun>;
+
+  // Sub-kitchen — the branch prep station. Portal routes, caller's portal token.
+  // No `status` returns the working board (QUEUED + IN_PROGRESS + READY).
+  listPrepBoard(filters?: PrepBoardFilters): Promise<Paginated<PrepTicket>>;
+  getPrepTicket(id: string): Promise<PrepTicket>;
+  createBatchJob(body: CreateBatchInput): Promise<PrepTicket>;
+  updatePrepStatus(id: string, body: UpdatePrepStatusInput): Promise<PrepTicket>;
+  // Completing moves stock: components come off branch stock; a BATCH adds the
+  // finished item back, an ORDER does not.
+  completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket>;
+  cancelPrepTicket(id: string): Promise<PrepTicket>;
+
+  // Products the chef can reference — real product ids for both recipe pickers
+  // (never menu_item_ids). `kind=FINISHED_GOOD` = what's made, `RAW_MATERIAL` =
+  // what it's made of.
+  listSubKitchenProducts(filters?: SubKitchenProductFilters): Promise<SubKitchenProduct[]>;
+
+  // Chef-owned recipes — versioned, never edited in place.
+  listSubKitchenRecipes(): Promise<SubKitchenRecipe[]>;
+  getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe>;
+  createSubKitchenRecipe(body: CreateSubKitchenRecipeInput): Promise<SubKitchenRecipe>;
+
+  // Waste — the same branch stock ledger, logged from the prep station.
+  logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem>;
+  listSubKitchenWaste(filters?: WasteEventFilters): Promise<WasteEvent[]>;
+
+  // Sold out (86-ing) — stops the tills selling the item immediately.
+  listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]>;
+  setSubKitchenAvailability(
+    menuItemId: string,
+    body: SetAvailabilityInput,
+  ): Promise<SubKitchenAvailabilityRow>;
+
+  getSubKitchenStats(filters?: SubKitchenStatsFilters): Promise<SubKitchenStats>;
+
+  // Branch stock nearing expiry (outside the sub-kitchen namespace).
+  listBranchNearExpiry(filters?: BranchNearExpiryFilters): Promise<BranchInventoryItem[]>;
 }
