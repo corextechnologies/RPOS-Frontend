@@ -86,6 +86,9 @@ export type AuthAction =
   | "branch-waste:log"
   | "branch-production:read"
   | "branch-production:create"
+  // Sub-kitchen prep station. The manager holds it for the oversight view; the
+  // Chef will hold it once portal `position` routing lands.
+  | "sub-kitchen:read"
   | "branch-requests:read"
   | "branch-requests:create"
   | "branch-planning:read"
@@ -178,6 +181,7 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "branch-waste:log",
     "branch-production:read",
     "branch-production:create",
+    "sub-kitchen:read",
     "branch-requests:read",
     "branch-requests:create",
     "branch-planning:read",
