@@ -493,6 +493,19 @@ export interface PaymentInput {
   auth_code?: string;
   /** Display-only. Never send a full PAN. */
   masked_pan?: string;
+  /**
+   * NEW·P5 — the forever-anchor for this tender. Minted once, persisted in the
+   * outbox before the first attempt, and reused on every replay: the server
+   * returns the *same* Payment for a repeated id, so an offline capture that
+   * syncs twice never double-charges. Optional so online call sites that let
+   * the server dedupe on `Idempotency-Key` alone keep working unchanged.
+   */
+  client_payment_id?: string;
+  /**
+   * NEW·P5 — which cached payment account the customer paid into for an ONLINE
+   * tender (§10). Null/absent for CASH.
+   */
+  payment_account_id?: number | null;
 }
 
 export interface PaymentResult {

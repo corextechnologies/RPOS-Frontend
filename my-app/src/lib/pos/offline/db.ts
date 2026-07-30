@@ -98,7 +98,7 @@ export function openDb(): Promise<IDBDatabase | null> {
 }
 
 /** Promisify one request inside an already-opened transaction. */
-function promisifyRequest<T>(req: IDBRequest<T>): Promise<T> {
+export function promisifyRequest<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
