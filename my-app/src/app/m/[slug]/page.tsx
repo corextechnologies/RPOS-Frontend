@@ -77,7 +77,7 @@ function ItemDetailModal({
       transition={{ duration: 0.25 }}
     >
       <motion.div
-        className="relative flex h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-line bg-surface-2 shadow-glow"
+        className="relative flex h-[90dvh] w-full max-w-lg flex-col overflow-hidden roun  ded-3xl border border-line bg-surface-2 shadow-glow"
         onClick={(e) => e.stopPropagation()}
         initial={{ y: "100%", opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
