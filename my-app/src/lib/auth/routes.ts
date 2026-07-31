@@ -1,5 +1,6 @@
 import type { MeResponse } from "@/lib/types/super-admin";
-import { portalPathForRole } from "./roles";
+import { portalPathForRole, SUB_KITCHEN_HOME } from "./roles";
+import { isBranchChef } from "./capabilities";
 
 export const AUTH_ROUTES = {
   login: "/login",
@@ -14,6 +15,8 @@ export function requiresPasswordChange(user: MeResponse | null | undefined): boo
 
 export function postAuthPath(user: MeResponse): string {
   if (requiresPasswordChange(user)) return AUTH_ROUTES.changePassword;
+  // A CHEF is BRANCH_STAFF by role but belongs in the sub-kitchen, not `/pos`.
+  if (isBranchChef(user)) return SUB_KITCHEN_HOME;
   return portalPathForRole(user.role);
 }
 
