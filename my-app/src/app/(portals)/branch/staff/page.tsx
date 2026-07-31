@@ -44,12 +44,13 @@ import type { BranchPosition } from "@/lib/types/super-admin";
 import type { BranchStaff, CreateBranchStaffInput, CreateBranchStaffResult, UpdateBranchStaffInput } from "@/lib/types/branch";
 
 /**
- * Branch staff, and the position that decides what they can do at a till.
+ * Branch staff, and the position that decides what they can do.
  *
- * Position is not a label — the server resolves it into the capability list the
- * POS gates on, so someone created without one has an empty capability set and
+ * Position is not a label — the server resolves it into the capability list that
+ * gates access, so someone created without one has an empty capability set and
  * is refused everywhere. That is why this screen exists and why position is
- * required rather than optional.
+ * required rather than optional. The three till roles run a POS; a CHEF works
+ * the sub-kitchen instead and never touches a till.
  */
 const POSITIONS: Array<{ value: BranchPosition; label: string; hint: string }> = [
   {
@@ -66,6 +67,11 @@ const POSITIONS: Array<{ value: BranchPosition; label: string; hint: string }> =
     value: "ORDER_TAKER",
     label: "Order taker",
     hint: "Takes orders only. The curbside-tablet profile — no payments.",
+  },
+  {
+    value: "CHEF",
+    label: "Chef",
+    hint: "Works the sub-kitchen prep station. Can't take orders or handle cash.",
   },
 ];
 
@@ -314,8 +320,9 @@ function AddStaffDialog({
                         ))}
                       </div>
                       <p className="text-xs text-faint">
-                        Decides what they can do on a till. A curbside tablet has no drawer, so
-                        it refuses cash whatever the position.
+                        Decides what they can do. For the till roles a curbside tablet has no
+                        drawer, so it refuses cash whatever the position; a chef works the
+                        sub-kitchen and uses no till at all.
                       </p>
                       <FormMessage />
                     </FormItem>

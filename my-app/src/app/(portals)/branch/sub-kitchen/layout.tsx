@@ -11,9 +11,11 @@ import { useAuth } from "@/lib/auth";
  * the board, stock, recipes, waste, sold-out, and overview screens.
  */
 export default function SubKitchenLayout({ children }: { children: React.ReactNode }) {
-  const { can } = useAuth();
+  const { can, hasCapability } = useAuth();
 
-  if (!can("sub-kitchen:read")) {
+  // Manager reaches it via their role permission; a Chef via the PREP_READ
+  // capability. The OR keeps the manager in even if their capability list lags.
+  if (!can("sub-kitchen:read") && !hasCapability("PREP_READ")) {
     return (
       <Card>
         <CardContent className="p-0">

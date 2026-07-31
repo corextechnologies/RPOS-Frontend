@@ -141,3 +141,22 @@ export const BRANCH_NAV: NavSection[] = [
     ],
   },
 ];
+
+/**
+ * A branch CHEF's nav: the sub-kitchen and nothing else. The Chef is scoped to
+ * this sub-area, so the shell renders this in place of the full BRANCH_NAV
+ * (which a Chef's role would otherwise mis-filter into the counter screens).
+ */
+export const CHEF_NAV: NavSection[] = [
+  {
+    title: "Prep",
+    items: [
+      {
+        label: "Sub-kitchen",
+        href: "/branch/sub-kitchen",
+        icon: ChefHat,
+        match: "prefix",
+      },
+    ],
+  },
+];
