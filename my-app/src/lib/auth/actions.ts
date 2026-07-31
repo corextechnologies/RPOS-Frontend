@@ -84,10 +84,8 @@ export type AuthAction =
   | "branch-customers:delete"
   | "branch-inventory:read"
   | "branch-waste:log"
-  | "branch-production:read"
-  | "branch-production:create"
-  // Sub-kitchen prep station. The manager holds it for the oversight view; the
-  // Chef will hold it once portal `position` routing lands.
+  // Sub-kitchen prep station. The manager holds it for the oversight view; a
+  // branch CHEF reaches it via the PREP_READ capability instead.
   | "sub-kitchen:read"
   | "branch-requests:read"
   | "branch-requests:create"
@@ -179,8 +177,6 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "branch-customers:delete",
     "branch-inventory:read",
     "branch-waste:log",
-    "branch-production:read",
-    "branch-production:create",
     "sub-kitchen:read",
     "branch-requests:read",
     "branch-requests:create",

@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { branchApi } from "@/lib/api/branch.api";
 import { posErrorMessage, stockAwareMessage } from "@/lib/api/errors";
-import { ApiError } from "@/lib/types/super-admin";
 import type {
   BranchCustomerFilters,
   BranchOrderFilters,
@@ -13,8 +12,6 @@ import type {
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
-  CreateProductionRunInput,
-  ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import type { RequestFilters } from "@/lib/types/admin";
@@ -37,9 +34,6 @@ export const branchKeys = {
     filters && Object.keys(filters).length
       ? (["branch-waste", filters] as const)
       : (["branch-waste"] as const),
-  production: (filters?: ProductionRunFilters) =>
-    filters ? (["branch-production", filters] as const) : (["branch-production"] as const),
-  productionRun: (id: string) => ["branch-production-run", id] as const,
 };
 
 // ---- Terminals ----
@@ -282,33 +276,3 @@ export function useWasteBranchStock() {
   });
 }
 
-// ---- Sub-kitchen production ----
-
-export function useProductionRuns(filters?: ProductionRunFilters) {
-  return useQuery({
-    queryKey: branchKeys.production(filters),
-    queryFn: () => api.listProductionRuns(filters),
-  });
-}
-
-export function useProductionRun(id: string | null) {
-  return useQuery({
-    queryKey: branchKeys.productionRun(id ?? ""),
-    queryFn: () => api.getProductionRun(id as string),
-    enabled: !!id,
-  });
-}
-
-export function useCreateProductionRun() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateProductionRunInput) => api.createProductionRun(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["branch-production"] });
-      // A run consumes and produces branch stock, so inventory moved.
-      qc.invalidateQueries({ queryKey: branchKeys.inventory });
-      toast.success("Production run logged");
-    },
-    onError: (err) => toast.error(message(err, "Couldn't log production run")),
-  });
-}

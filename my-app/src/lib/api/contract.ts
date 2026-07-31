@@ -130,9 +130,7 @@ import type {
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
-  CreateProductionRunInput,
   ProductionRun,
-  ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import type {
@@ -461,9 +459,6 @@ export interface ApiClient {
   listBranchInventory(): Promise<BranchInventoryItem[]>;
   wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem>;
   listBranchWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
-  listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
-  getProductionRun(id: string): Promise<ProductionRun>;
-  createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun>;
 
   // Sub-kitchen — the branch prep station. Portal routes, caller's portal token.
   // No `status` returns the working board (QUEUED + IN_PROGRESS + READY).

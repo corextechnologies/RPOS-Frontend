@@ -101,12 +101,10 @@ import type {
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
-  CreateProductionRunInput,
   ProductionRun,
-  ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
-import { INVALID_PRODUCTION_RUN, MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
+import { MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
 import type {
   BranchNearExpiryFilters,
   CreateBatchInput,
@@ -7616,151 +7614,6 @@ export const mockClient: ApiClient = {
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .map(toPublicWasteEvent);
     return delay(events);
-  },
-
-  async listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-
-    const rows = db.production_runs
-      .filter((r) => r.location_type === "BRANCH" && r.location_id === branch.id)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
-
-    const page = filters?.page ?? 1;
-    const pageSize = filters?.page_size ?? 50;
-    const start = (page - 1) * pageSize;
-
-    return delay({
-      items: rows.slice(start, start + pageSize),
-      page,
-      page_size: pageSize,
-      total: rows.length,
-    });
-  },
-
-  async getProductionRun(id: string): Promise<ProductionRun> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-    const found = db.production_runs.find(
-      (r) => r.id === id && r.location_type === "BRANCH" && r.location_id === branch.id,
-    );
-    if (!found) throw new ApiError("Production run not found", 404);
-    return delay(found);
-  },
-
-  async createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-
-    const inputs = body.lines.filter((l) => l.role === "INPUT");
-    const outputs = body.lines.filter((l) => l.role === "OUTPUT");
-    if (!inputs.length || !outputs.length) {
-      throw new ApiError(
-        "A production run needs at least one input and one output.",
-        409,
-        INVALID_PRODUCTION_RUN,
-      );
-    }
-
-    // All-or-nothing: check every input has stock BEFORE moving any of it,
-    // otherwise a half-applied run leaves the branch's stock lying about what
-    // happened.
-    for (const line of inputs) {
-      const onHand = db.inventory
-        .filter(
-          (i) =>
-            i.location_type === "BRANCH" &&
-            i.location_id === branch.id &&
-            i.product_id === line.product_id,
-        )
-        .reduce((sum, i) => sum + i.quantity, 0);
-      if (onHand < line.quantity) {
-        const product = db.products.find((p) => p.id === line.product_id);
-        throw new ApiError(
-          `Not enough ${product?.name ?? "stock"} — ${onHand} on hand, ${line.quantity} needed.`,
-          409,
-          "insufficient_stock",
-        );
-      }
-    }
-
-    for (const line of inputs) {
-      let remaining = line.quantity;
-      for (const item of db.inventory) {
-        if (remaining <= 0) break;
-        if (
-          item.location_type !== "BRANCH" ||
-          item.location_id !== branch.id ||
-          item.product_id !== line.product_id
-        ) {
-          continue;
-        }
-        const take = Math.min(item.quantity, remaining);
-        item.quantity -= take;
-        remaining -= take;
-      }
-    }
-
-    for (const line of outputs) {
-      const existing = db.inventory.find(
-        (i) =>
-          i.location_type === "BRANCH" &&
-          i.location_id === branch.id &&
-          i.product_id === line.product_id &&
-          !i.batch_code,
-      );
-      if (existing) {
-        existing.quantity += line.quantity;
-      } else {
-        const product = db.products.find((p) => p.id === line.product_id);
-        db.inventory.push({
-          id: `inv-${Date.now()}-${line.product_id}`,
-          restaurant_id: branch.restaurant_id,
-          product_id: line.product_id,
-          product: {
-            id: line.product_id,
-            name: product?.name ?? "Unknown",
-            sku: product?.sku ?? null,
-          },
-          quantity: line.quantity,
-          batch_code: "",
-          expiry_date: null,
-          location_type: "BRANCH",
-          location_id: branch.id,
-        });
-      }
-    }
-
-    const run: MockProductionRun = {
-      id: `prod-${Date.now()}`,
-      restaurant_id: branch.restaurant_id,
-      location_type: "BRANCH",
-      location_id: branch.id,
-      // A branch sub-kitchen run states its own inputs and outputs, so no
-      // recipe drove it. That is exactly what distinguishes it from a kitchen
-      // run in the shared ledger.
-      recipe_id: null,
-      lines: body.lines.map((l, i) => ({
-        id: `prodline-${Date.now()}-${i}`,
-        product_id: l.product_id,
-        product_name: db.products.find((p) => p.id === l.product_id)?.name,
-        role: l.role,
-        quantity: l.quantity,
-      })),
-      note: body.note ?? null,
-      created_at: now(),
-      created_by_id: String(me.id),
-    };
-
-    db.production_runs.push(run);
-    saveDb(db);
-    return delay(run);
   },
 
   // ---- Sub-kitchen prep board ----
