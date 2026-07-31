@@ -152,6 +152,7 @@ import {
 import { POS_ERROR } from "@/lib/api/errors";
 import { tryConvertQty } from "@/lib/unit-convert";
 import type { BranchPosition } from "@/lib/types/super-admin";
+import type { Capability } from "@/lib/types/pos";
 // Mock and live agree on the state machine by sharing the real map, the same way
 // the warehouse mock does.
 import { kitchenAllowedTransitions } from "@/lib/kitchen/request-transitions";
@@ -259,7 +260,7 @@ const producedByIdempotencyKey = new Map<string, ProductionRun>();
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 30;
+const SEED_VERSION = 31;
 
 interface MockInvoiceRecord {
   id: number;
@@ -493,6 +494,32 @@ function randomPassword(length = 12): string {
   return out;
 }
 
+/**
+ * Branch capabilities, mirroring what live `/auth/me` returns. The manager holds
+ * the full station set; a CHEF holds read + operate for prep, plus inventory
+ * read, but not WASTE_LOG or any menu capability. Non-branch roles get `[]`.
+ */
+const MANAGER_CAPABILITIES: Capability[] = [
+  "ORDER_READ",
+  "ORDER_CREATE",
+  "CUSTOMER_READ",
+  "CUSTOMER_CREATE",
+  "INVENTORY_READ",
+  "WASTE_LOG",
+  "PREP_READ",
+  "PREP_OPERATE",
+];
+const CHEF_CAPABILITIES: Capability[] = ["INVENTORY_READ", "PREP_OPERATE", "PREP_READ"];
+
+/**
+ * The capability list the server would derive from a branch position. Only CHEF
+ * is load-bearing for the portal (till roles gate on the POS bootstrap's own
+ * capability list, not `/auth/me`), so those come back empty here.
+ */
+function capabilitiesForPosition(position: BranchPosition | null | undefined): Capability[] {
+  return position === "CHEF" ? [...CHEF_CAPABILITIES] : [];
+}
+
 function seedUsers(): MockUserAccount[] {
   const users: MockUserAccount[] = [];
 
@@ -578,6 +605,26 @@ function seedUsers(): MockUserAccount[] {
         restaurant_id: 1,
         created_by_id: 2,
         is_active: true,
+        branch_id: 1,
+        capabilities: MANAGER_CAPABILITIES,
+      },
+    },
+    {
+      // A branch CHEF: BRANCH_STAFF by role, position CHEF. Routes to the
+      // sub-kitchen (not the till) and skips the POS device upgrade.
+      email: "chef@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 8,
+        email: "chef@demo.ros",
+        full_name: "Sam Chef",
+        role: "BRANCH_STAFF",
+        restaurant_id: 1,
+        created_by_id: 5,
+        is_active: true,
+        position: "CHEF",
+        branch_id: 1,
+        capabilities: CHEF_CAPABILITIES,
       },
     },
     {
@@ -779,6 +826,20 @@ function seedDb(): MockDb {
       email: "branch@demo.ros",
       full_name: "Riley Branch",
       role: "BRANCH_MANAGER",
+      is_active: true,
+      branch_id: "br-001",
+      kitchen_id: null,
+      warehouse_id: null,
+      created_at: created,
+    },
+    {
+      // The branch CHEF — resolves the sub-kitchen endpoints to br-001.
+      id: "emp-009",
+      restaurant_id: "rest-001",
+      email: "chef@demo.ros",
+      full_name: "Sam Chef",
+      role: "BRANCH_STAFF",
+      position: "CHEF",
       is_active: true,
       branch_id: "br-001",
       kitchen_id: null,
@@ -2227,6 +2288,19 @@ function resolveMyBranch(db: MockDb, me: MeResponse): Branch {
 /** Branch writes the counter staff may not do. The server enforces it too. */
 function requireBranchManager(me: MeResponse) {
   if (me.role !== "BRANCH_MANAGER") {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+/**
+ * The sub-kitchen prep station admits the branch manager (oversight) and a
+ * branch CHEF (BRANCH_STAFF + position CHEF) who operates it. Waste write-off
+ * and 86-ing stay manager-only (they keep `requireBranchManager`).
+ */
+function requirePrepStation(me: MeResponse) {
+  const isManager = me.role === "BRANCH_MANAGER";
+  const isChef = me.role === "BRANCH_STAFF" && me.position === "CHEF";
+  if (!isManager && !isChef) {
     throw new ApiError("You do not have access to this operation.", 403);
   }
 }
@@ -6855,7 +6929,9 @@ export const mockClient: ApiClient = {
     } as MockEmployee);
 
     // A staff member who can't sign in isn't staff. The mock mints a working
-    // account for the same reason the live server does.
+    // account for the same reason the live server does. Position and its derived
+    // capabilities ride on `/auth/me` so a created CHEF routes and gates exactly
+    // like a seeded one.
     db.users.push({
       email: body.email,
       password,
@@ -6867,6 +6943,9 @@ export const mockClient: ApiClient = {
         restaurant_id: 1,
         created_by_id: me.id,
         is_active: true,
+        position: body.position,
+        branch_id: 1,
+        capabilities: capabilitiesForPosition(body.position),
       },
     });
 
@@ -6952,7 +7031,15 @@ export const mockClient: ApiClient = {
       emp.full_name = body.full_name;
       if (user) user.me.full_name = body.full_name;
     }
-    if (body.position !== undefined) (emp as any).position = body.position;
+    if (body.position !== undefined) {
+      (emp as MockEmployee).position = body.position;
+      // Position drives routing + capabilities, so a switch (e.g. to/from CHEF)
+      // must follow through to the login the next `/auth/me` reads.
+      if (user) {
+        user.me.position = body.position;
+        user.me.capabilities = capabilitiesForPosition(body.position);
+      }
+    }
     if (body.phone_number !== undefined) emp.phone_number = body.phone_number.trim() || null;
     if (body.address !== undefined) emp.address = body.address.trim() || null;
     if (body.image_url !== undefined) emp.image_url = body.image_url || null;
@@ -7680,7 +7767,7 @@ export const mockClient: ApiClient = {
 
   async listPrepBoard(filters?: PrepBoardFilters): Promise<Paginated<PrepTicket>> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -7704,7 +7791,7 @@ export const mockClient: ApiClient = {
 
   async getPrepTicket(id: string): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7714,7 +7801,7 @@ export const mockClient: ApiClient = {
 
   async createBatchJob(body: CreateBatchInput): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -7757,7 +7844,7 @@ export const mockClient: ApiClient = {
 
   async updatePrepStatus(id: string, body: UpdatePrepStatusInput): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7792,7 +7879,7 @@ export const mockClient: ApiClient = {
 
   async completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7911,7 +7998,7 @@ export const mockClient: ApiClient = {
 
   async cancelPrepTicket(id: string): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7931,7 +8018,7 @@ export const mockClient: ApiClient = {
     filters?: SubKitchenProductFilters,
   ): Promise<SubKitchenProduct[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -7973,7 +8060,7 @@ export const mockClient: ApiClient = {
 
   async listSubKitchenRecipes(): Promise<SubKitchenRecipe[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     return delay(
@@ -7985,7 +8072,7 @@ export const mockClient: ApiClient = {
 
   async getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const recipe = db.sub_kitchen_recipes.find(
@@ -7999,7 +8086,7 @@ export const mockClient: ApiClient = {
     body: CreateSubKitchenRecipeInput,
   ): Promise<SubKitchenRecipe> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -8187,7 +8274,7 @@ export const mockClient: ApiClient = {
 
   async getSubKitchenStats(filters?: SubKitchenStatsFilters): Promise<SubKitchenStats> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const { start, end } = statsWindow(filters);
@@ -8237,7 +8324,7 @@ export const mockClient: ApiClient = {
     filters?: BranchNearExpiryFilters,
   ): Promise<BranchInventoryItem[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 

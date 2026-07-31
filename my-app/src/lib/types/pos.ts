@@ -196,6 +196,10 @@ export type Capability =
   | "REFUND"
   | "DISCOUNT_OVER_LIMIT"
   | "VOID_AFTER_SEND"
+  // Sub-kitchen prep station: read the board/recipes/stats, and operate
+  // (batch, work tickets, publish recipes). Held by a branch CHEF and manager.
+  | "PREP_READ"
+  | "PREP_OPERATE"
   | (string & {});
 
 // ---- Customers (as the till sees them) ----
