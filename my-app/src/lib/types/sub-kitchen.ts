@@ -175,31 +175,26 @@ export interface SubKitchenRecipe {
   created_at?: string;
 }
 
-// ---- Branch near-expiry (outside the sub-kitchen namespace) ----
+// ---- Stock the station works from ----
 
-export interface BranchNearExpiryFilters {
+/**
+ * The station's own view of branch stock (`/sub-kitchen/inventory`). Same rows
+ * as `/branch/inventory` underneath — and the same `BranchInventoryItem` shape —
+ * but served inside the sub-kitchen namespace, so a chef never has to reach into
+ * the branch manager's surface to see what's on the shelf. Cost is not exposed.
+ */
+export interface SubKitchenNearExpiryFilters {
   /** Rows expiring within this many days (default 7). */
   within_days?: number;
 }
 
-// ---- Sold out (86-ing) ----
-
-export interface SubKitchenAvailabilityRow {
-  menu_item_id: string;
-  product_name?: string;
-  is_available: boolean;
-  reason: string | null;
-  on_hand: number | null;
-  auto_clear_at?: string | null;
-}
-
-/** Body for `PUT /branch/sub-kitchen/availability/{menu_item_id}`. */
-export interface SetAvailabilityInput {
-  is_available: boolean;
-  reason?: string | null;
-  /** Lets an 86 expire on its own (e.g. end of day). */
-  auto_clear_at?: string | null;
-}
+/*
+ * There is no manual 86 here. The server derives availability from branch stock
+ * — an item at zero on hand stops being sellable on the till by itself — so the
+ * only "sold out" this station shows is an on-hand figure of zero, read from the
+ * inventory endpoints above. (`/pos/availability` is a separate, device-facing
+ * surface for pulling an in-stock item; not this station's job.)
+ */
 
 // ---- Stats (the sub-kitchen overview) ----
 

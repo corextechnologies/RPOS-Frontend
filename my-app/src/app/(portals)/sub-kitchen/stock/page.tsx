@@ -12,8 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useBranchInventory } from "@/lib/hooks/use-branch";
-import { useBranchNearExpiry } from "@/lib/hooks/use-sub-kitchen";
+import { useSubKitchenInventory, useSubKitchenNearExpiry } from "@/lib/hooks/use-sub-kitchen";
 import { stockUnitColumnLabel } from "@/lib/stock-unit";
 import { formatDate } from "@/lib/utils";
 import type { BranchInventoryItem } from "@/lib/types/branch";
@@ -45,8 +44,8 @@ function aggregate(items: BranchInventoryItem[]): StockRow[] {
 }
 
 export default function SubKitchenStockPage() {
-  const inventory = useBranchInventory();
-  const nearExpiry = useBranchNearExpiry({ within_days: NEAR_EXPIRY_DAYS });
+  const inventory = useSubKitchenInventory();
+  const nearExpiry = useSubKitchenNearExpiry({ within_days: NEAR_EXPIRY_DAYS });
 
   const rows = useMemo(() => aggregate(inventory.data ?? []), [inventory.data]);
   const expiring = nearExpiry.data ?? [];

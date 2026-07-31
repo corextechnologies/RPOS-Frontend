@@ -3,10 +3,10 @@ import { postAuthPath } from "@/lib/auth/routes";
 import { isBranchChef, userHasCapability } from "@/lib/auth/capabilities";
 
 /**
- * The branch CHEF: routed to the sub-kitchen (not the till), scoped by
- * capabilities. Verifies the shape `/auth/me` must carry and that the mock's
- * prep-station guard admits a chef for prep work but not the manager-only
- * waste / availability endpoints.
+ * The branch CHEF: routed to the Sub-kitchen portal (not the till), scoped by
+ * capabilities. Verifies the shape `/auth/me` must carry, and that the mock's
+ * prep guards admit whoever holds the capability rather than whoever holds the
+ * manager role.
  *
  * The mock reads `window`/`localStorage`; the suite runs under `node`, so both
  * are stubbed before the module is imported.
@@ -44,22 +44,52 @@ describe("branch chef routing + capabilities", () => {
     expect(userHasCapability(me, "PREP_OPERATE")).toBe(true);
     expect(userHasCapability(me, "WASTE_LOG")).toBe(false);
 
-    expect(postAuthPath(me)).toBe("/branch/sub-kitchen");
+    expect(postAuthPath(me)).toBe("/sub-kitchen");
   });
 
-  it("chef can work the prep station but is refused manager-only endpoints", async () => {
+  it("chef works the prep station, waste included — it's gated on PREP_OPERATE", async () => {
     await mockClient.login("chef@demo.ros", "Demo@1234");
 
-    // Prep read/operate is allowed.
     const board = await mockClient.listPrepBoard();
     expect(Array.isArray(board.items)).toBe(true);
 
-    // Waste history + write-off and 86-ing stay manager-only.
+    // Station waste rides on PREP_OPERATE, which the chef holds — not WASTE_LOG
+    // (they don't have it) and not the manager role.
+    expect(await mockClient.listSubKitchenWaste()).toBeInstanceOf(Array);
+    await expect(
+      mockClient.logSubKitchenWaste({ product_id: "prod-004", quantity: 1 }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("a branch position without PREP_OPERATE is refused station waste", async () => {
+    await mockClient.login("branch@demo.ros", "Demo@1234");
+    const created = await mockClient.createBranchStaff({
+      ...STAFF_INPUT,
+      full_name: "Plain Cashier",
+      email: "plain.cashier@branch.com",
+      position: "CASHIER",
+    });
+
+    await mockClient.login("plain.cashier@branch.com", created.temporary_password!);
     await expect(mockClient.listSubKitchenWaste()).rejects.toMatchObject({ status: 403 });
     await expect(
       mockClient.logSubKitchenWaste({ product_id: "prod-004", quantity: 1 }),
     ).rejects.toMatchObject({ status: 403 });
-    await expect(mockClient.listSubKitchenAvailability()).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("chef reads stock through the sub-kitchen's own route, not the branch's", async () => {
+    // The manager's view of the same shelf, for comparison.
+    await mockClient.login("branch@demo.ros", "Demo@1234");
+    const managerRows = await mockClient.listBranchInventory();
+
+    await mockClient.login("chef@demo.ros", "Demo@1234");
+    const chefRows = await mockClient.listSubKitchenInventory();
+
+    // Same stock, same read model — one builder feeds both routes.
+    expect(chefRows).toEqual(managerRows);
+
+    const nearExpiry = await mockClient.listSubKitchenNearExpiry({ within_days: 7 });
+    expect(nearExpiry.every((r) => r.expiry_date != null)).toBe(true);
   });
 
   it("manager carries the prep capabilities and is not a chef", async () => {
@@ -111,7 +141,7 @@ describe("branch chef routing + capabilities", () => {
     expect(me.position).toBe("CHEF");
     expect(me.capabilities).toEqual(["INVENTORY_READ", "PREP_OPERATE", "PREP_READ"]);
     expect(isBranchChef(me)).toBe(true);
-    expect(postAuthPath(me)).toBe("/branch/sub-kitchen");
+    expect(postAuthPath(me)).toBe("/sub-kitchen");
   });
 
   it("switching a position to CHEF re-derives capabilities and routing", async () => {
@@ -133,6 +163,6 @@ describe("branch chef routing + capabilities", () => {
     const me = await mockClient.me();
     expect(me.position).toBe("CHEF");
     expect(me.capabilities).toEqual(["INVENTORY_READ", "PREP_OPERATE", "PREP_READ"]);
-    expect(postAuthPath(me)).toBe("/branch/sub-kitchen");
+    expect(postAuthPath(me)).toBe("/sub-kitchen");
   });
 });

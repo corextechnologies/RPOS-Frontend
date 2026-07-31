@@ -2,45 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import type { Capability } from "@/lib/types/pos";
 
-type TabVisible = (isManager: boolean, has: (cap: Capability) => boolean) => boolean;
-
-/** Readable with prep access; the full manager always sees everything. */
-const prepRead: TabVisible = (isManager, has) => isManager || has("PREP_READ");
-
-/**
- * Tabs a Chef sees are a subset of the manager's: a Chef holds PREP_READ (board,
- * stock, recipes, overview) but not WASTE_LOG, and 86-ing is a manager-only menu
- * job — so Waste and Sold out are hidden for a Chef.
- */
-const TABS: { label: string; href: string; show: TabVisible }[] = [
-  { label: "Board", href: "/branch/sub-kitchen", show: prepRead },
-  { label: "Stock", href: "/branch/sub-kitchen/stock", show: prepRead },
-  { label: "Recipes", href: "/branch/sub-kitchen/recipes", show: prepRead },
-  { label: "Waste", href: "/branch/sub-kitchen/waste", show: (m, has) => m || has("WASTE_LOG") },
-  { label: "Sold out", href: "/branch/sub-kitchen/sold-out", show: (m) => m },
-  { label: "Overview", href: "/branch/sub-kitchen/overview", show: prepRead },
-];
-
-/** Board is the index, so it's active only on an exact match; the rest by prefix. */
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/branch/sub-kitchen") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
+export interface SubKitchenTab {
+  label: string;
+  href: string;
+  /** The index tab matches exactly; every other tab matches by prefix. */
+  index?: boolean;
 }
 
-export function SubKitchenTabs() {
+/**
+ * The tab bar over a sub-kitchen surface. Presentational on purpose: the portal
+ * and the Branch portal's read-only tab show different tabs, and passing the
+ * list in keeps the *which* out of here — so the read-only view cannot grow an
+ * operate tab by someone editing a shared array.
+ */
+export function SubKitchenTabs({ tabs }: { tabs: SubKitchenTab[] }) {
   const pathname = usePathname();
-  const { can, hasCapability } = useAuth();
-  const isManager = can("sub-kitchen:read");
-  const tabs = TABS.filter((tab) => tab.show(isManager, hasCapability));
+
+  const isActive = (tab: SubKitchenTab) =>
+    tab.index
+      ? pathname === tab.href
+      : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
 
   return (
     <nav className="flex gap-1 overflow-x-auto border-b border-line">
       {tabs.map((tab) => {
-        const active = isActive(pathname, tab.href);
+        const active = isActive(tab);
         return (
           <Link
             key={tab.href}

@@ -39,8 +39,13 @@ export interface EightySixDialogProps {
 
 /**
  * Take a menu item off (86) or put it back. Presentational only — the caller
- * owns the mutation, so the same dialog drives both the POS availability list
- * and the sub-kitchen sold-out screen, each hitting its own endpoint.
+ * owns the mutation.
+ *
+ * One caller now: the manager's POS availability list (`/pos/availability`).
+ * The sub-kitchen used to drive it too, but that station no longer 86s anything
+ * — the server derives sellability from stock, so an item at zero comes off the
+ * till by itself. What's left here is the other case: pulling an item that *is*
+ * in stock, which is a back-office call and stays a manager's.
  */
 export function EightySixDialog({
   open,

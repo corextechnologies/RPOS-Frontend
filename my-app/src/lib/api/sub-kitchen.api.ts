@@ -2,14 +2,12 @@ import type { Paginated } from "@/lib/types/admin";
 import type { BranchInventoryItem, BranchWasteInput } from "@/lib/types/branch";
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import type {
-  BranchNearExpiryFilters,
+  SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
   CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepTicket,
-  SetAvailabilityInput,
-  SubKitchenAvailabilityRow,
   SubKitchenProduct,
   SubKitchenProductFilters,
   SubKitchenRecipe,
@@ -79,7 +77,7 @@ export const subKitchenApi = {
     });
     if (filters?.status) params.set("status", filters.status);
     const { data, meta } = await requestEnvelope<PrepTicket[]>(
-      `/branch/sub-kitchen/board?${params.toString()}`,
+      `/sub-kitchen/board?${params.toString()}`,
     );
     const items = (data ?? []).map(normalizePrepTicket);
     return {
@@ -91,12 +89,12 @@ export const subKitchenApi = {
   },
 
   async getPrepTicket(id: string): Promise<PrepTicket> {
-    const data = await request<PrepTicket>(`/branch/sub-kitchen/tickets/${id}`);
+    const data = await request<PrepTicket>(`/sub-kitchen/tickets/${id}`);
     return normalizePrepTicket(data);
   },
 
   async createBatchJob(body: CreateBatchInput): Promise<PrepTicket> {
-    const data = await request<PrepTicket>("/branch/sub-kitchen/batch", {
+    const data = await request<PrepTicket>("/sub-kitchen/batch", {
       method: "POST",
       ...json(body),
     });
@@ -105,7 +103,7 @@ export const subKitchenApi = {
 
   async updatePrepStatus(id: string, body: UpdatePrepStatusInput): Promise<PrepTicket> {
     const data = await request<PrepTicket>(
-      `/branch/sub-kitchen/tickets/${id}/status`,
+      `/sub-kitchen/tickets/${id}/status`,
       { method: "PATCH", ...json(body) },
     );
     return normalizePrepTicket(data);
@@ -113,7 +111,7 @@ export const subKitchenApi = {
 
   async completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket> {
     const data = await request<PrepTicket>(
-      `/branch/sub-kitchen/tickets/${id}/complete`,
+      `/sub-kitchen/tickets/${id}/complete`,
       { method: "POST", ...json(body ?? {}) },
     );
     return normalizePrepTicket(data);
@@ -121,7 +119,7 @@ export const subKitchenApi = {
 
   async cancelPrepTicket(id: string): Promise<PrepTicket> {
     const data = await request<PrepTicket>(
-      `/branch/sub-kitchen/tickets/${id}/cancel`,
+      `/sub-kitchen/tickets/${id}/cancel`,
       { method: "POST" },
     );
     return normalizePrepTicket(data);
@@ -136,7 +134,7 @@ export const subKitchenApi = {
     if (filters?.kind) params.set("kind", filters.kind);
     if (filters?.all) params.set("all", "true");
     const suffix = params.toString() ? `?${params}` : "";
-    const data = await request<SubKitchenProduct[]>(`/branch/sub-kitchen/products${suffix}`);
+    const data = await request<SubKitchenProduct[]>(`/sub-kitchen/products${suffix}`);
     return (data ?? []).map((p) => ({
       ...p,
       id: String(p.id),
@@ -149,19 +147,19 @@ export const subKitchenApi = {
   // ---- Recipes ----
 
   async listSubKitchenRecipes(): Promise<SubKitchenRecipe[]> {
-    const data = await request<SubKitchenRecipe[]>("/branch/sub-kitchen/recipes");
+    const data = await request<SubKitchenRecipe[]>("/sub-kitchen/recipes");
     return (data ?? []).map(normalizeRecipe);
   },
 
   async getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe> {
-    const data = await request<SubKitchenRecipe>(`/branch/sub-kitchen/recipes/${id}`);
+    const data = await request<SubKitchenRecipe>(`/sub-kitchen/recipes/${id}`);
     return normalizeRecipe(data);
   },
 
   async createSubKitchenRecipe(
     body: CreateSubKitchenRecipeInput,
   ): Promise<SubKitchenRecipe> {
-    const data = await request<SubKitchenRecipe>("/branch/sub-kitchen/recipes", {
+    const data = await request<SubKitchenRecipe>("/sub-kitchen/recipes", {
       method: "POST",
       ...json(body),
     });
@@ -171,7 +169,7 @@ export const subKitchenApi = {
   // ---- Waste (same branch ledger, logged from the station) ----
 
   async logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem> {
-    const data = await request<RawBranchInventoryItem>("/branch/sub-kitchen/waste", {
+    const data = await request<RawBranchInventoryItem>("/sub-kitchen/waste", {
       method: "POST",
       ...json(body),
     });
@@ -182,40 +180,8 @@ export const subKitchenApi = {
     const suffix = filters?.movement_type
       ? `?movement_type=${filters.movement_type}`
       : "";
-    const data = await request<WasteEvent[]>(`/branch/sub-kitchen/waste${suffix}`);
+    const data = await request<WasteEvent[]>(`/sub-kitchen/waste${suffix}`);
     return (data ?? []).map(normalizeWasteEvent);
-  },
-
-  // ---- Sold out (86) ----
-
-  async listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]> {
-    const data = await request<SubKitchenAvailabilityRow[]>(
-      "/branch/sub-kitchen/availability",
-    );
-    return (data ?? []).map((row) => ({
-      ...row,
-      menu_item_id: String(row.menu_item_id),
-      is_available: Boolean(row.is_available),
-      reason: row.reason ?? null,
-      on_hand: row.on_hand == null ? null : Number(row.on_hand),
-    }));
-  },
-
-  async setSubKitchenAvailability(
-    menuItemId: string,
-    body: SetAvailabilityInput,
-  ): Promise<SubKitchenAvailabilityRow> {
-    const row = await request<SubKitchenAvailabilityRow>(
-      `/branch/sub-kitchen/availability/${menuItemId}`,
-      { method: "PUT", ...json(body) },
-    );
-    return {
-      ...row,
-      menu_item_id: String(row.menu_item_id),
-      is_available: Boolean(row.is_available),
-      reason: row.reason ?? null,
-      on_hand: row.on_hand == null ? null : Number(row.on_hand),
-    };
   },
 
   // ---- Stats ----
@@ -225,17 +191,25 @@ export const subKitchenApi = {
     if (filters?.start) params.set("start", filters.start);
     if (filters?.end) params.set("end", filters.end);
     const q = params.toString();
-    return request<SubKitchenStats>(`/branch/sub-kitchen/stats${q ? `?${q}` : ""}`);
+    return request<SubKitchenStats>(`/sub-kitchen/stats${q ? `?${q}` : ""}`);
   },
 
-  // ---- Branch near-expiry (outside the sub-kitchen namespace) ----
+  // ---- Stock the station works from ----
 
-  async listBranchNearExpiry(
-    filters?: BranchNearExpiryFilters,
+  // Both reuse the branch inventory read model: the rows are the same branch
+  // stock, so the serializer (and its `product`-nested shape) is the same too.
+
+  async listSubKitchenInventory(): Promise<BranchInventoryItem[]> {
+    const data = await request<RawBranchInventoryItem[]>("/sub-kitchen/inventory");
+    return (data ?? []).map(normalizeBranchInventory);
+  },
+
+  async listSubKitchenNearExpiry(
+    filters?: SubKitchenNearExpiryFilters,
   ): Promise<BranchInventoryItem[]> {
     const within = filters?.within_days ?? 7;
     const data = await request<RawBranchInventoryItem[]>(
-      `/branch/inventory/near-expiry?within_days=${within}`,
+      `/sub-kitchen/inventory/near-expiry?within_days=${within}`,
     );
     return (data ?? []).map(normalizeBranchInventory);
   },

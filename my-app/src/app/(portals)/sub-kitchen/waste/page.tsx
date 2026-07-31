@@ -17,8 +17,11 @@ import { BranchWasteDialog } from "@/components/branch/BranchWasteDialog";
 import { WasteEventsTable } from "@/components/waste/WasteEventsTable";
 import { WasteEventDetailDialog } from "@/components/waste/WasteEventDetailDialog";
 import { useAuth } from "@/lib/auth";
-import { useBranchInventory } from "@/lib/hooks/use-branch";
-import { useLogSubKitchenWaste, useSubKitchenWasteEvents } from "@/lib/hooks/use-sub-kitchen";
+import {
+  useLogSubKitchenWaste,
+  useSubKitchenInventory,
+  useSubKitchenWasteEvents,
+} from "@/lib/hooks/use-sub-kitchen";
 import { stockUnitColumnLabel } from "@/lib/stock-unit";
 import { formatDate } from "@/lib/utils";
 import type { WasteStockForm } from "@/lib/schemas/warehouse-stock";
@@ -36,11 +39,13 @@ function isExpiring(dateStr?: string | null): boolean {
 }
 
 export default function SubKitchenWastePage() {
-  const { can } = useAuth();
-  const canWaste = can("branch-waste:log");
+  const { hasCapability } = useAuth();
+  // Station waste is gated on PREP_OPERATE — not WASTE_LOG, and not the manager
+  // role. The chef holds it, and so does the manager covering the station.
+  const canWaste = hasCapability("PREP_OPERATE");
 
-  const inventory = useBranchInventory();
-  // History is manager-only server-side; don't fetch it without the capability.
+  const inventory = useSubKitchenInventory();
+  // The history endpoint carries the same gate; don't fetch it without it.
   const wasteEvents = useSubKitchenWasteEvents(undefined, { enabled: canWaste });
   const logWaste = useLogSubKitchenWaste();
 

@@ -31,10 +31,17 @@ export const PORTAL_LABEL: Record<UserRole, string> = {
 export const BRANCH_PORTAL_ROLES = ["BRANCH_MANAGER"] as const;
 
 /**
- * A branch CHEF (BRANCH_STAFF + position CHEF) is admitted to this sub-area of
- * the Branch portal and nothing else — it's their home and their only screen.
+ * The Sub-kitchen is its own portal, not a branch sub-area. It admits a branch
+ * CHEF (BRANCH_STAFF + position CHEF), whose only home it is, and the branch
+ * manager, who keeps every branch capability and can cover the station.
+ *
+ * The Branch portal's `/branch/sub-kitchen` tab is a different surface: a
+ * read-only watch view over the same data, with nothing that acts.
  */
-export const SUB_KITCHEN_HOME = "/branch/sub-kitchen";
+export const SUB_KITCHEN_HOME = "/sub-kitchen";
+
+/** The manager's read-only window onto the station, inside the Branch portal. */
+export const SUB_KITCHEN_BRANCH_TAB = "/branch/sub-kitchen";
 
 /**
  * The Warehouse portal is for managers alone. Warehouse staff are personnel

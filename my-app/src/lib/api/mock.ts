@@ -106,15 +106,13 @@ import type {
 } from "@/lib/types/branch";
 import { MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
 import type {
-  BranchNearExpiryFilters,
+  SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
   CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepStatus,
   PrepTicket,
-  SetAvailabilityInput,
-  SubKitchenAvailabilityRow,
   SubKitchenProduct,
   SubKitchenProductFilters,
   SubKitchenRecipe,
@@ -386,15 +384,6 @@ interface MockSubKitchenRecipe extends SubKitchenRecipe {
   branch_id: string;
 }
 
-/** Only 86 overrides are stored; the list is derived from sellable products. */
-interface MockAvailabilityOverride {
-  restaurant_id: string;
-  branch_id: string;
-  menu_item_id: string;
-  is_available: boolean;
-  reason: string | null;
-  auto_clear_at: string | null;
-}
 
 /** A daily production target, tenant-scoped and keyed to one kitchen. */
 interface MockProductionTarget extends ProductionTarget {
@@ -431,8 +420,6 @@ interface MockDb {
   prep_tickets: MockPrepTicket[];
   /** Chef-owned prep recipes, versioned. */
   sub_kitchen_recipes: MockSubKitchenRecipe[];
-  /** 86 overrides — the availability list is derived from sellable products. */
-  availability_overrides: MockAvailabilityOverride[];
   /**
    * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
    * limit is compared against total on hand across every batch, so it cannot
@@ -1532,7 +1519,6 @@ function seedDb(): MockDb {
     production_targets: seedProductionTargets(),
     prep_tickets: seedPrepTickets(),
     sub_kitchen_recipes: seedSubKitchenRecipes(),
-    availability_overrides: [],
   };
 }
 
@@ -1654,41 +1640,6 @@ function toPublicSkRecipe(r: MockSubKitchenRecipe): SubKitchenRecipe {
   void restaurant_id;
   void branch_id;
   return pub;
-}
-
-/** On-hand for a product at a branch, summed across batches. */
-function branchOnHand(db: MockDb, branchId: string, productId: string): number {
-  return db.inventory
-    .filter(
-      (i) =>
-        i.location_type === "BRANCH" &&
-        i.location_id === branchId &&
-        i.product_id === productId,
-    )
-    .reduce((sum, i) => sum + i.quantity, 0);
-}
-
-/** The sub-kitchen availability list is derived from sellable products + overrides. */
-function deriveAvailability(db: MockDb, branch: Branch): SubKitchenAvailabilityRow[] {
-  return db.products
-    .filter(
-      (p) =>
-        p.restaurant_id === branch.restaurant_id &&
-        (p.kind === "FINISHED_GOOD" || p.kind === "RESALE"),
-    )
-    .map((p) => {
-      const override = db.availability_overrides.find(
-        (o) => o.branch_id === branch.id && o.menu_item_id === p.id,
-      );
-      return {
-        menu_item_id: p.id,
-        product_name: p.name,
-        is_available: override ? override.is_available : true,
-        reason: override?.reason ?? null,
-        on_hand: branchOnHand(db, branch.id, p.id),
-        auto_clear_at: override?.auto_clear_at ?? null,
-      };
-    });
 }
 
 /** Inclusive `YYYY-MM-DD` stats window; defaults to the last 7 days. */
@@ -2291,9 +2242,9 @@ function requireBranchManager(me: MeResponse) {
 }
 
 /**
- * The sub-kitchen prep station admits the branch manager (oversight) and a
- * branch CHEF (BRANCH_STAFF + position CHEF) who operates it. Waste write-off
- * and 86-ing stay manager-only (they keep `requireBranchManager`).
+ * The sub-kitchen prep station admits the branch manager (who keeps every branch
+ * capability and can cover the station) and a branch CHEF (BRANCH_STAFF +
+ * position CHEF) who works it day to day.
  */
 function requirePrepStation(me: MeResponse) {
   const isManager = me.role === "BRANCH_MANAGER";
@@ -2301,6 +2252,43 @@ function requirePrepStation(me: MeResponse) {
   if (!isManager && !isChef) {
     throw new ApiError("You do not have access to this operation.", 403);
   }
+}
+
+/**
+ * Writes at the station — completing, batching, waste. Gated on the capability
+ * rather than the role: the server gates sub-kitchen waste on `PREP_OPERATE`
+ * (not `WASTE_LOG`), which both the chef and the manager hold.
+ */
+function requirePrepOperate(me: MeResponse) {
+  requirePrepStation(me);
+  if (!(me.capabilities ?? []).includes("PREP_OPERATE")) {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+/**
+ * On-hand rows for one branch, shared by `/branch/inventory` and the
+ * sub-kitchen's `/sub-kitchen/inventory`. One builder because they are the same
+ * stock seen from two portals — if they were built separately they would drift,
+ * and the chef and the manager would disagree about what's on the shelf.
+ *
+ * No `cost_price`: structurally absent, not nulled (`pricing-leak.test.ts`).
+ */
+function branchInventoryRows(db: MockDb, branchId: string): BranchInventoryItem[] {
+  return db.inventory
+    .filter((i) => i.location_type === "BRANCH" && i.location_id === branchId)
+    .map((i) => ({
+      id: i.id,
+      product_id: i.product_id,
+      product_name: i.product.name,
+      sku: i.product.sku ?? null,
+      quantity: i.quantity,
+      batch_code: i.batch_code ?? "",
+      expiry_date: i.expiry_date ?? null,
+      // Resolved from the catalog so the table can show the unit.
+      stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit ?? "EACH",
+      location_id: i.location_id,
+    }));
 }
 
 function toPublicCustomer(c: MockCustomer): BranchCustomer {
@@ -7501,24 +7489,7 @@ export const mockClient: ApiClient = {
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
-    return delay(
-      db.inventory
-        .filter((i) => i.location_type === "BRANCH" && i.location_id === branch.id)
-        .map((i) => ({
-          id: i.id,
-          product_id: i.product_id,
-          product_name: i.product.name,
-          sku: i.product.sku ?? null,
-          quantity: i.quantity,
-          batch_code: i.batch_code ?? "",
-          expiry_date: i.expiry_date ?? null,
-          // Resolved from the catalog so the branch table can show the unit.
-          stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit ?? "EACH",
-          location_id: i.location_id,
-          // No cost_price. Structurally absent, not nulled — the branch has no
-          // business seeing it and `pricing-leak.test.ts` guards the type.
-        })),
-    );
+    return delay(branchInventoryRows(db, branch.id));
   },
 
   async wasteBranchStock(body: BranchWasteInput) {
@@ -7995,7 +7966,7 @@ export const mockClient: ApiClient = {
 
   async logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepOperate(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -8056,7 +8027,7 @@ export const mockClient: ApiClient = {
 
   async listSubKitchenWaste(filters?: WasteEventFilters): Promise<WasteEvent[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepOperate(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     return delay(
@@ -8071,56 +8042,6 @@ export const mockClient: ApiClient = {
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .map(toPublicWasteEvent),
     );
-  },
-
-  // ---- Sold out (86) ----
-
-  async listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-    return delay(deriveAvailability(db, branch));
-  },
-
-  async setSubKitchenAvailability(
-    menuItemId: string,
-    body: SetAvailabilityInput,
-  ): Promise<SubKitchenAvailabilityRow> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-
-    let override = db.availability_overrides.find(
-      (o) => o.branch_id === branch.id && o.menu_item_id === menuItemId,
-    );
-    if (!override) {
-      override = {
-        restaurant_id: branch.restaurant_id,
-        branch_id: branch.id,
-        menu_item_id: menuItemId,
-        is_available: true,
-        reason: null,
-        auto_clear_at: null,
-      };
-      db.availability_overrides.push(override);
-    }
-    override.is_available = body.is_available;
-    override.reason = body.is_available ? null : body.reason?.trim() || null;
-    override.auto_clear_at = body.is_available ? null : body.auto_clear_at ?? null;
-    saveDb(db);
-
-    const product = db.products.find((p) => p.id === menuItemId);
-    const result: SubKitchenAvailabilityRow = {
-      menu_item_id: menuItemId,
-      product_name: product?.name,
-      is_available: override.is_available,
-      reason: override.reason,
-      on_hand: branchOnHand(db, branch.id, menuItemId),
-      auto_clear_at: override.auto_clear_at,
-    };
-    return delay(result, 300);
   },
 
   // ---- Stats ----
@@ -8171,10 +8092,19 @@ export const mockClient: ApiClient = {
     return delay(stats);
   },
 
-  // ---- Branch near-expiry ----
+  // ---- Stock the station works from ----
 
-  async listBranchNearExpiry(
-    filters?: BranchNearExpiryFilters,
+  async listSubKitchenInventory(): Promise<BranchInventoryItem[]> {
+    const me = requireAuth();
+    requirePrepStation(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    return delay(branchInventoryRows(db, branch.id));
+  },
+
+  async listSubKitchenNearExpiry(
+    filters?: SubKitchenNearExpiryFilters,
   ): Promise<BranchInventoryItem[]> {
     const me = requireAuth();
     requirePrepStation(me);
