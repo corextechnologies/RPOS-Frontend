@@ -14,11 +14,11 @@ export const SUB_KITCHEN_NAV: NavSection[] = [
   {
     title: "Prep",
     items: [
+      { label: "Overview", href: "/sub-kitchen/overview", icon: LineChart, match: "exact" },
       { label: "Board", href: "/sub-kitchen", icon: ClipboardList, match: "exact" },
       { label: "Stock", href: "/sub-kitchen/stock", icon: Package, match: "exact" },
       { label: "Recipes", href: "/sub-kitchen/recipes", icon: ChefHat, match: "prefix" },
       { label: "Waste", href: "/sub-kitchen/waste", icon: Trash2, match: "exact" },
-      { label: "Overview", href: "/sub-kitchen/overview", icon: LineChart, match: "exact" },
     ],
   },
 ];
