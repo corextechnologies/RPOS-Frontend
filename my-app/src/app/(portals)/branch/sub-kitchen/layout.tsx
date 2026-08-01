@@ -1,19 +1,39 @@
 "use client";
 
-import { SubKitchenTabs } from "@/components/branch/sub-kitchen/SubKitchenTabs";
+import {
+  SubKitchenTabs,
+  type SubKitchenTab,
+} from "@/components/branch/sub-kitchen/SubKitchenTabs";
 import { EmptyState } from "@/components/ui/state";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 
 /**
- * The branch prep station. Sits inside the branch portal (manager-only for now;
- * the Chef gets routed here once portal `position` lands), with a tab bar over
- * the board, stock, recipes, waste, sold-out, and overview screens.
+ * The manager's window onto the sub-kitchen: numbers and the live board, and
+ * nothing that acts. Every operating control — batching, completing, recipes,
+ * waste — lives in the Sub-kitchen portal.
+ *
+ * This is display scoping, not a capability removal: the manager still holds
+ * every branch capability. The point is that a supervisor's dashboard shouldn't
+ * offer a button that belongs on the chef's bench.
+ *
+ * Overview is the landing page — a supervisor wants the numbers first, and the
+ * tab you arrive on should be the one that reads first.
  */
-export default function SubKitchenLayout({ children }: { children: React.ReactNode }) {
-  const { can } = useAuth();
+const TABS: SubKitchenTab[] = [
+  { label: "Overview", href: "/branch/sub-kitchen", index: true },
+  { label: "Board", href: "/branch/sub-kitchen/board" },
+];
 
-  if (!can("sub-kitchen:read")) {
+export default function BranchSubKitchenLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { can, hasCapability } = useAuth();
+
+  // The OR keeps the manager in even if their capability list lags the role.
+  if (!can("sub-kitchen:read") && !hasCapability("PREP_READ")) {
     return (
       <Card>
         <CardContent className="p-0">
@@ -33,11 +53,11 @@ export default function SubKitchenLayout({ children }: { children: React.ReactNo
           Sub-kitchen
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Final prep at this branch — the board, recipes, stock, waste, and sold-out.
+          What the prep station is working on. Read-only from here.
         </p>
       </div>
 
-      <SubKitchenTabs />
+      <SubKitchenTabs tabs={TABS} />
 
       {children}
     </div>

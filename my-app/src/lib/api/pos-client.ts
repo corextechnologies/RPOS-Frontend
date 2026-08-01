@@ -68,15 +68,31 @@ function buildHeaders(opts?: PosRequestOptions): Record<string, string> {
   return headers;
 }
 
+/**
+ * A request that stalls longer than this is aborted, so it surfaces as a
+ * `PosNetworkError` and the offline queue kicks in. Without it a hung request
+ * (a captive portal, a dead uplink that `navigator.onLine` still calls "online")
+ * waits forever and the sale neither queues nor completes — it just resolves
+ * whenever the network happens to return.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 async function send(path: string, opts?: PosRequestOptions): Promise<Response> {
-  return fetch(`${apiConfig.baseUrl}${path}`, {
-    ...opts,
-    // The device identity rides an httpOnly cookie the server sets at activation
-    // and every login. Without this the cookie neither travels nor sticks, and
-    // login falls back to the (clearable) localStorage uid on every call.
-    credentials: "include",
-    headers: buildHeaders(opts),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(`${apiConfig.baseUrl}${path}`, {
+      ...opts,
+      // The device identity rides an httpOnly cookie the server sets at activation
+      // and every login. Without this the cookie neither travels nor sticks, and
+      // login falls back to the (clearable) localStorage uid on every call.
+      credentials: "include",
+      headers: buildHeaders(opts),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

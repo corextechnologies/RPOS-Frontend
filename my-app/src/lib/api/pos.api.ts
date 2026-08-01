@@ -187,8 +187,14 @@ export const posApi = {
    * Fires the KOT and deducts stock. Idempotent server-side — re-sending after
    * a timeout never double-deducts, so a retry is safe.
    */
-  sendOrder(id: number): Promise<PosOrder> {
-    return posRequest<PosOrder>(`/pos/orders/${id}/send`, { method: "POST" });
+  async sendOrder(id: number): Promise<PosOrder> {
+    // The send response is `{ order, kot, kot_stations }` — unwrap the order so
+    // callers get a real PosOrder (otherwise `order.order_no` reads undefined).
+    const resp = await posRequest<{ order: PosOrder; kot: unknown; kot_stations: unknown }>(
+      `/pos/orders/${id}/send`,
+      { method: "POST" },
+    );
+    return resp.order;
   },
 
   kot(id: number): Promise<KotPayload> {

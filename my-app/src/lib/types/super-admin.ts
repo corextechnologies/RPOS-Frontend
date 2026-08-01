@@ -1,3 +1,5 @@
+import type { Capability } from "@/lib/types/pos";
+
 export type PlanTier = "standard" | "premium" | "enterprise" | string;
 export type PlanStatus = "active" | "halted";
 export type AccessStatus = "active" | "revoked";
@@ -28,7 +30,7 @@ export type UserRole =
  * exists to *explain* a permission ("your position cannot take cash"), never to
  * decide one.
  */
-export type BranchPosition = "CASHIER" | "SALESPERSON" | "ORDER_TAKER";
+export type BranchPosition = "CASHIER" | "SALESPERSON" | "ORDER_TAKER" | "CHEF";
 
 export interface RestaurantAdmin {
   id?: string;
@@ -212,6 +214,21 @@ export interface MeResponse {
   is_active: boolean;
   /** When true, user must set a new password before accessing any portal. */
   must_change_password?: boolean;
+  /**
+   * Branch sub-role. Present for BRANCH_STAFF; drives portal routing (a `CHEF`
+   * lands in the sub-kitchen, not the till). Absent/null for other roles.
+   */
+  position?: BranchPosition | null;
+  /** The location the user belongs to. Only one is set, per role. */
+  branch_id?: number | null;
+  kitchen_id?: number | null;
+  warehouse_id?: number | null;
+  /**
+   * Branch-only permission list (empty `[]` for Admin/Kitchen/Warehouse, meaning
+   * "not applicable"). Gate individual Branch-area actions on this — never gate
+   * other portals on it, and never infer it from `role`. See {@link Capability}.
+   */
+  capabilities?: Capability[];
 }
 
 export interface ForgotPasswordInput {

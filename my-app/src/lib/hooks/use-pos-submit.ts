@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { posApi } from "@/lib/api/pos.api";
 import { isNetworkError } from "@/lib/api/pos-client";
 import { newIdempotencyKey } from "@/lib/pos/idempotency";
+import { isOnline } from "@/lib/pos/offline/connectivity";
 import { deviceServices } from "@/lib/pos/offline/device-services";
 import { posOrderKeys } from "@/lib/hooks/use-pos-orders";
 import type { Minor } from "@/lib/money";
@@ -48,20 +49,14 @@ export function useSubmitOrder() {
   const qc = useQueryClient();
 
   return useMutation<SubmitOrderResult, unknown, SubmitOrderInput>({
+    // Stated here rather than left to the client default: this seam only works
+    // if it is allowed to *run* while offline. React Query's "online" mode
+    // would park the mutation until connectivity returns, so the till would
+    // hang on Send with nothing queued — the exact failure the seam exists to
+    // prevent. Not a preference; a precondition.
+    networkMode: "always",
     mutationFn: async ({ create, deviceTotalMinor, existingOrderId, localOrder }) => {
-      try {
-        const order =
-          existingOrderId && existingOrderId > 0
-            ? await posApi.sendOrder(existingOrderId)
-            : await posApi.sendOrder(
-                (await posApi.createOrder(create, newIdempotencyKey())).id,
-              );
-        return { order, offline: false };
-      } catch (err) {
-        // Only being offline falls back to the queue. A price_mismatch or any
-        // other server rejection must reach the caller unchanged.
-        if (!isNetworkError(err)) throw err;
-
+      const queueOffline = async (): Promise<SubmitOrderResult> => {
         await deviceServices.outbox.enqueue({
           kind: "order",
           anchor: create.local_id,
@@ -75,6 +70,28 @@ export function useSubmitOrder() {
           },
         });
         return { order: localOrder, offline: true };
+      };
+
+      // Known-offline fast path. `navigator.onLine === false` is a reliable
+      // "definitely offline" signal (only the reverse — true while actually
+      // offline — is the unreliable case connectivity.ts warns about). Queue
+      // immediately instead of firing a request that may hang with no fast
+      // failure for the catch below to see.
+      if (!isOnline()) return queueOffline();
+
+      try {
+        const order =
+          existingOrderId && existingOrderId > 0
+            ? await posApi.sendOrder(existingOrderId)
+            : await posApi.sendOrder(
+                (await posApi.createOrder(create, newIdempotencyKey())).id,
+              );
+        return { order, offline: false };
+      } catch (err) {
+        // Only being offline falls back to the queue. A price_mismatch or any
+        // other server rejection must reach the caller unchanged.
+        if (!isNetworkError(err)) throw err;
+        return queueOffline();
       }
     },
     onSuccess: ({ order, offline }) => {

@@ -101,22 +101,18 @@ import type {
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
-  CreateProductionRunInput,
   ProductionRun,
-  ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
-import { INVALID_PRODUCTION_RUN, MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
+import { MISSING_BRANCH_ASSIGNMENT } from "@/lib/types/branch";
 import type {
-  BranchNearExpiryFilters,
+  SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
   CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepStatus,
   PrepTicket,
-  SetAvailabilityInput,
-  SubKitchenAvailabilityRow,
   SubKitchenProduct,
   SubKitchenProductFilters,
   SubKitchenRecipe,
@@ -152,6 +148,7 @@ import {
 import { POS_ERROR } from "@/lib/api/errors";
 import { tryConvertQty } from "@/lib/unit-convert";
 import type { BranchPosition } from "@/lib/types/super-admin";
+import type { Capability } from "@/lib/types/pos";
 // Mock and live agree on the state machine by sharing the real map, the same way
 // the warehouse mock does.
 import { kitchenAllowedTransitions } from "@/lib/kitchen/request-transitions";
@@ -259,7 +256,7 @@ const producedByIdempotencyKey = new Map<string, ProductionRun>();
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 30;
+const SEED_VERSION = 31;
 
 interface MockInvoiceRecord {
   id: number;
@@ -387,15 +384,6 @@ interface MockSubKitchenRecipe extends SubKitchenRecipe {
   branch_id: string;
 }
 
-/** Only 86 overrides are stored; the list is derived from sellable products. */
-interface MockAvailabilityOverride {
-  restaurant_id: string;
-  branch_id: string;
-  menu_item_id: string;
-  is_available: boolean;
-  reason: string | null;
-  auto_clear_at: string | null;
-}
 
 /** A daily production target, tenant-scoped and keyed to one kitchen. */
 interface MockProductionTarget extends ProductionTarget {
@@ -432,8 +420,6 @@ interface MockDb {
   prep_tickets: MockPrepTicket[];
   /** Chef-owned prep recipes, versioned. */
   sub_kitchen_recipes: MockSubKitchenRecipe[];
-  /** 86 overrides — the availability list is derived from sellable products. */
-  availability_overrides: MockAvailabilityOverride[];
   /**
    * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
    * limit is compared against total on hand across every batch, so it cannot
@@ -491,6 +477,32 @@ function randomPassword(length = 12): string {
     out += chars[Math.floor(Math.random() * chars.length)];
   }
   return out;
+}
+
+/**
+ * Branch capabilities, mirroring what live `/auth/me` returns. The manager holds
+ * the full station set; a CHEF holds read + operate for prep, plus inventory
+ * read, but not WASTE_LOG or any menu capability. Non-branch roles get `[]`.
+ */
+const MANAGER_CAPABILITIES: Capability[] = [
+  "ORDER_READ",
+  "ORDER_CREATE",
+  "CUSTOMER_READ",
+  "CUSTOMER_CREATE",
+  "INVENTORY_READ",
+  "WASTE_LOG",
+  "PREP_READ",
+  "PREP_OPERATE",
+];
+const CHEF_CAPABILITIES: Capability[] = ["INVENTORY_READ", "PREP_OPERATE", "PREP_READ"];
+
+/**
+ * The capability list the server would derive from a branch position. Only CHEF
+ * is load-bearing for the portal (till roles gate on the POS bootstrap's own
+ * capability list, not `/auth/me`), so those come back empty here.
+ */
+function capabilitiesForPosition(position: BranchPosition | null | undefined): Capability[] {
+  return position === "CHEF" ? [...CHEF_CAPABILITIES] : [];
 }
 
 function seedUsers(): MockUserAccount[] {
@@ -578,6 +590,26 @@ function seedUsers(): MockUserAccount[] {
         restaurant_id: 1,
         created_by_id: 2,
         is_active: true,
+        branch_id: 1,
+        capabilities: MANAGER_CAPABILITIES,
+      },
+    },
+    {
+      // A branch CHEF: BRANCH_STAFF by role, position CHEF. Routes to the
+      // sub-kitchen (not the till) and skips the POS device upgrade.
+      email: "chef@demo.ros",
+      password: "Demo@1234",
+      me: {
+        id: 8,
+        email: "chef@demo.ros",
+        full_name: "Sam Chef",
+        role: "BRANCH_STAFF",
+        restaurant_id: 1,
+        created_by_id: 5,
+        is_active: true,
+        position: "CHEF",
+        branch_id: 1,
+        capabilities: CHEF_CAPABILITIES,
       },
     },
     {
@@ -779,6 +811,20 @@ function seedDb(): MockDb {
       email: "branch@demo.ros",
       full_name: "Riley Branch",
       role: "BRANCH_MANAGER",
+      is_active: true,
+      branch_id: "br-001",
+      kitchen_id: null,
+      warehouse_id: null,
+      created_at: created,
+    },
+    {
+      // The branch CHEF — resolves the sub-kitchen endpoints to br-001.
+      id: "emp-009",
+      restaurant_id: "rest-001",
+      email: "chef@demo.ros",
+      full_name: "Sam Chef",
+      role: "BRANCH_STAFF",
+      position: "CHEF",
       is_active: true,
       branch_id: "br-001",
       kitchen_id: null,
@@ -1473,7 +1519,6 @@ function seedDb(): MockDb {
     production_targets: seedProductionTargets(),
     prep_tickets: seedPrepTickets(),
     sub_kitchen_recipes: seedSubKitchenRecipes(),
-    availability_overrides: [],
   };
 }
 
@@ -1595,41 +1640,6 @@ function toPublicSkRecipe(r: MockSubKitchenRecipe): SubKitchenRecipe {
   void restaurant_id;
   void branch_id;
   return pub;
-}
-
-/** On-hand for a product at a branch, summed across batches. */
-function branchOnHand(db: MockDb, branchId: string, productId: string): number {
-  return db.inventory
-    .filter(
-      (i) =>
-        i.location_type === "BRANCH" &&
-        i.location_id === branchId &&
-        i.product_id === productId,
-    )
-    .reduce((sum, i) => sum + i.quantity, 0);
-}
-
-/** The sub-kitchen availability list is derived from sellable products + overrides. */
-function deriveAvailability(db: MockDb, branch: Branch): SubKitchenAvailabilityRow[] {
-  return db.products
-    .filter(
-      (p) =>
-        p.restaurant_id === branch.restaurant_id &&
-        (p.kind === "FINISHED_GOOD" || p.kind === "RESALE"),
-    )
-    .map((p) => {
-      const override = db.availability_overrides.find(
-        (o) => o.branch_id === branch.id && o.menu_item_id === p.id,
-      );
-      return {
-        menu_item_id: p.id,
-        product_name: p.name,
-        is_available: override ? override.is_available : true,
-        reason: override?.reason ?? null,
-        on_hand: branchOnHand(db, branch.id, p.id),
-        auto_clear_at: override?.auto_clear_at ?? null,
-      };
-    });
 }
 
 /** Inclusive `YYYY-MM-DD` stats window; defaults to the last 7 days. */
@@ -2229,6 +2239,56 @@ function requireBranchManager(me: MeResponse) {
   if (me.role !== "BRANCH_MANAGER") {
     throw new ApiError("You do not have access to this operation.", 403);
   }
+}
+
+/**
+ * The sub-kitchen prep station admits the branch manager (who keeps every branch
+ * capability and can cover the station) and a branch CHEF (BRANCH_STAFF +
+ * position CHEF) who works it day to day.
+ */
+function requirePrepStation(me: MeResponse) {
+  const isManager = me.role === "BRANCH_MANAGER";
+  const isChef = me.role === "BRANCH_STAFF" && me.position === "CHEF";
+  if (!isManager && !isChef) {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+/**
+ * Writes at the station — completing, batching, waste. Gated on the capability
+ * rather than the role: the server gates sub-kitchen waste on `PREP_OPERATE`
+ * (not `WASTE_LOG`), which both the chef and the manager hold.
+ */
+function requirePrepOperate(me: MeResponse) {
+  requirePrepStation(me);
+  if (!(me.capabilities ?? []).includes("PREP_OPERATE")) {
+    throw new ApiError("You do not have access to this operation.", 403);
+  }
+}
+
+/**
+ * On-hand rows for one branch, shared by `/branch/inventory` and the
+ * sub-kitchen's `/sub-kitchen/inventory`. One builder because they are the same
+ * stock seen from two portals — if they were built separately they would drift,
+ * and the chef and the manager would disagree about what's on the shelf.
+ *
+ * No `cost_price`: structurally absent, not nulled (`pricing-leak.test.ts`).
+ */
+function branchInventoryRows(db: MockDb, branchId: string): BranchInventoryItem[] {
+  return db.inventory
+    .filter((i) => i.location_type === "BRANCH" && i.location_id === branchId)
+    .map((i) => ({
+      id: i.id,
+      product_id: i.product_id,
+      product_name: i.product.name,
+      sku: i.product.sku ?? null,
+      quantity: i.quantity,
+      batch_code: i.batch_code ?? "",
+      expiry_date: i.expiry_date ?? null,
+      // Resolved from the catalog so the table can show the unit.
+      stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit ?? "EACH",
+      location_id: i.location_id,
+    }));
 }
 
 function toPublicCustomer(c: MockCustomer): BranchCustomer {
@@ -6855,7 +6915,9 @@ export const mockClient: ApiClient = {
     } as MockEmployee);
 
     // A staff member who can't sign in isn't staff. The mock mints a working
-    // account for the same reason the live server does.
+    // account for the same reason the live server does. Position and its derived
+    // capabilities ride on `/auth/me` so a created CHEF routes and gates exactly
+    // like a seeded one.
     db.users.push({
       email: body.email,
       password,
@@ -6867,6 +6929,9 @@ export const mockClient: ApiClient = {
         restaurant_id: 1,
         created_by_id: me.id,
         is_active: true,
+        position: body.position,
+        branch_id: 1,
+        capabilities: capabilitiesForPosition(body.position),
       },
     });
 
@@ -6952,7 +7017,15 @@ export const mockClient: ApiClient = {
       emp.full_name = body.full_name;
       if (user) user.me.full_name = body.full_name;
     }
-    if (body.position !== undefined) (emp as any).position = body.position;
+    if (body.position !== undefined) {
+      (emp as MockEmployee).position = body.position;
+      // Position drives routing + capabilities, so a switch (e.g. to/from CHEF)
+      // must follow through to the login the next `/auth/me` reads.
+      if (user) {
+        user.me.position = body.position;
+        user.me.capabilities = capabilitiesForPosition(body.position);
+      }
+    }
     if (body.phone_number !== undefined) emp.phone_number = body.phone_number.trim() || null;
     if (body.address !== undefined) emp.address = body.address.trim() || null;
     if (body.image_url !== undefined) emp.image_url = body.image_url || null;
@@ -7416,24 +7489,7 @@ export const mockClient: ApiClient = {
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
-    return delay(
-      db.inventory
-        .filter((i) => i.location_type === "BRANCH" && i.location_id === branch.id)
-        .map((i) => ({
-          id: i.id,
-          product_id: i.product_id,
-          product_name: i.product.name,
-          sku: i.product.sku ?? null,
-          quantity: i.quantity,
-          batch_code: i.batch_code ?? "",
-          expiry_date: i.expiry_date ?? null,
-          // Resolved from the catalog so the branch table can show the unit.
-          stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit ?? "EACH",
-          location_id: i.location_id,
-          // No cost_price. Structurally absent, not nulled — the branch has no
-          // business seeing it and `pricing-leak.test.ts` guards the type.
-        })),
-    );
+    return delay(branchInventoryRows(db, branch.id));
   },
 
   async wasteBranchStock(body: BranchWasteInput) {
@@ -7531,156 +7587,11 @@ export const mockClient: ApiClient = {
     return delay(events);
   },
 
-  async listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-
-    const rows = db.production_runs
-      .filter((r) => r.location_type === "BRANCH" && r.location_id === branch.id)
-      .sort((a, b) => b.created_at.localeCompare(a.created_at));
-
-    const page = filters?.page ?? 1;
-    const pageSize = filters?.page_size ?? 50;
-    const start = (page - 1) * pageSize;
-
-    return delay({
-      items: rows.slice(start, start + pageSize),
-      page,
-      page_size: pageSize,
-      total: rows.length,
-    });
-  },
-
-  async getProductionRun(id: string): Promise<ProductionRun> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-    const found = db.production_runs.find(
-      (r) => r.id === id && r.location_type === "BRANCH" && r.location_id === branch.id,
-    );
-    if (!found) throw new ApiError("Production run not found", 404);
-    return delay(found);
-  },
-
-  async createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-
-    const inputs = body.lines.filter((l) => l.role === "INPUT");
-    const outputs = body.lines.filter((l) => l.role === "OUTPUT");
-    if (!inputs.length || !outputs.length) {
-      throw new ApiError(
-        "A production run needs at least one input and one output.",
-        409,
-        INVALID_PRODUCTION_RUN,
-      );
-    }
-
-    // All-or-nothing: check every input has stock BEFORE moving any of it,
-    // otherwise a half-applied run leaves the branch's stock lying about what
-    // happened.
-    for (const line of inputs) {
-      const onHand = db.inventory
-        .filter(
-          (i) =>
-            i.location_type === "BRANCH" &&
-            i.location_id === branch.id &&
-            i.product_id === line.product_id,
-        )
-        .reduce((sum, i) => sum + i.quantity, 0);
-      if (onHand < line.quantity) {
-        const product = db.products.find((p) => p.id === line.product_id);
-        throw new ApiError(
-          `Not enough ${product?.name ?? "stock"} — ${onHand} on hand, ${line.quantity} needed.`,
-          409,
-          "insufficient_stock",
-        );
-      }
-    }
-
-    for (const line of inputs) {
-      let remaining = line.quantity;
-      for (const item of db.inventory) {
-        if (remaining <= 0) break;
-        if (
-          item.location_type !== "BRANCH" ||
-          item.location_id !== branch.id ||
-          item.product_id !== line.product_id
-        ) {
-          continue;
-        }
-        const take = Math.min(item.quantity, remaining);
-        item.quantity -= take;
-        remaining -= take;
-      }
-    }
-
-    for (const line of outputs) {
-      const existing = db.inventory.find(
-        (i) =>
-          i.location_type === "BRANCH" &&
-          i.location_id === branch.id &&
-          i.product_id === line.product_id &&
-          !i.batch_code,
-      );
-      if (existing) {
-        existing.quantity += line.quantity;
-      } else {
-        const product = db.products.find((p) => p.id === line.product_id);
-        db.inventory.push({
-          id: `inv-${Date.now()}-${line.product_id}`,
-          restaurant_id: branch.restaurant_id,
-          product_id: line.product_id,
-          product: {
-            id: line.product_id,
-            name: product?.name ?? "Unknown",
-            sku: product?.sku ?? null,
-          },
-          quantity: line.quantity,
-          batch_code: "",
-          expiry_date: null,
-          location_type: "BRANCH",
-          location_id: branch.id,
-        });
-      }
-    }
-
-    const run: MockProductionRun = {
-      id: `prod-${Date.now()}`,
-      restaurant_id: branch.restaurant_id,
-      location_type: "BRANCH",
-      location_id: branch.id,
-      // A branch sub-kitchen run states its own inputs and outputs, so no
-      // recipe drove it. That is exactly what distinguishes it from a kitchen
-      // run in the shared ledger.
-      recipe_id: null,
-      lines: body.lines.map((l, i) => ({
-        id: `prodline-${Date.now()}-${i}`,
-        product_id: l.product_id,
-        product_name: db.products.find((p) => p.id === l.product_id)?.name,
-        role: l.role,
-        quantity: l.quantity,
-      })),
-      note: body.note ?? null,
-      created_at: now(),
-      created_by_id: String(me.id),
-    };
-
-    db.production_runs.push(run);
-    saveDb(db);
-    return delay(run);
-  },
-
   // ---- Sub-kitchen prep board ----
 
   async listPrepBoard(filters?: PrepBoardFilters): Promise<Paginated<PrepTicket>> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -7704,7 +7615,7 @@ export const mockClient: ApiClient = {
 
   async getPrepTicket(id: string): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7714,7 +7625,7 @@ export const mockClient: ApiClient = {
 
   async createBatchJob(body: CreateBatchInput): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -7757,7 +7668,7 @@ export const mockClient: ApiClient = {
 
   async updatePrepStatus(id: string, body: UpdatePrepStatusInput): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7792,7 +7703,7 @@ export const mockClient: ApiClient = {
 
   async completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7911,7 +7822,7 @@ export const mockClient: ApiClient = {
 
   async cancelPrepTicket(id: string): Promise<PrepTicket> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const ticket = db.prep_tickets.find((t) => t.id === id && t.branch_id === branch.id);
@@ -7931,7 +7842,7 @@ export const mockClient: ApiClient = {
     filters?: SubKitchenProductFilters,
   ): Promise<SubKitchenProduct[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -7973,7 +7884,7 @@ export const mockClient: ApiClient = {
 
   async listSubKitchenRecipes(): Promise<SubKitchenRecipe[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     return delay(
@@ -7985,7 +7896,7 @@ export const mockClient: ApiClient = {
 
   async getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const recipe = db.sub_kitchen_recipes.find(
@@ -7999,7 +7910,7 @@ export const mockClient: ApiClient = {
     body: CreateSubKitchenRecipeInput,
   ): Promise<SubKitchenRecipe> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -8055,7 +7966,7 @@ export const mockClient: ApiClient = {
 
   async logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepOperate(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 
@@ -8116,7 +8027,7 @@ export const mockClient: ApiClient = {
 
   async listSubKitchenWaste(filters?: WasteEventFilters): Promise<WasteEvent[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepOperate(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     return delay(
@@ -8133,61 +8044,11 @@ export const mockClient: ApiClient = {
     );
   },
 
-  // ---- Sold out (86) ----
-
-  async listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-    return delay(deriveAvailability(db, branch));
-  },
-
-  async setSubKitchenAvailability(
-    menuItemId: string,
-    body: SetAvailabilityInput,
-  ): Promise<SubKitchenAvailabilityRow> {
-    const me = requireAuth();
-    requireBranchManager(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-
-    let override = db.availability_overrides.find(
-      (o) => o.branch_id === branch.id && o.menu_item_id === menuItemId,
-    );
-    if (!override) {
-      override = {
-        restaurant_id: branch.restaurant_id,
-        branch_id: branch.id,
-        menu_item_id: menuItemId,
-        is_available: true,
-        reason: null,
-        auto_clear_at: null,
-      };
-      db.availability_overrides.push(override);
-    }
-    override.is_available = body.is_available;
-    override.reason = body.is_available ? null : body.reason?.trim() || null;
-    override.auto_clear_at = body.is_available ? null : body.auto_clear_at ?? null;
-    saveDb(db);
-
-    const product = db.products.find((p) => p.id === menuItemId);
-    const result: SubKitchenAvailabilityRow = {
-      menu_item_id: menuItemId,
-      product_name: product?.name,
-      is_available: override.is_available,
-      reason: override.reason,
-      on_hand: branchOnHand(db, branch.id, menuItemId),
-      auto_clear_at: override.auto_clear_at,
-    };
-    return delay(result, 300);
-  },
-
   // ---- Stats ----
 
   async getSubKitchenStats(filters?: SubKitchenStatsFilters): Promise<SubKitchenStats> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
     const { start, end } = statsWindow(filters);
@@ -8231,13 +8092,22 @@ export const mockClient: ApiClient = {
     return delay(stats);
   },
 
-  // ---- Branch near-expiry ----
+  // ---- Stock the station works from ----
 
-  async listBranchNearExpiry(
-    filters?: BranchNearExpiryFilters,
+  async listSubKitchenInventory(): Promise<BranchInventoryItem[]> {
+    const me = requireAuth();
+    requirePrepStation(me);
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    return delay(branchInventoryRows(db, branch.id));
+  },
+
+  async listSubKitchenNearExpiry(
+    filters?: SubKitchenNearExpiryFilters,
   ): Promise<BranchInventoryItem[]> {
     const me = requireAuth();
-    requireBranchManager(me);
+    requirePrepStation(me);
     const db = loadDb();
     const branch = resolveMyBranch(db, me);
 

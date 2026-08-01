@@ -1,117 +1,114 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useMemo } from "react";
+import { PackageX } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageState } from "@/components/ui/page-state";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { CompleteTicketDialog } from "@/components/branch/sub-kitchen/CompleteTicketDialog";
-import { NewBatchDialog } from "@/components/branch/sub-kitchen/NewBatchDialog";
-import { PrepTicketCard } from "@/components/branch/sub-kitchen/PrepTicketCard";
-import { usePrepBoard } from "@/lib/hooks/use-sub-kitchen";
-import { prepStatusLabel } from "@/lib/sub-kitchen/prep-transitions";
-import type { PrepStatus, PrepTicket } from "@/lib/types/sub-kitchen";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { SubKitchenStatsPanel } from "@/components/branch/sub-kitchen/SubKitchenStatsPanel";
+import { useSubKitchenInventory } from "@/lib/hooks/use-sub-kitchen";
+import { stockUnitColumnLabel } from "@/lib/stock-unit";
+import type { BranchInventoryItem } from "@/lib/types/branch";
 
-type BoardFilter = "OPEN" | "COMPLETED" | "CANCELLED";
+interface OutOfStockRow {
+  productId: string;
+  name: string;
+  unit: BranchInventoryItem["stock_unit"];
+}
 
-const FILTERS: { value: BoardFilter; label: string }[] = [
-  { value: "OPEN", label: "Open work" },
-  { value: "COMPLETED", label: "Completed" },
-  { value: "CANCELLED", label: "Cancelled" },
-];
+/**
+ * Products the station has nothing left of.
+ *
+ * Derived from on-hand rather than read from an availability list, because
+ * there is no longer such a list: the server computes sellability from stock, so
+ * "on hand is zero" *is* "sold out on the till". Totalled across batches first —
+ * a product with an empty batch and a full one is not out of stock.
+ */
+function outOfStock(items: BranchInventoryItem[]): OutOfStockRow[] {
+  const totals = new Map<string, { row: OutOfStockRow; quantity: number }>();
+  for (const item of items) {
+    const prev = totals.get(item.product_id);
+    if (prev) {
+      prev.quantity += item.quantity;
+      continue;
+    }
+    totals.set(item.product_id, {
+      quantity: item.quantity,
+      row: {
+        productId: item.product_id,
+        name: item.product_name,
+        unit: item.stock_unit,
+      },
+    });
+  }
+  return [...totals.values()]
+    .filter((t) => t.quantity <= 0)
+    .map((t) => t.row)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
-/** The order statuses stack in for the open board. */
-const OPEN_ORDER: PrepStatus[] = ["QUEUED", "IN_PROGRESS", "READY"];
-
-export default function SubKitchenBoardPage() {
-  const [filter, setFilter] = useState<BoardFilter>("OPEN");
-  const [newBatch, setNewBatch] = useState(false);
-  const [completing, setCompleting] = useState<PrepTicket | null>(null);
-
-  const board = usePrepBoard(filter === "OPEN" ? undefined : { status: filter });
-
-  // Group the open board by status; history views are a single group.
-  const groups = useMemo(() => {
-    const items = board.data?.items ?? [];
-    if (filter !== "OPEN") return [{ status: filter as PrepStatus, tickets: items }];
-    return OPEN_ORDER.map((status) => ({
-      status,
-      tickets: items.filter((t) => t.status === status),
-    })).filter((g) => g.tickets.length > 0);
-  }, [board.data?.items, filter]);
+export default function BranchSubKitchenOverviewPage() {
+  const inventory = useSubKitchenInventory();
+  const rows = useMemo(() => outOfStock(inventory.data ?? []), [inventory.data]);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Select value={filter} onValueChange={(v) => setFilter(v as BoardFilter)}>
-          <SelectTrigger className="sm:w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {FILTERS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button onClick={() => setNewBatch(true)}>
-          <Plus className="mr-1.5 size-4" aria-hidden />
-          New batch job
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <SubKitchenStatsPanel />
 
-      <PageState
-        isLoading={board.isLoading}
-        isError={board.isError}
-        data={board.data?.items}
-        isEmpty={(rows) => rows.length === 0}
-        errorTitle="Couldn't load the board"
-        errorDescription={board.error instanceof Error ? board.error.message : undefined}
-        onRetry={() => board.refetch()}
-        emptyTitle={filter === "OPEN" ? "Nothing on the board" : "Nothing here"}
-        emptyDescription={
-          filter === "OPEN"
-            ? "Queue a batch job, or wait for made-to-order tickets to arrive."
-            : "No tickets in this state."
-        }
-      >
-        {() => (
-          <div className="space-y-6">
-            {groups.map((group) => (
-              <section key={group.status} className="space-y-3">
-                <h2 className="text-xs font-medium uppercase tracking-wide text-faint">
-                  {prepStatusLabel(group.status)} · {group.tickets.length}
-                </h2>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {group.tickets.map((ticket) => (
-                    <PrepTicketCard
-                      key={ticket.id}
-                      ticket={ticket}
-                      onComplete={setCompleting}
-                    />
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <PackageX className="size-4 text-muted" aria-hidden />
+            Out of stock
+          </CardTitle>
+          <CardDescription>
+            Nothing left on the shelf, so the tills have already stopped selling these.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <PageState
+            isLoading={inventory.isLoading}
+            isError={inventory.isError}
+            data={rows}
+            isEmpty={(r) => r.length === 0}
+            errorTitle="Couldn't load stock"
+            errorDescription={
+              inventory.error instanceof Error ? inventory.error.message : undefined
+            }
+            onRetry={() => inventory.refetch()}
+            emptyTitle="Everything's in stock"
+            emptyDescription="No product the station holds has run out."
+          >
+            {(stockRows) => (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Unit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stockRows.map((row) => (
+                    <TableRow key={row.productId}>
+                      <TableCell className="font-medium text-content">{row.name}</TableCell>
+                      <TableCell className="text-muted">
+                        {stockUnitColumnLabel(row.unit)}
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-      </PageState>
-
-      <NewBatchDialog open={newBatch} onOpenChange={setNewBatch} />
-      <CompleteTicketDialog
-        ticket={completing}
-        open={completing !== null}
-        onOpenChange={(o) => {
-          if (!o) setCompleting(null);
-        }}
-      />
+                </TableBody>
+              </Table>
+            )}
+          </PageState>
+        </CardContent>
+      </Card>
     </div>
   );
 }

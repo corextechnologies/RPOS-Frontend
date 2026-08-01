@@ -6,6 +6,7 @@ import { Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { AUTH_ROUTES, postAuthPath, requiresPasswordChange } from "@/lib/auth/actions";
+import { isBranchChef } from "@/lib/auth/capabilities";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,8 @@ export default function ChangePasswordPage() {
       new_password: newPassword,
     });
     const me = await api.me();
-    if (me.role === "BRANCH_STAFF" && !requiresPasswordChange(me)) {
+    // A CHEF has no POS device role — skip the upgrade (it would 403), same as login.
+    if (me.role === "BRANCH_STAFF" && !isBranchChef(me) && !requiresPasswordChange(me)) {
       await upgradeBranchStaffToPos(me.email, newPassword);
     }
     await refresh();

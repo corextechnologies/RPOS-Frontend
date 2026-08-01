@@ -20,8 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCompletePrepTicket, useSubKitchenRecipes } from "@/lib/hooks/use-sub-kitchen";
-import { useBranchInventory } from "@/lib/hooks/use-branch";
+import {
+  useCompletePrepTicket,
+  useSubKitchenInventory,
+  useSubKitchenRecipes,
+} from "@/lib/hooks/use-sub-kitchen";
 import { formatStockQty, type StockUnit } from "@/lib/stock-unit";
 import { tryConvertQty } from "@/lib/unit-convert";
 import type { PrepTicket } from "@/lib/types/sub-kitchen";
@@ -49,7 +52,7 @@ export function CompleteTicketDialog({
 }) {
   const complete = useCompletePrepTicket();
   const recipes = useSubKitchenRecipes();
-  const inventory = useBranchInventory();
+  const inventory = useSubKitchenInventory();
 
   const activeRecipe = useMemo(() => {
     if (!ticket) return undefined;

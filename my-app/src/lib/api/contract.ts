@@ -100,14 +100,12 @@ import type {
 } from "@/lib/types/notification";
 import type { StaffDocumentKind } from "@/lib/types/staff";
 import type {
-  BranchNearExpiryFilters,
+  SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
   CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepTicket,
-  SetAvailabilityInput,
-  SubKitchenAvailabilityRow,
   SubKitchenProduct,
   SubKitchenProductFilters,
   SubKitchenRecipe,
@@ -130,9 +128,7 @@ import type {
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
-  CreateProductionRunInput,
   ProductionRun,
-  ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import type {
@@ -461,9 +457,6 @@ export interface ApiClient {
   listBranchInventory(): Promise<BranchInventoryItem[]>;
   wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem>;
   listBranchWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
-  listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>>;
-  getProductionRun(id: string): Promise<ProductionRun>;
-  createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun>;
 
   // Sub-kitchen — the branch prep station. Portal routes, caller's portal token.
   // No `status` returns the working board (QUEUED + IN_PROGRESS + READY).
@@ -490,15 +483,16 @@ export interface ApiClient {
   logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem>;
   listSubKitchenWaste(filters?: WasteEventFilters): Promise<WasteEvent[]>;
 
-  // Sold out (86-ing) — stops the tills selling the item immediately.
-  listSubKitchenAvailability(): Promise<SubKitchenAvailabilityRow[]>;
-  setSubKitchenAvailability(
-    menuItemId: string,
-    body: SetAvailabilityInput,
-  ): Promise<SubKitchenAvailabilityRow>;
-
+  // No manual 86 here: the server computes availability from branch stock, so an
+  // item at zero goes unsellable on the till by itself. (`/pos/availability` is
+  // a separate, device-facing surface the sub-kitchen does not touch.)
   getSubKitchenStats(filters?: SubKitchenStatsFilters): Promise<SubKitchenStats>;
 
-  // Branch stock nearing expiry (outside the sub-kitchen namespace).
-  listBranchNearExpiry(filters?: BranchNearExpiryFilters): Promise<BranchInventoryItem[]>;
+  // The station's own stock view. Same branch rows (and the same read model) as
+  // `listBranchInventory`, served inside the sub-kitchen namespace so the chef
+  // never has to call a `/branch/*` route the branch manager owns.
+  listSubKitchenInventory(): Promise<BranchInventoryItem[]>;
+  listSubKitchenNearExpiry(
+    filters?: SubKitchenNearExpiryFilters,
+  ): Promise<BranchInventoryItem[]>;
 }

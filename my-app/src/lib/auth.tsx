@@ -10,7 +10,9 @@ import {
 } from "react";
 import { api, tokens } from "@/lib/api";
 import { canPerform, postAuthPath, requiresPasswordChange, type AuthAction } from "@/lib/auth/actions";
+import { isBranchChef, userHasCapability } from "@/lib/auth/capabilities";
 import { upgradeBranchStaffToPos } from "@/lib/pos/upgrade";
+import type { Capability } from "@/lib/types/pos";
 import type { MeResponse } from "@/lib/types/super-admin";
 
 interface AuthContextValue {
@@ -20,6 +22,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   can: (action: AuthAction) => boolean;
+  /** Branch-only capability check. Never gate non-branch portals on this. */
+  hasCapability: (cap: Capability) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -80,7 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     await api.login(email, password);
     const me = await api.me();
-    if (me.role === "BRANCH_STAFF" && !requiresPasswordChange(me)) {
+    // A CHEF is BRANCH_STAFF but works the sub-kitchen, not the till — they have
+    // no POS device role, so the device-token upgrade would 403. Skip it.
+    if (me.role === "BRANCH_STAFF" && !isBranchChef(me) && !requiresPasswordChange(me)) {
       await upgradeBranchStaffToPos(email, password);
     }
     setUser(me);
@@ -98,9 +104,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user],
   );
 
+  const hasCapability = useCallback(
+    (cap: Capability) => userHasCapability(user, cap),
+    [user],
+  );
+
   const value = useMemo(
-    () => ({ user, loading, login, logout, refresh: loadMe, can }),
-    [user, loading, login, logout, loadMe, can],
+    () => ({ user, loading, login, logout, refresh: loadMe, can, hasCapability }),
+    [user, loading, login, logout, loadMe, can, hasCapability],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

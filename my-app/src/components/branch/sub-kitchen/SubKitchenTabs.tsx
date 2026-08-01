@@ -4,28 +4,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const TABS: { label: string; href: string }[] = [
-  { label: "Board", href: "/branch/sub-kitchen" },
-  { label: "Stock", href: "/branch/sub-kitchen/stock" },
-  { label: "Recipes", href: "/branch/sub-kitchen/recipes" },
-  { label: "Waste", href: "/branch/sub-kitchen/waste" },
-  { label: "Sold out", href: "/branch/sub-kitchen/sold-out" },
-  { label: "Overview", href: "/branch/sub-kitchen/overview" },
-];
-
-/** Board is the index, so it's active only on an exact match; the rest by prefix. */
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/branch/sub-kitchen") return pathname === href;
-  return pathname === href || pathname.startsWith(`${href}/`);
+export interface SubKitchenTab {
+  label: string;
+  href: string;
+  /** The index tab matches exactly; every other tab matches by prefix. */
+  index?: boolean;
 }
 
-export function SubKitchenTabs() {
+/**
+ * The tab bar over a sub-kitchen surface. Presentational on purpose: the portal
+ * and the Branch portal's read-only tab show different tabs, and passing the
+ * list in keeps the *which* out of here — so the read-only view cannot grow an
+ * operate tab by someone editing a shared array.
+ */
+export function SubKitchenTabs({ tabs }: { tabs: SubKitchenTab[] }) {
   const pathname = usePathname();
+
+  const isActive = (tab: SubKitchenTab) =>
+    tab.index
+      ? pathname === tab.href
+      : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
 
   return (
     <nav className="flex gap-1 overflow-x-auto border-b border-line">
-      {TABS.map((tab) => {
-        const active = isActive(pathname, tab.href);
+      {tabs.map((tab) => {
+        const active = isActive(tab);
         return (
           <Link
             key={tab.href}

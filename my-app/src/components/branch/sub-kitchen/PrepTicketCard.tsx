@@ -1,10 +1,9 @@
 "use client";
 
-import { CircleCheck, Flame, Hash } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PrepStatusBadge } from "./PrepStatusBadge";
+import { PrepTicketSummary } from "./PrepTicketSummary";
 import {
   isPrepOpen,
   prepActionLabel,
@@ -14,9 +13,9 @@ import {
   useCancelPrepTicket,
   useUpdatePrepStatus,
 } from "@/lib/hooks/use-sub-kitchen";
-import { formatDate } from "@/lib/utils";
 import type { PrepTicket } from "@/lib/types/sub-kitchen";
 
+/** The working card — the summary plus the moves. Sub-kitchen portal only. */
 export function PrepTicketCard({
   ticket,
   onComplete,
@@ -35,43 +34,7 @@ export function PrepTicketCard({
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-content">
-              {ticket.quantity}× {ticket.product_name}
-            </span>
-            <Badge variant={ticket.source === "ORDER" ? "warning" : "secondary"}>
-              {ticket.source === "ORDER" ? "Order" : "Batch"}
-            </Badge>
-            {ticket.priority > 0 && (
-              <span className="flex items-center gap-1 text-xs text-warning">
-                <Flame className="size-3" aria-hidden />
-                Priority
-              </span>
-            )}
-          </div>
-          <PrepStatusBadge status={ticket.status} />
-        </div>
-
-        {ticket.source === "ORDER" && ticket.customization_note && (
-          <div className="rounded-lg border border-line bg-surface-2 px-3 py-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-faint">
-              Customer note
-            </p>
-            <p className="text-sm text-content">{ticket.customization_note}</p>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-          {ticket.order_id && (
-            <span className="flex items-center gap-1">
-              <Hash className="size-3" aria-hidden />
-              Order {ticket.order_id}
-            </span>
-          )}
-          {ticket.due_at && <span>Due {formatDate(ticket.due_at)}</span>}
-          {ticket.note && <span className="italic">{ticket.note}</span>}
-        </div>
+        <PrepTicketSummary ticket={ticket} />
 
         {open && (
           <div className="flex flex-wrap justify-end gap-2 pt-1">

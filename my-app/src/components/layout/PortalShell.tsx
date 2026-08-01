@@ -7,18 +7,31 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import type { UserRole } from "@/lib/types/super-admin";
 import { PORTAL_HOME, PORTAL_LABEL } from "@/lib/auth/roles";
-import { navForRole } from "@/lib/nav";
+import { navForRole, type NavSection } from "@/lib/nav";
 
 interface PortalShellProps {
   role: UserRole;
   children: React.ReactNode;
+  /**
+   * Override the role-derived shell. Used for a branch CHEF, who is BRANCH_STAFF
+   * by role but gets a sub-kitchen-only nav, label, and home — not the till's.
+   */
+  sections?: NavSection[];
+  portalLabel?: string;
+  portalHome?: string;
 }
 
-export function PortalShell({ role, children }: PortalShellProps) {
+export function PortalShell({
+  role,
+  children,
+  sections: sectionsProp,
+  portalLabel: labelProp,
+  portalHome: homeProp,
+}: PortalShellProps) {
   const [drawer, setDrawer] = useState(false);
-  const portalLabel = PORTAL_LABEL[role];
-  const portalHome = PORTAL_HOME[role];
-  const sections = navForRole(role);
+  const portalLabel = labelProp ?? PORTAL_LABEL[role];
+  const portalHome = homeProp ?? PORTAL_HOME[role];
+  const sections = sectionsProp ?? navForRole(role);
 
   return (
     <div className="min-h-screen bg-bg">

@@ -2,8 +2,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 /**
  * The rest of the sub-kitchen station: recipe-driven completion, recipe
- * versioning, 86-ing (sold out), stats, and near-expiry. The prep-ticket
- * lifecycle itself is covered by `sub-kitchen-prep.test.ts`.
+ * versioning, stats, and near-expiry. The prep-ticket lifecycle itself is
+ * covered by `sub-kitchen-prep.test.ts`.
  *
  * The mock reads `window`/`localStorage`; the suite runs under `node`, so both
  * are stubbed before the module is imported.
@@ -65,22 +65,6 @@ describe("sub-kitchen station", () => {
     expect(burgerRecipes[0].version).toBe(2);
   });
 
-  it("86s an item and reflects it in the availability list", async () => {
-    const list = await mockClient.listSubKitchenAvailability();
-    const cola = list.find((r) => r.menu_item_id === "prod-005"); // Bottled Cola
-    expect(cola?.is_available).toBe(true);
-
-    await mockClient.setSubKitchenAvailability("prod-005", {
-      is_available: false,
-      reason: "Out of cola",
-    });
-
-    const after = await mockClient.listSubKitchenAvailability();
-    const colaAfter = after.find((r) => r.menu_item_id === "prod-005");
-    expect(colaAfter?.is_available).toBe(false);
-    expect(colaAfter?.reason).toBe("Out of cola");
-  });
-
   it("reports stats and near-expiry stock", async () => {
     const stats = await mockClient.getSubKitchenStats();
     // prep-001 was completed above (8 burgers).
@@ -91,7 +75,7 @@ describe("sub-kitchen station", () => {
     // No order-sourced tickets in mock mode.
     expect(stats.avg_order_to_ready_seconds).toBeNull();
 
-    const nearExpiry = await mockClient.listBranchNearExpiry({ within_days: 7 });
+    const nearExpiry = await mockClient.listSubKitchenNearExpiry({ within_days: 7 });
     const ids = nearExpiry.map((r) => r.product_id);
     expect(ids).toContain("prod-003"); // Mozzarella expires in ~4 days
     expect(ids).not.toContain("prod-001"); // Coffee expires in ~28 days

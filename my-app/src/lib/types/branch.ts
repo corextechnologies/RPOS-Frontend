@@ -219,18 +219,6 @@ export interface BranchWasteInput {
 
 export type ProductionLineRole = "INPUT" | "OUTPUT";
 
-export interface ProductionLineInput {
-  product_id: string;
-  role: ProductionLineRole;
-  quantity: number;
-}
-
-/** Needs at least one INPUT and one OUTPUT, or 409 `invalid_production_run`. */
-export interface CreateProductionRunInput {
-  lines: ProductionLineInput[];
-  note?: string;
-}
-
 export interface ProductionLine {
   id: string;
   product_id: string;
@@ -260,9 +248,4 @@ export interface ProductionRun {
   created_at: string;
   created_by_id?: string;
   note?: string | null;
-}
-
-export interface ProductionRunFilters {
-  page?: number;
-  page_size?: number;
 }

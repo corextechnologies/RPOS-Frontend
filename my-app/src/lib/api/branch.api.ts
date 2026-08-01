@@ -21,9 +21,6 @@ import type {
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
-  CreateProductionRunInput,
-  ProductionRun,
-  ProductionRunFilters,
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import type { DeviceCreateInput, PosDevice, PosDeviceActivation } from "@/lib/types/pos";
@@ -116,21 +113,6 @@ function normalizeRequest(r: StockRequest): StockRequest {
       id: String(l.id),
       product_id: l.product_id == null ? undefined : String(l.product_id),
       quantity_requested: Number(l.quantity_requested),
-    })),
-  };
-}
-
-function normalizeProductionRun(r: ProductionRun): ProductionRun {
-  return {
-    ...r,
-    id: String(r.id),
-    location_id: String(r.location_id),
-    recipe_id: r.recipe_id == null ? null : String(r.recipe_id),
-    lines: (r.lines ?? []).map((l) => ({
-      ...l,
-      id: String(l.id),
-      product_id: String(l.product_id),
-      quantity: Number(l.quantity),
     })),
   };
 }
@@ -433,42 +415,5 @@ export const branchApi = {
       batch_code: event.batch_code ?? "",
       location_id: String(event.location_id),
     }));
-  },
-
-  // ---- Sub-kitchen production ----
-
-  async listProductionRuns(filters?: ProductionRunFilters): Promise<Paginated<ProductionRun>> {
-    const page = filters?.page ?? 1;
-    const pageSize = filters?.page_size ?? 50;
-    const { data, meta } = await requestEnvelope<ProductionRun[]>(
-      `/branch/production${qs({ page, page_size: pageSize })}`,
-    );
-    return {
-      items: data.map(normalizeProductionRun),
-      page: numberFromMeta(meta, "page", page),
-      page_size: numberFromMeta(meta, "page_size", pageSize),
-      total: numberFromMeta(meta, "total", data.length),
-    };
-  },
-
-  async getProductionRun(id: string): Promise<ProductionRun> {
-    return normalizeProductionRun(await request<ProductionRun>(`/branch/production/${id}`));
-  },
-
-  /** Needs ≥1 INPUT and ≥1 OUTPUT — all-or-nothing (409 invalid_production_run). */
-  async createProductionRun(body: CreateProductionRunInput): Promise<ProductionRun> {
-    return normalizeProductionRun(
-      await request<ProductionRun>("/branch/production", {
-        method: "POST",
-        body: JSON.stringify({
-          note: optionalText(body.note),
-          lines: body.lines.map((l) => ({
-            product_id: l.product_id,
-            role: l.role,
-            quantity: l.quantity,
-          })),
-        }),
-      }),
-    );
   },
 };

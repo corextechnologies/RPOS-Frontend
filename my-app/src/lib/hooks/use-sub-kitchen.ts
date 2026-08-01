@@ -7,12 +7,11 @@ import type { BranchWasteInput } from "@/lib/types/branch";
 import type { WasteEventFilters } from "@/lib/types/waste";
 import type { ProductKind } from "@/lib/types/admin";
 import type {
-  BranchNearExpiryFilters,
+  SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
   CreateSubKitchenRecipeInput,
   PrepBoardFilters,
-  SetAvailabilityInput,
   SubKitchenStatsFilters,
   UpdatePrepStatusInput,
 } from "@/lib/types/sub-kitchen";
@@ -31,11 +30,13 @@ export const subKitchenKeys = {
     filters && Object.keys(filters).length
       ? (["sub-kitchen-waste", filters] as const)
       : (["sub-kitchen-waste"] as const),
-  availability: ["sub-kitchen-availability"] as const,
   stats: (filters?: SubKitchenStatsFilters) =>
     filters ? (["sub-kitchen-stats", filters] as const) : (["sub-kitchen-stats"] as const),
-  nearExpiry: (filters?: BranchNearExpiryFilters) =>
-    filters ? (["branch-near-expiry", filters] as const) : (["branch-near-expiry"] as const),
+  inventory: ["sub-kitchen-inventory"] as const,
+  nearExpiry: (filters?: SubKitchenNearExpiryFilters) =>
+    filters
+      ? (["sub-kitchen-near-expiry", filters] as const)
+      : (["sub-kitchen-near-expiry"] as const),
   products: (kind?: ProductKind, all?: boolean) =>
     ["sub-kitchen-products", kind ?? null, all ? "all" : "scoped"] as const,
 };
@@ -68,12 +69,18 @@ export function usePrepTicket(id: string | null) {
   });
 }
 
-/** Invalidate every board view and, when it moved stock, branch inventory. */
+/**
+ * Invalidate every board view and, when it moved stock, both stock views.
+ * The station and the branch manager read the same rows through two routes, so
+ * a move has to expire both keys or one portal shows a stale shelf.
+ */
 function useBoardInvalidator() {
   const qc = useQueryClient();
   return (movedStock = false) => {
     qc.invalidateQueries({ queryKey: ["sub-kitchen-board"] });
     if (movedStock) {
+      qc.invalidateQueries({ queryKey: ["sub-kitchen-inventory"] });
+      qc.invalidateQueries({ queryKey: ["sub-kitchen-near-expiry"] });
       qc.invalidateQueries({ queryKey: ["branch-inventory"] });
       qc.invalidateQueries({ queryKey: ["branch-waste"] });
     }
@@ -177,34 +184,16 @@ export function useLogSubKitchenWaste() {
     mutationFn: (body: BranchWasteInput) => api.logSubKitchenWaste(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["sub-kitchen-waste"] });
+      qc.invalidateQueries({ queryKey: ["sub-kitchen-inventory"] });
+      qc.invalidateQueries({ queryKey: ["sub-kitchen-near-expiry"] });
       qc.invalidateQueries({ queryKey: ["branch-inventory"] });
-      qc.invalidateQueries({ queryKey: ["branch-near-expiry"] });
       toast.success("Written off.");
     },
     onError: (err) => toast.error(subKitchenErrorMessage(err)),
   });
 }
 
-// ---- Sold out (86) ----
-
-export function useSubKitchenAvailability() {
-  return useQuery({
-    queryKey: subKitchenKeys.availability,
-    queryFn: () => api.listSubKitchenAvailability(),
-  });
-}
-
-export function useSetSubKitchenAvailability() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ menuItemId, body }: { menuItemId: string; body: SetAvailabilityInput }) =>
-      api.setSubKitchenAvailability(menuItemId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: subKitchenKeys.availability }),
-    onError: (err) => toast.error(subKitchenErrorMessage(err)),
-  });
-}
-
-// ---- Stats + near-expiry ----
+// ---- Stats ----
 
 export function useSubKitchenStats(filters?: SubKitchenStatsFilters) {
   return useQuery({
@@ -213,9 +202,23 @@ export function useSubKitchenStats(filters?: SubKitchenStatsFilters) {
   });
 }
 
-export function useBranchNearExpiry(filters?: BranchNearExpiryFilters) {
+// ---- Stock the station works from ----
+
+/**
+ * Branch on-hand, read through the sub-kitchen's own route. Prefer this over
+ * `useBranchInventory` anywhere the Chef can reach: it returns the same rows,
+ * but `/branch/*` belongs to the branch manager and a chef has no claim on it.
+ */
+export function useSubKitchenInventory() {
+  return useQuery({
+    queryKey: subKitchenKeys.inventory,
+    queryFn: () => api.listSubKitchenInventory(),
+  });
+}
+
+export function useSubKitchenNearExpiry(filters?: SubKitchenNearExpiryFilters) {
   return useQuery({
     queryKey: subKitchenKeys.nearExpiry(filters),
-    queryFn: () => api.listBranchNearExpiry(filters),
+    queryFn: () => api.listSubKitchenNearExpiry(filters),
   });
 }
