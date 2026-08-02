@@ -149,6 +149,7 @@ function RestaurantMobileCard({
           <Badge variant={restaurant.plan_status === "active" ? "success" : "warning"}>
             {titleCase(restaurant.plan_status)}
           </Badge>
+          {!restaurant.has_central_kitchen && <Badge variant="outline">Branch-only</Badge>}
           {USE_MOCK && (
             <Badge variant={restaurant.admin.access_status === "active" ? "secondary" : "destructive"}>
               Access: {titleCase(restaurant.admin.access_status)}
@@ -373,6 +374,7 @@ export default function DashboardPage() {
                             <Badge variant={r.plan_status === "active" ? "success" : "warning"}>
                               {titleCase(r.plan_status)}
                             </Badge>
+                            {!r.has_central_kitchen && <Badge variant="outline">Branch-only</Badge>}
                           </div>
                         </TableCell>
                         <TableCell>

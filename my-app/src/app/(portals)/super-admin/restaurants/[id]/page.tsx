@@ -170,6 +170,7 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
             <Badge variant={r.plan_status === "active" ? "success" : "warning"}>
               Plan: {titleCase(r.plan_status)}
             </Badge>
+            {!r.has_central_kitchen && <Badge variant="outline">Branch-only</Badge>}
             {USE_MOCK && (
               <Badge variant={r.admin.access_status === "active" ? "secondary" : "destructive"}>
                 Access: {titleCase(r.admin.access_status)}
