@@ -256,7 +256,7 @@ const producedByIdempotencyKey = new Map<string, ProductionRun>();
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 31;
+const SEED_VERSION = 32;
 
 interface MockInvoiceRecord {
   id: number;
@@ -626,6 +626,21 @@ function seedUsers(): MockUserAccount[] {
         must_change_password: true,
       },
     },
+    {
+      // Admin of the kitchen-off tenant (rest-004). Log in here to see the
+      // Admin portal with its central-kitchen surfaces hidden (F4).
+      email: "admin@branch-only.ros",
+      password: "Demo@1234",
+      me: {
+        id: 9,
+        email: "admin@branch-only.ros",
+        full_name: "Riley Kapoor",
+        role: "ADMIN",
+        restaurant_id: 4,
+        created_by_id: 1,
+        is_active: true,
+      },
+    },
   );
 
   return users;
@@ -726,7 +741,33 @@ function seedDb(): MockDb {
     updated_at: now(),
   };
 
-  const restaurants = [r1, r2, r3];
+  // A tenant with NO central/cloud kitchen — every branch runs its own
+  // sub-kitchen. Exercises the kitchen-off path end to end (its admin login is
+  // seeded in seedUsers). Deliberately has no kitchen location or kitchen staff,
+  // so it stays consistent with has_central_kitchen: false.
+  const r4: Restaurant = {
+    id: "rest-004",
+    name: "Branch-Only Bistro",
+    plan_tier: "standard",
+    plan_status: "active",
+    branch_limit: 3,
+    branch_count: 1,
+    has_central_kitchen: false,
+    plan_amount: "199.00",
+    next_billing_date: defaultNextBillingDate(),
+    admin: {
+      id: "admin-004",
+      name: "Riley Kapoor",
+      email: "admin@branch-only.ros",
+      phone: "+1 555 010 2004",
+      access_status: "active",
+    },
+    public_slug: "branch-only-bistro",
+    created_at: localCreatedAt(),
+    updated_at: now(),
+  };
+
+  const restaurants = [r1, r2, r3, r4];
 
   const branches: Branch[] = [
     {
