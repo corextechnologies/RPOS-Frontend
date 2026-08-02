@@ -38,6 +38,9 @@ export function restaurantFromApi(r: RestaurantOut): Restaurant {
     plan_status: statusToPlanStatus(r.status),
     branch_limit: r.branch_limit ?? 0,
     branch_count: 0,
+    // Unknown (backend not yet emitting the field) means the tenant keeps its
+    // central kitchen — preserves today's behavior against the live API.
+    has_central_kitchen: r.has_central_kitchen ?? true,
     plan_amount: r.plan_amount,
     next_billing_date: r.next_billing_date,
     admin: {
@@ -61,6 +64,7 @@ export function createInputToApi(body: CreateRestaurantInput) {
     branch_limit: body.branch_limit,
     plan_tier: body.plan_tier,
     plan_amount: body.plan_amount,
+    has_central_kitchen: body.has_central_kitchen ?? true,
     // Backend ignores next_billing_date on create and sets today + 1 month when a plan is set.
     // Always include payment_received as a real boolean (never omit / never string/"1").
     payment_received: body.payment_received === true,
@@ -75,6 +79,7 @@ export function updateInputToApi(body: UpdateRestaurantInput) {
   if (body.plan_amount !== undefined) patch.plan_amount = body.plan_amount;
   if (body.branch_limit !== undefined) patch.branch_limit = body.branch_limit;
   if (body.next_billing_date !== undefined) patch.next_billing_date = body.next_billing_date;
+  if (body.has_central_kitchen !== undefined) patch.has_central_kitchen = body.has_central_kitchen;
   return patch;
 }
 
