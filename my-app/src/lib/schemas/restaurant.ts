@@ -13,6 +13,7 @@ export const createRestaurantSchema = z.object({
   plan_amount: z.string().optional(),
   branch_limit: z.number().int().min(1),
   next_billing_date: z.string().optional(),
+  has_central_kitchen: z.boolean(),
   payment_received: z.boolean(),
 });
 
@@ -39,5 +40,6 @@ export const createRestaurantDefaults: CreateRestaurantForm = {
   plan_amount: initialPlan.plan_amount,
   branch_limit: initialPlan.branch_limit,
   next_billing_date: initialPlan.next_billing_date,
+  has_central_kitchen: true,
   payment_received: false,
 };
