@@ -24,6 +24,7 @@ export const updateRestaurantSchema = z.object({
   owner_phone: z.string().optional(),
   plan_amount: z.string().optional(),
   next_billing_date: z.string().optional(),
+  has_central_kitchen: z.boolean(),
 });
 
 export type CreateRestaurantForm = z.infer<typeof createRestaurantSchema>;

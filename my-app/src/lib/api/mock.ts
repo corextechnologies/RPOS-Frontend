@@ -3278,11 +3278,31 @@ export const mockClient: ApiClient = {
       );
     }
 
+    // Guarded disable: a tenant cannot drop its central kitchen while kitchen
+    // locations or kitchen staff still exist — those must be decommissioned
+    // first, so historical production data is never orphaned.
+    if (current.has_central_kitchen && body.has_central_kitchen === false) {
+      const hasKitchens = db.kitchens.some((k) => k.restaurant_id === id);
+      const hasKitchenStaff = db.employees.some(
+        (e) =>
+          e.restaurant_id === id &&
+          (e.role === "KITCHEN_MANAGER" || e.role === "KITCHEN_STAFF"),
+      );
+      if (hasKitchens || hasKitchenStaff) {
+        throw new ApiError(
+          "Remove this restaurant's kitchen locations and kitchen staff before disabling its central kitchen.",
+          409,
+          "kitchen_in_use",
+        );
+      }
+    }
+
     const updated: Restaurant = {
       ...current,
       name: body.name ?? current.name,
       plan_tier: body.plan_tier ?? current.plan_tier,
       branch_limit: body.branch_limit ?? current.branch_limit,
+      has_central_kitchen: body.has_central_kitchen ?? current.has_central_kitchen,
       admin: {
         ...current.admin,
         name: body.owner_name ?? current.admin.name,

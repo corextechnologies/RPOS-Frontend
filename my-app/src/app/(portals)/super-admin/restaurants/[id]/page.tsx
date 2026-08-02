@@ -29,7 +29,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { ApiError } from "@/lib/types/super-admin";
 import { titleCase } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function EditRestaurantPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -38,6 +41,7 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
   const restaurant = useRestaurant(id);
   const mutations = useRestaurantMutations();
   const [confirm, setConfirm] = useState<"revoke" | "restore" | "delete" | null>(null);
+  const [disableConfirm, setDisableConfirm] = useState<UpdateRestaurantForm | null>(null);
 
   const form = useForm<UpdateRestaurantForm>({
     resolver: zodResolver(updateRestaurantSchema),
@@ -48,6 +52,7 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
       owner_phone: "",
       plan_amount: "",
       next_billing_date: "",
+      has_central_kitchen: true,
     },
   });
 
@@ -66,6 +71,7 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
         owner_phone: restaurant.data.admin.phone,
         plan_amount: restaurant.data.plan_amount ?? "",
         next_billing_date: restaurant.data.next_billing_date ?? "",
+        has_central_kitchen: restaurant.data.has_central_kitchen ?? true,
       });
     }
   }, [restaurant.data, form]);
@@ -75,6 +81,32 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
     form.setValue("plan_tier", fields.plan_tier as UpdateRestaurantForm["plan_tier"]);
     form.setValue("plan_amount", fields.plan_amount);
     form.setValue("branch_limit", fields.branch_limit);
+  };
+
+  const doUpdate = async (values: UpdateRestaurantForm) => {
+    try {
+      await mutations.updateRestaurant.mutateAsync({
+        id,
+        body: {
+          plan_tier: values.plan_tier,
+          branch_limit: values.branch_limit,
+          owner_email: values.owner_email,
+          owner_phone: values.owner_phone || undefined,
+          plan_amount: values.plan_amount || undefined,
+          next_billing_date: values.next_billing_date || undefined,
+          has_central_kitchen: values.has_central_kitchen,
+        },
+      });
+    } catch (err) {
+      // The guarded disable (mock now, backend later) rejects with a 409. Put the
+      // toggle back to on so the form reflects the state that was actually saved.
+      if (err instanceof ApiError) {
+        form.setValue("has_central_kitchen", true);
+        toast.error(err.message);
+      } else {
+        toast.error("Failed to update restaurant.");
+      }
+    }
   };
 
   const onSubmit = async (values: UpdateRestaurantForm) => {
@@ -88,17 +120,13 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
       });
       return;
     }
-    await mutations.updateRestaurant.mutateAsync({
-      id,
-      body: {
-        plan_tier: values.plan_tier,
-        branch_limit: values.branch_limit,
-        owner_email: values.owner_email,
-        owner_phone: values.owner_phone || undefined,
-        plan_amount: values.plan_amount || undefined,
-        next_billing_date: values.next_billing_date || undefined,
-      },
-    });
+    // Disabling an active central kitchen is a big operational change — confirm
+    // first, then let doUpdate attempt it (the guard may still reject).
+    if (restaurant.data?.has_central_kitchen && !values.has_central_kitchen) {
+      setDisableConfirm(values);
+      return;
+    }
+    await doUpdate(values);
   };
 
   const handleConfirm = async () => {
@@ -194,6 +222,26 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
                 nextBillingDate={nextBillingDate}
               />
 
+              <FormField
+                control={form.control}
+                name="has_central_kitchen"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-xl border border-line bg-surface-2/40 px-4 py-3">
+                    <div className="space-y-0.5 pr-4">
+                      <FormLabel className="text-base">Central / cloud kitchen</FormLabel>
+                      <p className="text-sm text-muted">
+                        Turn off if the client has no cloud kitchen — each branch then handles
+                        production in its own sub-kitchen. Disabling is blocked while kitchen
+                        locations or staff still exist.
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -233,6 +281,21 @@ export default function EditRestaurantPage({ params }: { params: Promise<{ id: s
           </Form>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={!!disableConfirm}
+        onOpenChange={(open) => !open && setDisableConfirm(null)}
+        title="Disable central kitchen"
+        description="This restaurant will run without a cloud kitchen — each branch handles production in its own sub-kitchen, and the kitchen portal and request-forwarding are turned off. Continue?"
+        destructive
+        confirmLabel="Disable kitchen"
+        onConfirm={async () => {
+          const values = disableConfirm;
+          setDisableConfirm(null);
+          if (values) await doUpdate(values);
+        }}
+        loading={mutations.updateRestaurant.isPending}
+      />
 
       {USE_MOCK && (
         <Card>
