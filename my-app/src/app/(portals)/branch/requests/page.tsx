@@ -232,8 +232,11 @@ function NewRequestDialog({
   ).map(([id, name]) => ({ id, name }));
 
   const kitchenOptions = kitchens.data ?? [];
+  // No central kitchen (or none created yet) → don't force choosing one. Admin
+  // fulfils from the warehouse and the branch sub-kitchen produces locally.
+  const noKitchens = !kitchens.isLoading && kitchenOptions.length === 0;
   const usable = lines.filter((l) => l.product_id && l.quantity_requested > 0);
-  const valid = usable.length > 0 && !!kitchenId;
+  const valid = usable.length > 0 && (noKitchens || !!kitchenId);
 
   function update(uid: string, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((l) => (l.uid === uid ? { ...l, ...patch } : l)));
@@ -251,30 +254,33 @@ function NewRequestDialog({
         <DialogHeader>
           <DialogTitle>New stock request</DialogTitle>
           <DialogDescription>
-            What this branch needs, and which kitchen should fulfil it. Admin
-            reviews and approves it.
+            {noKitchens
+              ? "What this branch needs. Admin reviews and approves it."
+              : "What this branch needs, and which kitchen should fulfil it. Admin reviews and approves it."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Fulfilling kitchen</Label>
-            <Select value={kitchenId} onValueChange={setKitchenId}>
-              <SelectTrigger className="h-10">
-                <SelectValue
-                  placeholder={kitchens.isLoading ? "Loading kitchens…" : "Choose a kitchen…"}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {kitchenOptions.map((k) => (
-                  <SelectItem key={k.id} value={k.id}>
-                    {k.name}
-                    {k.location ? ` — ${k.location}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!noKitchens && (
+            <div className="space-y-1">
+              <Label className="text-xs">Fulfilling kitchen</Label>
+              <Select value={kitchenId} onValueChange={setKitchenId}>
+                <SelectTrigger className="h-10">
+                  <SelectValue
+                    placeholder={kitchens.isLoading ? "Loading kitchens…" : "Choose a kitchen…"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {kitchenOptions.map((k) => (
+                    <SelectItem key={k.id} value={k.id}>
+                      {k.name}
+                      {k.location ? ` — ${k.location}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {lines.map((line) => (
             <div key={line.uid} className="flex items-end gap-2">
@@ -345,7 +351,7 @@ function NewRequestDialog({
 
           {!valid && (
             <Badge variant="outline" className="text-warning">
-              {!kitchenId
+              {!noKitchens && !kitchenId
                 ? "Pick a kitchen and add at least one product"
                 : "Add at least one product with a quantity"}
             </Badge>
@@ -361,7 +367,7 @@ function NewRequestDialog({
             onClick={() =>
               create.mutate(
                 {
-                  kitchen_id: kitchenId,
+                  kitchen_id: kitchenId || undefined,
                   notes: notes.trim() || undefined,
                   lines: usable.map(({ product_id, quantity_requested }) => ({
                     product_id,

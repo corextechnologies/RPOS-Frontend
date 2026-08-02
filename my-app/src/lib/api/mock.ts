@@ -7351,12 +7351,16 @@ export const mockClient: ApiClient = {
       }
     }
 
-    // The branch picks which kitchen should fulfil it. Admin still approves and
-    // forwards; this records the branch's chosen destination up front.
-    const kitchen = db.kitchens.find(
-      (k) => k.id === body.kitchen_id && k.restaurant_id === branch.restaurant_id,
-    );
-    if (!kitchen) throw new ApiError("Kitchen not found", 404);
+    // The branch may name a fulfilling kitchen up front; Admin still approves and
+    // can re-route. A tenant with no central kitchen omits it — Admin then fulfils
+    // from the warehouse and the branch sub-kitchen produces locally.
+    let kitchen: Kitchen | undefined;
+    if (body.kitchen_id) {
+      kitchen = db.kitchens.find(
+        (k) => k.id === body.kitchen_id && k.restaurant_id === branch.restaurant_id,
+      );
+      if (!kitchen) throw new ApiError("Kitchen not found", 404);
+    }
 
     const id = `req-${Date.now()}`;
     const created: MockStockRequest = {
@@ -7372,9 +7376,10 @@ export const mockClient: ApiClient = {
       assignee_id: null,
       source_location_type: "BRANCH",
       source_location_id: branch.id,
-      // The branch's chosen kitchen. Admin can confirm or re-route on forward.
-      target_location_type: "KITCHEN",
-      target_location_id: kitchen.id,
+      // The branch's chosen kitchen, if any. Admin can confirm or re-route on
+      // forward; a kitchen-off tenant leaves this open for Admin to fulfil.
+      target_location_type: kitchen ? "KITCHEN" : null,
+      target_location_id: kitchen ? kitchen.id : null,
       line_items: lines.map((line, index) => ({
         id: `${id}-l${index + 1}`,
         product_id: line.product_id,

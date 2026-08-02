@@ -155,8 +155,11 @@ export interface CreateBranchRequestLineInput {
 }
 
 export interface CreateBranchRequestInput {
-  /** The kitchen the branch wants to fulfil this — chosen from a picker. */
-  kitchen_id: string;
+  /**
+   * The kitchen the branch wants to fulfil this — chosen from a picker. Omitted
+   * when the tenant has no central kitchen (Admin fulfils from the warehouse).
+   */
+  kitchen_id?: string;
   notes?: string;
   lines: CreateBranchRequestLineInput[];
 }
