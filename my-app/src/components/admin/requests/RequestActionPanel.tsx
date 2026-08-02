@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useKitchens } from "@/lib/hooks/use-locations";
+import { useRestaurantFeatures } from "@/lib/hooks/use-restaurant-features";
 import { requestActionSchema } from "@/lib/schemas/request-action";
 import type {
   RequestStatus,
@@ -41,9 +42,16 @@ export function RequestActionPanel({
   isSubmitting,
   onSubmit,
 }: RequestActionPanelProps) {
+  const { hasCentralKitchen } = useRestaurantFeatures();
+
+  // Without a central kitchen there is nowhere to forward to — drop that option
+  // so Admin can only approve/reject/dispatch a branch request directly.
   const transitions = useMemo(
-    () => allowedTransitions(request.type, request.status),
-    [request.type, request.status],
+    () =>
+      allowedTransitions(request.type, request.status).filter(
+        (t) => hasCentralKitchen || t !== "FORWARDED_TO_KITCHEN",
+      ),
+    [request.type, request.status, hasCentralKitchen],
   );
 
   const [selected, setSelected] = useState<RequestStatus | null>(null);

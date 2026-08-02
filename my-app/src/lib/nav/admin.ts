@@ -63,6 +63,7 @@ export const ADMIN_NAV: NavSection[] = [
         icon: CookingPot,
         action: "kitchens:read",
         match: "prefix",
+        requiresFeature: "central_kitchen",
       },
       {
         label: "Warehouses",
@@ -157,6 +158,7 @@ export const ADMIN_NAV: NavSection[] = [
         icon: Target,
         action: "production-targets:read",
         match: "prefix",
+        requiresFeature: "central_kitchen",
       },
       {
         label: "Requests",
