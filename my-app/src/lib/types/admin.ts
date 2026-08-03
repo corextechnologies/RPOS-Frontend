@@ -391,6 +391,13 @@ export interface StockRequest {
    */
   source_location_type?: AdminLocationType | null;
   source_location_id?: string | null;
+  /**
+   * The destination the requester chose up front. On a BRANCH_TO_ADMIN request
+   * this is the kitchen the branch picked to fulfil it — shown to Admin and used
+   * to pre-select the "Forward to kitchen" picker. Admin may still re-route.
+   */
+  target_location_type?: AdminLocationType | null;
+  target_location_id?: string | null;
   line_items: RequestLineItem[];
   /** Present on KITCHEN_TO_ADMIN once Admin has allocated it across branches. */
   allocations?: RequestBranchAllocation[];

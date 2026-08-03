@@ -1,4 +1,5 @@
 import type {
+  KitchenRequest,
   KitchenRequestStatus,
   KitchenRequestType,
 } from "@/lib/types/kitchen";
@@ -36,10 +37,38 @@ export const KITCHEN_REQUEST_TRANSITIONS: Record<
   KITCHEN_TO_ADMIN: {},
 };
 
+/**
+ * A branch request the kitchen makes nothing for: every line is RESALE stock the
+ * kitchen already holds. Such a request skips the production steps entirely.
+ *
+ * A line with no `kind`, or any FINISHED_GOOD / RAW_MATERIAL line, is treated as
+ * makeable — so this only returns true when we're certain there's nothing to
+ * produce, and mixed requests keep the normal make-then-dispatch flow.
+ */
+export function isResaleOnlyBranchRequest(
+  request: Pick<KitchenRequest, "request_type" | "line_items">,
+): boolean {
+  return (
+    request.request_type === "BRANCH_TO_ADMIN" &&
+    request.line_items.length > 0 &&
+    request.line_items.every((line) => line.kind === "RESALE")
+  );
+}
+
 export function kitchenAllowedTransitions(
   type: KitchenRequestType,
   status: KitchenRequestStatus,
+  opts?: { resaleOnly?: boolean },
 ): KitchenRequestStatus[] {
+  // Resale-only branch requests have nothing to make, so they go straight from
+  // FORWARDED_TO_KITCHEN to DISPATCHED — no IN_PRODUCTION / PRODUCED steps.
+  if (
+    opts?.resaleOnly &&
+    type === "BRANCH_TO_ADMIN" &&
+    status === "FORWARDED_TO_KITCHEN"
+  ) {
+    return ["DISPATCHED"];
+  }
   return [...(KITCHEN_REQUEST_TRANSITIONS[type]?.[status] ?? [])];
 }
 
