@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import {
   useBranchInventory,
@@ -23,10 +23,63 @@ import { BranchWasteDialog } from "@/components/branch/BranchWasteDialog";
 import { WasteEventsTable } from "@/components/waste/WasteEventsTable";
 import { WasteEventDetailDialog } from "@/components/waste/WasteEventDetailDialog";
 import { formatDate } from "@/lib/utils";
+import { localDateOf, toLocalDateString } from "@/lib/date-range";
 import { stockUnitColumnLabel } from "@/lib/stock-unit";
 import type { WasteStockForm } from "@/lib/schemas/warehouse-stock";
 import type { BranchInventoryItem } from "@/lib/types/branch";
 import type { WasteEvent } from "@/lib/types/waste";
+
+/**
+ * A branch stock row as shown in the table: the backend's per-receipt lots
+ * consolidated to product + expiry grain, with an `expired` flag computed once.
+ */
+interface BranchStockRow extends BranchInventoryItem {
+  /** `expiry_date` is strictly before today (local calendar). */
+  expired: boolean;
+}
+
+/**
+ * Collapse the backend's raw lot rows into what the branch actually wants to
+ * see: one row per product **and expiry date**, quantities summed. Two receipts
+ * of the same product on the same day (e.g. a production-target dispatch and a
+ * branch-request receipt) share an expiry and so merge into a single row.
+ *
+ * - **Batch is dropped** — the branch tracks finished goods by product, the
+ *   column is gone, and write-off is logged product-level.
+ * - **Out-of-stock rows are removed entirely** (summed quantity must be > 0).
+ * - **Expired lots are kept** and flagged, so a manager can still write them off.
+ *
+ * This is a display-side stopgap; the durable fix is the backend consolidating
+ * lots by product + expiry (see the note sent to the backend team).
+ */
+function groupBranchStock(items: BranchInventoryItem[]): BranchStockRow[] {
+  const today = toLocalDateString(new Date());
+  const byKey = new Map<string, BranchStockRow>();
+
+  for (const item of items) {
+    const key = `${item.product_id}|${item.expiry_date ?? ""}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.quantity += item.quantity;
+      continue;
+    }
+    byKey.set(key, {
+      ...item,
+      id: key,
+      batch_code: "",
+      quantity: item.quantity,
+      expired: item.expiry_date ? localDateOf(item.expiry_date) < today : false,
+    });
+  }
+
+  return [...byKey.values()]
+    .filter((row) => row.quantity > 0)
+    .sort(
+      (a, b) =>
+        a.product_name.localeCompare(b.product_name) ||
+        (a.expiry_date ?? "9999-12-31").localeCompare(b.expiry_date ?? "9999-12-31"),
+    );
+}
 
 /**
  * Branch stock on hand, plus write-off of wasted/expired stock and its history.
@@ -44,7 +97,12 @@ export default function BranchInventoryPage() {
   const wasteEvents = useBranchWasteEvents(undefined, { enabled: canWaste });
   const wasteStock = useWasteBranchStock();
 
-  const [wasting, setWasting] = useState<BranchInventoryItem | null>(null);
+  const rows = useMemo(
+    () => (data ? groupBranchStock(data) : undefined),
+    [data],
+  );
+
+  const [wasting, setWasting] = useState<BranchStockRow | null>(null);
   const [wasteSearch, setWasteSearch] = useState("");
   const [viewingWaste, setViewingWaste] = useState<WasteEvent | null>(null);
 
@@ -73,21 +131,20 @@ export default function BranchInventoryPage() {
       <PageState
         isLoading={isLoading}
         isError={!!error}
-        data={data}
-        isEmpty={(rows) => rows.length === 0}
+        data={rows}
+        isEmpty={(list) => list.length === 0}
         errorTitle="Couldn't load inventory"
         errorDescription={error instanceof Error ? error.message : undefined}
         onRetry={() => void refetch()}
         emptyTitle="No stock yet"
         emptyDescription="Stock allocated to this branch will appear here."
       >
-        {(rows) => (
+        {(list) => (
           <div className="rounded-2xl border border-line bg-surface">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
-                  <TableHead>Batch</TableHead>
                   <TableHead className="text-right">On hand</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Expires</TableHead>
@@ -95,7 +152,7 @@ export default function BranchInventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((item) => (
+                {list.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
                       <span className="font-medium text-content">{item.product_name}</span>
@@ -103,23 +160,17 @@ export default function BranchInventoryPage() {
                         <span className="ml-2 font-mono text-xs text-faint">{item.sku}</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted">
-                      {item.batch_code || <span className="text-faint">—</span>}
-                    </TableCell>
                     <TableCell className="text-right">
-                      {item.quantity === 0 ? (
-                        <Badge variant="destructive">Out</Badge>
-                      ) : (
-                        <span className="tabular-nums text-content">
-                          {item.quantity}
-                        </span>
-                      )}
+                      <span className="tabular-nums text-content">{item.quantity}</span>
                     </TableCell>
                     <TableCell className="text-muted">
                       {stockUnitColumnLabel(item.stock_unit)}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {item.expiry_date ? formatDate(item.expiry_date) : "-"}
+                      <span className="inline-flex items-center gap-2">
+                        {item.expiry_date ? formatDate(item.expiry_date) : "-"}
+                        {item.expired && <Badge variant="destructive">Expired</Badge>}
+                      </span>
                     </TableCell>
                     {canWaste && (
                       <TableCell className="text-right">
@@ -127,7 +178,6 @@ export default function BranchInventoryPage() {
                           variant="ghost"
                           size="sm"
                           className="text-danger"
-                          disabled={item.quantity === 0}
                           onClick={() => setWasting(item)}
                         >
                           <Trash2 className="mr-2 h-4 w-4" /> Waste
@@ -161,6 +211,7 @@ export default function BranchInventoryPage() {
       <BranchWasteDialog
         item={wasting}
         open={!!wasting}
+        defaultMovementType={wasting?.expired ? "EXPIRY" : "WASTE"}
         onOpenChange={(open) => {
           if (!open) setWasting(null);
         }}
