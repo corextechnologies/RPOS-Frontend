@@ -42,6 +42,8 @@ export function normalizeBranchInventory(i: RawBranchInventoryItem): BranchInven
     quantity: Number(i.quantity),
     batch_code: i.batch_code ?? "",
     expiry_date: i.expiry_date ?? null,
+    // Server-decided; absent on legacy payloads → not expired.
+    is_expired: Boolean(i.is_expired),
     // The serializer may put the unit top-level or nested under `product`.
     // Always present from the API (defaults to EACH); fall back defensively.
     stock_unit: i.stock_unit ?? i.product?.stock_unit ?? "EACH",
@@ -68,6 +70,7 @@ export type RawBranchInventoryItem = {
   quantity: string | number;
   batch_code?: string | null;
   expiry_date?: string | null;
+  is_expired?: boolean;
   stock_unit?: StockUnit;
   location_id: string | number;
 };
@@ -384,19 +387,22 @@ export const branchApi = {
     return items.map(normalizeBranchInventory);
   },
 
-  async wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem> {
-    const data = await request<RawBranchInventoryItem>("/branch/stock/waste", {
+  async wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem[]> {
+    // Branch waste is product-level and spends across lots earliest-expiry-first,
+    // so it can touch more than one lot — the API returns every affected row.
+    // `batch_code` is intentionally omitted: branch stock is product-level and the
+    // server ignores it.
+    const data = await request<RawBranchInventoryItem[]>("/branch/stock/waste", {
       method: "POST",
       body: JSON.stringify({
         product_id: body.product_id,
         quantity: body.quantity,
         waste_reason: body.waste_reason,
         movement_type: body.movement_type,
-        batch_code: optionalText(body.batch_code),
         notes: optionalText(body.notes),
       }),
     });
-    return normalizeBranchInventory(data);
+    return (data ?? []).map(normalizeBranchInventory);
   },
 
   async listBranchWasteEvents(

@@ -45,6 +45,11 @@ interface WasteEventsTableProps {
   onSelect?: (event: WasteEvent) => void;
   /** External filter value, when the page owns the search input. */
   search?: string;
+  /**
+   * Show the Batch column. Portals that track stock by product rather than batch
+   * (the Branch) hide it; warehouse/kitchen/admin keep it. Defaults to shown.
+   */
+  showBatch?: boolean;
 }
 
 /**
@@ -74,6 +79,7 @@ export function WasteEventsTable({
   locationName,
   onSelect,
   search = "",
+  showBatch = true,
 }: WasteEventsTableProps) {
   // Client-side search over the loaded log (these lists aren't paginated).
   // Matches product name, SKU, or batch code — case-insensitive. Prefer the
@@ -176,7 +182,7 @@ export function WasteEventsTable({
                   <TableHead>Type</TableHead>
                   <TableHead>Reason</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
-                  <TableHead>Batch</TableHead>
+                  {showBatch && <TableHead>Batch</TableHead>}
                   {showLocation && <TableHead>Location</TableHead>}
                   <TableHead>Written off</TableHead>
                 </TableRow>
@@ -215,13 +221,15 @@ export function WasteEventsTable({
                     <TableCell className="text-right font-medium text-content">
                       {event.quantity}
                     </TableCell>
-                    <TableCell>
-                      {event.batch_code ? (
-                        <span className="text-muted">{event.batch_code}</span>
-                      ) : (
-                        <Badge variant="secondary">Unbatched</Badge>
-                      )}
-                    </TableCell>
+                    {showBatch && (
+                      <TableCell>
+                        {event.batch_code ? (
+                          <span className="text-muted">{event.batch_code}</span>
+                        ) : (
+                          <Badge variant="secondary">Unbatched</Badge>
+                        )}
+                      </TableCell>
+                    )}
                     {showLocation && (
                       <TableCell>
                         <Badge variant="secondary">{event.location_type}</Badge>

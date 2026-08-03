@@ -104,6 +104,11 @@ function normalizeStockRequest(r: RawStockRequest): StockRequest {
     // screen resolves an origin label from `source_location_id`.
     source_location_id:
       r.source_location_id != null ? String(r.source_location_id) : r.source_location_id,
+    // Same treatment for the branch's chosen kitchen: the live API sends it as a
+    // number, but `Kitchen.id` is normalized to a string, so the "Requested
+    // kitchen" label and the forward picker's default only match once stringified.
+    target_location_id:
+      r.target_location_id != null ? String(r.target_location_id) : r.target_location_id,
     line_items: (r.line_items ?? []).map((line) => ({
       ...line,
       id: String(line.id),

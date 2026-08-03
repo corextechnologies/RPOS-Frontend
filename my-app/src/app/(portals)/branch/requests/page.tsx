@@ -32,10 +32,34 @@ import { PageState } from "@/components/ui/page-state";
 import { Badge } from "@/components/ui/badge";
 import { RequestStatusBadge } from "@/components/admin/requests/RequestStatusBadge";
 import { formatDate, titleCase } from "@/lib/utils";
-import type { RequestFilters, RequestStatus } from "@/lib/types/admin";
+import { localDateOf } from "@/lib/date-range";
+import type { RequestFilters, RequestStatus, StockRequest } from "@/lib/types/admin";
 import type { CreateBranchRequestLineInput } from "@/lib/types/branch";
 
 const REQUESTS_PAGE_SIZE = 20;
+
+/**
+ * Group requests by the calendar date they were created, preserving the order
+ * they arrive in (the API returns newest first). Each group becomes one dated
+ * card so the branch reads "everything asked for on this day" at a glance.
+ */
+function groupRequestsByDate(
+  rows: StockRequest[],
+): Array<{ key: string; label: string; items: StockRequest[] }> {
+  const groups: Array<{ key: string; label: string; items: StockRequest[] }> = [];
+  const indexByKey = new Map<string, number>();
+  for (const req of rows) {
+    const key = localDateOf(req.created_at);
+    let i = indexByKey.get(key);
+    if (i === undefined) {
+      i = groups.length;
+      indexByKey.set(key, i);
+      groups.push({ key, label: formatDate(req.created_at), items: [] });
+    }
+    groups[i].items.push(req);
+  }
+  return groups;
+}
 
 const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
   "all",
@@ -127,51 +151,74 @@ export default function BranchRequestsPage() {
         emptyDescription="Ask head office for stock with New request. Everything you raise appears here."
       >
         {(rows) => (
-          <ul className="space-y-3">
-            {rows.map((req) => (
-              <li key={req.id} className="rounded-2xl border border-line bg-surface p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm text-muted">{formatDate(req.created_at)}</p>
-                    {req.notes && (
-                      <p className="mt-0.5 text-xs italic text-faint">{req.notes}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <RequestStatusBadge status={req.status} />
-                    {req.status === "DISPATCHED" && (
-                      <Button
-                        size="sm"
-                        disabled={receiveRequest.isPending}
-                        onClick={() => receiveRequest.mutate(req.id)}
-                      >
-                        <PackageCheck className="mr-1.5 size-4" aria-hidden />
-                        Mark received
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <ul className="mt-3 divide-y divide-line rounded-xl bg-surface-2 px-3">
-                  {req.line_items.map((line) => (
-                    <li
-                      key={line.id}
-                      className="flex justify-between gap-3 py-2 text-sm"
-                    >
-                      <span className="min-w-0 truncate text-content">
-                        {line.product_name}
-                      </span>
-                      <span className="tabular-nums text-muted">
-                        {line.quantity_approved != null &&
-                        line.quantity_approved !== line.quantity_requested
-                          ? `${line.quantity_approved} / ${line.quantity_requested}`
-                          : line.quantity_requested}
-                      </span>
+          <div className="space-y-6">
+            {groupRequestsByDate(rows).map((group) => (
+              <section
+                key={group.key}
+                className="overflow-hidden rounded-2xl border border-line bg-surface"
+              >
+                <header className="flex items-center justify-between gap-3 border-b border-line bg-surface-2 px-4 py-3">
+                  <h2 className="font-display text-sm font-semibold tracking-tight text-content">
+                    {group.label}
+                  </h2>
+                  <span className="text-xs text-muted">
+                    {group.items.length} request{group.items.length === 1 ? "" : "s"}
+                  </span>
+                </header>
+
+                <ul className="divide-y divide-line">
+                  {group.items.map((req) => (
+                    <li key={req.id} className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          {req.notes && (
+                            // Labelled so a free-text note (which Admin's action
+                            // can overwrite, e.g. "Approved") isn't mistaken for
+                            // the status shown by the badge.
+                            <p className="text-xs text-muted">
+                              <span className="font-medium text-faint">Note:</span>{" "}
+                              <span className="italic">{req.notes}</span>
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RequestStatusBadge status={req.status} />
+                          {req.status === "DISPATCHED" && (
+                            <Button
+                              size="sm"
+                              disabled={receiveRequest.isPending}
+                              onClick={() => receiveRequest.mutate(req.id)}
+                            >
+                              <PackageCheck className="mr-1.5 size-4" aria-hidden />
+                              Mark received
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <ul className="mt-3 divide-y divide-line rounded-xl bg-surface-2 px-3">
+                        {req.line_items.map((line) => (
+                          <li
+                            key={line.id}
+                            className="flex justify-between gap-3 py-2 text-sm"
+                          >
+                            <span className="min-w-0 truncate text-content">
+                              {line.product_name}
+                            </span>
+                            <span className="tabular-nums text-muted">
+                              {line.quantity_approved != null &&
+                              line.quantity_approved !== line.quantity_requested
+                                ? `${line.quantity_approved} / ${line.quantity_requested}`
+                                : line.quantity_requested}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
                     </li>
                   ))}
                 </ul>
-              </li>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </PageState>
 
