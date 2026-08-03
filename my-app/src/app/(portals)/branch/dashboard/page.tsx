@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Package, Receipt, Users } from "lucide-react";
+import { AlertTriangle, Package, Receipt, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useBranchCustomers, useBranchInventory, useBranchOrders } from "@/lib/hooks/use-branch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { displayName } from "@/lib/types/super-admin";
 
 /**
@@ -80,23 +79,6 @@ export default function BranchDashboardPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Taking orders</CardTitle>
-          <CardDescription>
-            The till prices, takes payment, prints tickets and keeps working when the connection
-            drops.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href="/pos">
-              Open the till
-              <ArrowRight className="ml-1.5 size-4" aria-hidden />
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

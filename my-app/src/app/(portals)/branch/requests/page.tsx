@@ -31,35 +31,22 @@ import {
 import { PageState } from "@/components/ui/page-state";
 import { Badge } from "@/components/ui/badge";
 import { RequestStatusBadge } from "@/components/admin/requests/RequestStatusBadge";
+import { BranchDateFilter } from "@/components/branch/BranchDateFilter";
 import { formatDate, titleCase } from "@/lib/utils";
-import { localDateOf } from "@/lib/date-range";
-import type { RequestFilters, RequestStatus, StockRequest } from "@/lib/types/admin";
+import {
+  DEFAULT_DATE_FILTER,
+  isWithinRange,
+  resolveDateRange,
+  type DateFilterValue,
+} from "@/lib/date-range";
+import type { RequestFilters, RequestStatus } from "@/lib/types/admin";
 import type { CreateBranchRequestLineInput } from "@/lib/types/branch";
 
-const REQUESTS_PAGE_SIZE = 20;
-
-/**
- * Group requests by the calendar date they were created, preserving the order
- * they arrive in (the API returns newest first). Each group becomes one dated
- * card so the branch reads "everything asked for on this day" at a glance.
- */
-function groupRequestsByDate(
-  rows: StockRequest[],
-): Array<{ key: string; label: string; items: StockRequest[] }> {
-  const groups: Array<{ key: string; label: string; items: StockRequest[] }> = [];
-  const indexByKey = new Map<string, number>();
-  for (const req of rows) {
-    const key = localDateOf(req.created_at);
-    let i = indexByKey.get(key);
-    if (i === undefined) {
-      i = groups.length;
-      indexByKey.set(key, i);
-      groups.push({ key, label: formatDate(req.created_at), items: [] });
-    }
-    groups[i].items.push(req);
-  }
-  return groups;
-}
+// No server-side date filter exists, so date windows are applied on the client.
+// Pull a generous page so recent windows (today / last 7 / last 30 days) are
+// covered without a pager — anything beyond this is out of a normal branch's
+// recent activity. A backend `date_from`/`date_to` filter would remove the cap.
+const REQUESTS_PAGE_SIZE = 100;
 
 const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
   "all",
@@ -82,20 +69,22 @@ const STATUS_OPTIONS: Array<RequestStatus | "all"> = [
  */
 export default function BranchRequestsPage() {
   const [status, setStatus] = useState<RequestStatus | "all">("all");
-  const [page, setPage] = useState(1);
+  const [dateFilter, setDateFilter] = useState<DateFilterValue>(DEFAULT_DATE_FILTER);
   const [open, setOpen] = useState(false);
 
   const filters: RequestFilters = useMemo(
-    () => ({ status, page, page_size: REQUESTS_PAGE_SIZE }),
-    [status, page],
+    () => ({ status, page: 1, page_size: REQUESTS_PAGE_SIZE }),
+    [status],
   );
 
-  const { data, isLoading, error, isFetching } = useBranchRequests(filters);
+  const { data, isLoading, error } = useBranchRequests(filters);
   const receiveRequest = useReceiveBranchRequest();
 
-  const total = data?.total ?? 0;
-  const pageSize = data?.page_size ?? REQUESTS_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // Date window applied on the client — the API has no date filter.
+  const inRange = useMemo(() => {
+    const range = resolveDateRange(dateFilter);
+    return (data?.items ?? []).filter((req) => isWithinRange(req.created_at, range));
+  }, [data?.items, dateFilter]);
 
   return (
     <div className="space-y-6">
@@ -108,20 +97,17 @@ export default function BranchRequestsPage() {
             Stock this branch has asked head office for, and where each ask stands.
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
-          <Plus className="mr-1.5 size-4" aria-hidden />
-          New request
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <BranchDateFilter value={dateFilter} onChange={setDateFilter} />
+          <Button onClick={() => setOpen(true)}>
+            <Plus className="mr-1.5 size-4" aria-hidden />
+            New request
+          </Button>
+        </div>
       </div>
 
       <div className="flex justify-end">
-        <Select
-          value={status}
-          onValueChange={(value) => {
-            setStatus(value as RequestStatus | "all");
-            setPage(1);
-          }}
-        >
+        <Select value={status} onValueChange={(value) => setStatus(value as RequestStatus | "all")}>
           <SelectTrigger className="sm:w-56">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -143,76 +129,64 @@ export default function BranchRequestsPage() {
       <PageState
         isLoading={isLoading}
         isError={!!error}
-        data={data?.items}
+        data={inRange}
         isEmpty={(rows) => rows.length === 0}
         errorTitle="Couldn't load requests"
         errorDescription={error instanceof Error ? error.message : undefined}
-        emptyTitle="No requests yet"
-        emptyDescription="Ask head office for stock with New request. Everything you raise appears here."
+        emptyTitle="No requests in this period"
+        emptyDescription="Nothing was raised in the selected date range. Try a wider window, or raise one with New request."
       >
         {(rows) => (
-          <div className="space-y-6">
-            {groupRequestsByDate(rows).map((group) => (
+          <div className="space-y-4">
+            {rows.map((req) => (
               <section
-                key={group.key}
+                key={req.id}
                 className="overflow-hidden rounded-2xl border border-line bg-surface"
               >
-                <header className="flex items-center justify-between gap-3 border-b border-line bg-surface-2 px-4 py-3">
-                  <h2 className="font-display text-sm font-semibold tracking-tight text-content">
-                    {group.label}
-                  </h2>
-                  <span className="text-xs text-muted">
-                    {group.items.length} request{group.items.length === 1 ? "" : "s"}
-                  </span>
+                <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface-2 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="font-display text-sm font-semibold tracking-tight text-content">
+                      {formatDate(req.created_at)}
+                    </p>
+                    {req.notes && (
+                      // Labelled so a free-text note (which Admin's action can
+                      // overwrite, e.g. "Approved") isn't mistaken for the status.
+                      <p className="mt-0.5 text-xs text-muted">
+                        <span className="font-medium text-faint">Note:</span>{" "}
+                        <span className="italic">{req.notes}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <RequestStatusBadge status={req.status} />
+                    {req.status === "DISPATCHED" && (
+                      <Button
+                        size="sm"
+                        disabled={receiveRequest.isPending}
+                        onClick={() => receiveRequest.mutate(req.id)}
+                      >
+                        <PackageCheck className="mr-1.5 size-4" aria-hidden />
+                        Mark received
+                      </Button>
+                    )}
+                  </div>
                 </header>
 
                 <ul className="divide-y divide-line">
-                  {group.items.map((req) => (
-                    <li key={req.id} className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          {req.notes && (
-                            // Labelled so a free-text note (which Admin's action
-                            // can overwrite, e.g. "Approved") isn't mistaken for
-                            // the status shown by the badge.
-                            <p className="text-xs text-muted">
-                              <span className="font-medium text-faint">Note:</span>{" "}
-                              <span className="italic">{req.notes}</span>
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <RequestStatusBadge status={req.status} />
-                          {req.status === "DISPATCHED" && (
-                            <Button
-                              size="sm"
-                              disabled={receiveRequest.isPending}
-                              onClick={() => receiveRequest.mutate(req.id)}
-                            >
-                              <PackageCheck className="mr-1.5 size-4" aria-hidden />
-                              Mark received
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <ul className="mt-3 divide-y divide-line rounded-xl bg-surface-2 px-3">
-                        {req.line_items.map((line) => (
-                          <li
-                            key={line.id}
-                            className="flex justify-between gap-3 py-2 text-sm"
-                          >
-                            <span className="min-w-0 truncate text-content">
-                              {line.product_name}
-                            </span>
-                            <span className="tabular-nums text-muted">
-                              {line.quantity_approved != null &&
-                              line.quantity_approved !== line.quantity_requested
-                                ? `${line.quantity_approved} / ${line.quantity_requested}`
-                                : line.quantity_requested}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                  {req.line_items.map((line) => (
+                    <li
+                      key={line.id}
+                      className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                    >
+                      <span className="min-w-0 truncate text-content">
+                        {line.product_name}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-muted">
+                        {line.quantity_approved != null &&
+                        line.quantity_approved !== line.quantity_requested
+                          ? `${line.quantity_approved} / ${line.quantity_requested}`
+                          : line.quantity_requested}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -221,30 +195,6 @@ export default function BranchRequestsPage() {
           </div>
         )}
       </PageState>
-
-      {total > pageSize && (
-        <div className="flex items-center justify-end gap-3">
-          <p className="text-sm text-muted">
-            Page {page} of {totalPages}
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={page <= 1 || isFetching}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Previous
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={page >= totalPages || isFetching}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Next
-          </Button>
-        </div>
-      )}
 
       <NewRequestDialog open={open} onOpenChange={setOpen} />
     </div>

@@ -46,7 +46,7 @@ import {
   useReissueBranchDevice,
   useRevokeBranchDevice,
 } from "@/lib/hooks/use-branch";
-import { cn } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import type { DeviceProfile, DeviceStatus, PosDevice, PosDeviceActivation } from "@/lib/types/pos";
 
 /**
@@ -63,6 +63,8 @@ export default function BranchDevicesPage() {
 
   // The activation code returned by register/reissue — shown once, then dropped.
   const [activation, setActivation] = useState<PosDeviceActivation | null>(null);
+  // The terminal whose read-only detail dialog is open (row click).
+  const [detail, setDetail] = useState<PosDevice | null>(null);
 
   return (
     <div className="space-y-6">
@@ -107,7 +109,12 @@ export default function BranchDevicesPage() {
                 </TableHeader>
                 <TableBody>
                   {rows.map((device) => (
-                    <DeviceRow key={device.id} device={device} onReissued={setActivation} />
+                    <DeviceRow
+                      key={device.id}
+                      device={device}
+                      onReissued={setActivation}
+                      onSelect={setDetail}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -127,7 +134,92 @@ export default function BranchDevicesPage() {
         open={!!activation}
         onOpenChange={(open) => !open && setActivation(null)}
       />
+
+      <TerminalDetailDialog
+        device={detail}
+        open={!!detail}
+        onOpenChange={(open) => !open && setDetail(null)}
+      />
     </div>
+  );
+}
+
+// ---- Detail ----
+
+/** A single label/value row in the terminal details grid. */
+function TerminalField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="space-y-0.5">
+      <dt className="text-xs font-medium uppercase tracking-wide text-faint">{label}</dt>
+      <dd className="text-sm text-content">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * Read-only detail for one terminal, opened by clicking its row — mirroring the
+ * Staff section's detail dialog. All actions stay on the row's menu; this is a
+ * view only.
+ */
+function TerminalDetailDialog({
+  device,
+  open,
+  onOpenChange,
+}: {
+  device: PosDevice | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        {device && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <MonitorSmartphone className="size-4 text-brand" aria-hidden />
+                {device.name || `Terminal ${device.code}`}
+              </DialogTitle>
+              <DialogDescription>Terminal details.</DialogDescription>
+            </DialogHeader>
+
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <TerminalField
+                label="Name"
+                value={device.name || <span className="text-faint">—</span>}
+              />
+              <TerminalField
+                label="Receipt code"
+                value={
+                  <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-content">
+                    {device.code}
+                  </code>
+                }
+              />
+              <TerminalField
+                label="Profile"
+                value={
+                  <Badge variant={device.profile === "CURBSIDE" ? "outline" : "secondary"}>
+                    {device.profile === "CURBSIDE" ? (
+                      <Car className="mr-1 size-3" aria-hidden />
+                    ) : (
+                      <Store className="mr-1 size-3" aria-hidden />
+                    )}
+                    {device.profile.toLowerCase()}
+                  </Badge>
+                }
+              />
+              <TerminalField label="Status" value={<StatusBadge device={device} />} />
+              <TerminalField label="Last seen" value={formatLastSeen(device.last_seen_at)} />
+              <TerminalField
+                label="Added"
+                value={device.created_at ? formatDate(device.created_at) : "—"}
+              />
+            </dl>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -161,9 +253,11 @@ function StatusBadge({ device }: { device: PosDevice }) {
 function DeviceRow({
   device,
   onReissued,
+  onSelect,
 }: {
   device: PosDevice;
   onReissued: (activation: PosDeviceActivation) => void;
+  onSelect: (device: PosDevice) => void;
 }) {
   const reissue = useReissueBranchDevice();
   const revoke = useRevokeBranchDevice();
@@ -172,7 +266,10 @@ function DeviceRow({
   const isRevoked = device.status === "REVOKED";
 
   return (
-    <TableRow>
+    <TableRow
+      className="cursor-pointer"
+      onClick={() => onSelect(device)}
+    >
       <TableCell className="text-content">
         {device.name || <span className="text-faint">—</span>}
       </TableCell>
@@ -196,7 +293,8 @@ function DeviceRow({
         <StatusBadge device={device} />
       </TableCell>
       <TableCell className="text-sm text-muted">{formatLastSeen(device.last_seen_at)}</TableCell>
-      <TableCell>
+      {/* Stop the row's detail-open from firing when using the actions menu. */}
+      <TableCell onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
