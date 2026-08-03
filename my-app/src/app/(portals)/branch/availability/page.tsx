@@ -1,37 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Flag, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EightySixDialog } from "@/components/branch/EightySixDialog";
-import { posAdminApi } from "@/lib/api/pos-admin.api";
+import { usePublishedMenu } from "@/lib/hooks/use-pos-admin";
 import { useSetAvailability } from "@/lib/hooks/use-pos-menu";
 import { useFlaggedOrders } from "@/lib/hooks/use-pos-orders";
 import { posErrorMessage } from "@/lib/api/errors";
 import { formatDate } from "@/lib/utils";
-import type { AvailabilityRow } from "@/lib/types/pos";
+import type { MenuItem } from "@/lib/types/pos";
 
 /**
  * 86-ing and the flagged-order queue — the manager's POS jobs.
  *
- * Both live here rather than on the till because `PUT /pos/availability/{id}`
- * and `GET /pos/orders/flagged` take an ordinary role-gated token, not a
- * device-bound one. A till holds only a device token, so it can *read*
- * availability (a device route) and grey items out, but turning one off is a
- * back-office action.
+ * Both live here rather than on the till because `GET /pos/menu`,
+ * `PUT /pos/availability/{id}` and `GET /pos/orders/flagged` take an ordinary
+ * role-gated token, not a device-bound one.
+ *
+ * The item list is read from `GET /pos/menu` (via `usePublishedMenu`), NOT the
+ * till-only `GET /pos/availability`: the latter demands a device-paired token, so
+ * a manager on the web portal gets `device_not_bound`. The published menu already
+ * carries each item's `is_available` / `unavailable_reason`, and the toggle stays
+ * on `PUT /pos/availability/{id}`, which a plain manager session can call.
  */
 export default function BranchAvailabilityPage() {
-  const [editing, setEditing] = useState<AvailabilityRow | null>(null);
+  const [editing, setEditing] = useState<MenuItem | null>(null);
   const setAvailability = useSetAvailability();
 
-  const availability = useQuery({
-    queryKey: ["pos-availability"],
-    queryFn: () => posAdminApi.availability(),
-    retry: false,
-  });
+  const menu = usePublishedMenu();
   const flagged = useFlaggedOrders();
 
   const flaggedItems = flagged.data ?? [];
@@ -92,36 +91,36 @@ export default function BranchAvailabilityPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          {availability.isLoading ? (
+          {menu.isLoading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="size-5 animate-spin text-brand" aria-label="Loading" />
             </div>
-          ) : availability.error ? (
+          ) : menu.error ? (
             <p className="p-6 text-center text-sm text-danger">
-              {posErrorMessage(availability.error)}
+              {posErrorMessage(menu.error)}
             </p>
-          ) : !availability.data?.length ? (
+          ) : !menu.data?.items?.length ? (
             <p className="p-10 text-center text-sm text-muted">
               No menu published yet, so there&apos;s nothing to take off it.
             </p>
           ) : (
             <ul className="divide-y divide-line">
-              {availability.data.map((row) => (
-                <li key={row.menu_item_id} className="flex items-center gap-3 p-3">
+              {menu.data.items.map((item) => (
+                <li key={item.id} className="flex items-center gap-3 p-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-content">Item #{row.menu_item_id}</p>
-                    {row.reason && <p className="text-xs text-muted">{row.reason}</p>}
+                    <p className="truncate text-sm text-content">{item.name}</p>
+                    <p className="text-xs text-muted">
+                      {item.category ?? "Uncategorised"}
+                      {!item.is_available && item.unavailable_reason
+                        ? ` · ${item.unavailable_reason}`
+                        : ""}
+                    </p>
                   </div>
-                  {row.on_hand != null && (
-                    <span className="shrink-0 text-xs tabular-nums text-faint">
-                      {row.on_hand} on hand
-                    </span>
-                  )}
-                  <Badge variant={row.is_available ? "secondary" : "destructive"}>
-                    {row.is_available ? "on" : "off"}
+                  <Badge variant={item.is_available ? "secondary" : "destructive"}>
+                    {item.is_available ? "on" : "off"}
                   </Badge>
-                  <Button variant="outline" size="sm" onClick={() => setEditing(row)}>
-                    {row.is_available ? "86 it" : "Put back"}
+                  <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
+                    {item.is_available ? "86 it" : "Put back"}
                   </Button>
                 </li>
               ))}
@@ -133,22 +132,29 @@ export default function BranchAvailabilityPage() {
       <EightySixDialog
         open={editing !== null}
         onOpenChange={(o) => !o && setEditing(null)}
-        title={editing ? `Item #${editing.menu_item_id}` : ""}
+        title={editing?.name ?? ""}
         isAvailable={editing?.is_available ?? false}
-        currentReason={editing?.reason}
+        currentReason={editing?.unavailable_reason}
         isPending={setAvailability.isPending}
         onSubmit={(available, reason, autoClearAt) => {
           if (!editing) return;
           setAvailability.mutate(
             {
-              id: editing.menu_item_id,
+              id: editing.id,
               body: {
                 is_available: available,
                 reason: available ? undefined : reason || "86'd",
                 auto_clear_at: autoClearAt,
               },
             },
-            { onSuccess: () => setEditing(null) },
+            {
+              onSuccess: () => {
+                // The toggle invalidates the till's availability key; this page
+                // reads from the published menu, so refetch it to reflect the flip.
+                void menu.refetch();
+                setEditing(null);
+              },
+            },
           );
         }}
       />
