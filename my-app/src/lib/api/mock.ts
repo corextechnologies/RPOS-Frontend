@@ -91,6 +91,7 @@ import type {
   BranchCustomer,
   BranchCustomerFilters,
   BranchDelivery,
+  BranchRequestSummary,
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
@@ -5824,7 +5825,9 @@ export const mockClient: ApiClient = {
     });
 
     saveDb(db);
-    return delay(toPublicKitchenInventoryItem(item, db));
+    // Return a list to match the live shape — a write-off can span several lots.
+    // The mock stays status-only and touches one row, so the list holds one item.
+    return delay([toPublicKitchenInventoryItem(item, db)]);
   },
 
   async listKitchenWasteEvents(filters?: WasteEventFilters) {
@@ -7354,6 +7357,30 @@ export const mockClient: ApiClient = {
       items: rows.slice(start, start + pageSize).map(toPublicRequest),
       page,
       page_size: pageSize,
+      total: rows.length,
+    });
+  },
+
+  async getBranchRequestsSummary(): Promise<BranchRequestSummary> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const rows = db.requests.filter(
+      (r) =>
+        r.type === "BRANCH_TO_ADMIN" &&
+        r.restaurant_id === branch.restaurant_id &&
+        (r.source_location_id === branch.id ||
+          (r.source_location_id == null && r.from_label === branch.name)),
+    );
+
+    const received = rows.filter((r) => r.status === "RECEIVED").length;
+    const rejected = rows.filter((r) => r.status === "REJECTED").length;
+    // Open = not yet in a terminal state (not received and not rejected).
+    return delay({
+      open: rows.length - received - rejected,
+      received,
+      rejected,
       total: rows.length,
     });
   },

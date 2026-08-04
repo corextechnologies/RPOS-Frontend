@@ -116,6 +116,7 @@ import type {
 import type {
   BranchCustomer,
   BranchCustomerFilters,
+  BranchRequestSummary,
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
@@ -333,7 +334,9 @@ export interface ApiClient {
     filters?: KitchenNearExpiryFilters,
   ): Promise<KitchenInventoryItem[]>;
   listKitchenLabels(filters?: KitchenLabelFilters): Promise<KitchenLabel[]>;
-  wasteKitchenStock(body: KitchenWasteInput): Promise<KitchenInventoryItem>;
+  // Returns the list of stock lots the write-off touched — one request can span
+  // several lots (a finished good with no batch code cleared soonest-expiry first).
+  wasteKitchenStock(body: KitchenWasteInput): Promise<KitchenInventoryItem[]>;
   listKitchenWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
   createKitchenCount(body: CreateKitchenCountInput): Promise<KitchenStockCount>;
   listKitchenCounts(
@@ -448,6 +451,9 @@ export interface ApiClient {
   // Kitchens this branch can direct a stock request to (the picker source).
   listBranchKitchens(): Promise<Kitchen[]>;
   listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
+  // Server-side counts for the branch's requests — one indexed call powering the
+  // dashboard's "Open requests" tile, so the client needn't tally statuses.
+  getBranchRequestsSummary(): Promise<BranchRequestSummary>;
   createBranchRequest(body: CreateBranchRequestInput): Promise<StockRequest>;
   receiveBranchRequest(requestId: string): Promise<StockRequest>;
   // Finished goods the kitchen dispatched to this branch. Confirming receipt

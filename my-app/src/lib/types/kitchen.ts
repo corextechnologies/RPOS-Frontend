@@ -103,6 +103,13 @@ export interface KitchenWasteInput {
   movement_type?: KitchenMovementType;
   /** Must match the batch exactly. Omitted entirely for unbatched stock. */
   batch_code?: string;
+  /**
+   * Targets one exact expiry lot (`YYYY-MM-DD`). A finished good with no batch
+   * code can sit in several lots that differ only by expiry; sending this hits
+   * the precise lot the user clicked. Omit it and the server clears
+   * soonest-expiry-first (the default). Backward-compatible either way.
+   */
+  expiry_date?: string;
   notes?: string;
 }
 

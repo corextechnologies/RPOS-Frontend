@@ -209,8 +209,11 @@ export const kitchenApi = {
     return (data ?? []).map(normalizeInventoryItem);
   },
 
-  async wasteKitchenStock(body: KitchenWasteInput): Promise<KitchenInventoryItem> {
-    const data = await request<KitchenInventoryItem>("/kitchen/stock/waste", {
+  async wasteKitchenStock(body: KitchenWasteInput): Promise<KitchenInventoryItem[]> {
+    // The server returns the list of stock lots the write-off touched — a single
+    // request can span more than one lot (a finished good with no batch code may
+    // sit in several lots that differ only by expiry, cleared soonest-first).
+    const data = await request<KitchenInventoryItem[]>("/kitchen/stock/waste", {
       method: "POST",
       body: JSON.stringify({
         product_id: body.product_id,
@@ -219,10 +222,13 @@ export const kitchenApi = {
         waste_reason: body.waste_reason,
         movement_type: body.movement_type,
         batch_code: optionalText(body.batch_code),
+        // Optional: when present, the server targets that exact expiry lot
+        // instead of clearing soonest-first. Dropped when blank.
+        expiry_date: optionalText(body.expiry_date),
         notes: optionalText(body.notes),
       }),
     });
-    return normalizeInventoryItem(data);
+    return (data ?? []).map(normalizeInventoryItem);
   },
 
   async listKitchenWasteEvents(

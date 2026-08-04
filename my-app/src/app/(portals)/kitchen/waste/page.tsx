@@ -76,6 +76,9 @@ export default function KitchenWastePage() {
       waste_reason: values.waste_reason,
       movement_type: values.movement_type,
       batch_code: wasting.batch_code || undefined,
+      // Hit the exact lot the user clicked. Null on aggregate/legacy rows —
+      // then it's omitted and the server clears soonest-expiry-first.
+      expiry_date: wasting.expiry_date ?? undefined,
       notes: values.notes || undefined,
     });
     setWasting(null);

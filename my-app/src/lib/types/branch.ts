@@ -164,6 +164,18 @@ export interface CreateBranchRequestInput {
   lines: CreateBranchRequestLineInput[];
 }
 
+/**
+ * Server-side counts for the branch's own requests (`GET /branch/requests/summary`).
+ * A single indexed count, scoped to the caller's branch — same visibility as the
+ * list. `open` = not yet in a terminal state (not RECEIVED and not REJECTED).
+ */
+export interface BranchRequestSummary {
+  open: number;
+  received: number;
+  rejected: number;
+  total: number;
+}
+
 // ---- Incoming deliveries (from the kitchen) ----
 //
 // One branch's slice of a kitchen dispatch. The kitchen produced finished goods,
