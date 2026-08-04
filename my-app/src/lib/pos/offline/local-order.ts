@@ -64,6 +64,7 @@ export function buildLocalOrder(cart: CartState, subtotalMinor: Minor, currency:
       price_delta_minor: 0,
     })),
     note: l.note ?? null,
+    needs_prep: l.needs_prep,
   }));
 
   return {

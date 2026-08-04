@@ -172,7 +172,7 @@ function Sell() {
         item={picked}
         open={picked !== null}
         onOpenChange={(open) => !open && setPicked(null)}
-        onAdd={(item, ids, note) => cart.addItem(item, ids, note)}
+        onAdd={(item, ids, note, needsPrep) => cart.addItem(item, ids, note, needsPrep)}
       />
 
       <ParkedOrdersSheet

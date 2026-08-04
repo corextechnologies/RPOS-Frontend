@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cartSubtotalMinor, lineTotalMinor, validateModifiers, type CartLine } from "./cart";
+import {
+  cartSubtotalMinor,
+  lineTotalMinor,
+  sameLine,
+  validateModifiers,
+  type CartLine,
+} from "./cart";
 import type { MenuModifierGroup } from "@/lib/types/pos";
 
 function line(over: Partial<CartLine> = {}): CartLine {
@@ -12,6 +18,7 @@ function line(over: Partial<CartLine> = {}): CartLine {
     modifier_option_ids: [],
     modifier_labels: [],
     modifier_delta_minor: 0,
+    needs_prep: false,
     is_combo: false,
     ...over,
   };
@@ -47,6 +54,27 @@ describe("cart totals", () => {
 
   it("an empty cart is zero, not NaN", () => {
     expect(cartSubtotalMinor([])).toBe(0);
+  });
+});
+
+describe("sameLine (row collapsing)", () => {
+  it("merges two identical plain adds", () => {
+    expect(sameLine(line(), line())).toBe(true);
+  });
+
+  it("keeps a prep-flagged line separate from a plain one of the same item", () => {
+    // One spawns a sub-kitchen ticket, the other doesn't — never one row.
+    expect(sameLine(line({ needs_prep: true }), line({ needs_prep: false }))).toBe(false);
+  });
+
+  it("merges two prep-flagged lines that match on everything else", () => {
+    expect(
+      sameLine(line({ needs_prep: true, note: "Ali" }), line({ needs_prep: true, note: "Ali" })),
+    ).toBe(true);
+  });
+
+  it("still separates by note", () => {
+    expect(sameLine(line({ note: "no onions" }), line())).toBe(false);
   });
 });
 

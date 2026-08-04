@@ -391,6 +391,13 @@ export interface PosOrderLineInput {
   quantity: number;
   modifier_option_ids?: number[];
   note?: string;
+  /**
+   * Flags this line for final prep at the branch sub-kitchen. Sending the order
+   * drops a prep job onto the chef's board (carrying `note` as the customer
+   * instruction). Per line — the same product is sold plain to one customer and
+   * personalised for the next. Omitted when false.
+   */
+  needs_prep?: boolean;
 }
 
 export interface PosOrderCreate {
@@ -419,6 +426,8 @@ export interface PosOrderLine {
   modifier_option_ids: number[];
   modifiers?: Array<{ id: number; name: string; price_delta_minor: Minor }>;
   note?: string | null;
+  /** Echoed back so a parked/recalled order restores the prep flag. */
+  needs_prep?: boolean | null;
 }
 
 export interface PosOrder {

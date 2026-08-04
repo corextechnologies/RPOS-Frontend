@@ -19,6 +19,7 @@ function line(over: Partial<CartLine> = {}): CartLine {
     modifier_option_ids: [],
     modifier_labels: [],
     modifier_delta_minor: 0,
+    needs_prep: false,
     is_combo: false,
     ...over,
   };

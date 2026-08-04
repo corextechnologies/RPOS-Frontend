@@ -95,6 +95,22 @@ describe("cartFromOrder", () => {
     expect(cartFromOrder(order(), MENU).order_id).toBe(77);
   });
 
+  it("restores needs_prep and the note so a recalled prep line stays flagged", () => {
+    // The backend echoes needs_prep per line specifically for park/recall; read
+    // it straight off the line rather than re-deriving it.
+    const cart = cartFromOrder(
+      order({ lines: [{ ...LINE, needs_prep: true, note: "Happy Birthday Ali" }] }),
+      MENU,
+    );
+    expect(cart.lines[0].needs_prep).toBe(true);
+    expect(cart.lines[0].note).toBe("Happy Birthday Ali");
+  });
+
+  it("defaults needs_prep to false when the line omits it", () => {
+    const cart = cartFromOrder(order({ lines: [{ ...LINE }] }), MENU);
+    expect(cart.lines[0].needs_prep).toBe(false);
+  });
+
   it("carries the order's own context back", () => {
     const cart = cartFromOrder(
       order({

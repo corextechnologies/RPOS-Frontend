@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Minus, PackageOpen, Plus, Trash2, Car, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Money } from "./Money";
 import { CustomerDialog } from "./CustomerDialog";
 import { useCart, lineTotalMinor } from "@/lib/pos/cart";
@@ -39,7 +41,7 @@ export function CartPanel({
   canCreate: boolean;
   parkedCount?: number;
 }) {
-  const { cart, subtotalMinor, itemCount, setQty, remove, patch } = useCart();
+  const { cart, subtotalMinor, itemCount, setQty, remove, patch, setNote, setPrep } = useCart();
   const { device } = usePosBootstrap();
   const { can } = usePosSession();
 
@@ -167,11 +169,17 @@ export function CartPanel({
               <li key={line.uid} className="p-3">
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-content">{line.name}</p>
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-content">
+                      <span className="min-w-0 truncate">{line.name}</span>
+                      {line.needs_prep && (
+                        <Badge variant="warning" className="shrink-0">
+                          Prep
+                        </Badge>
+                      )}
+                    </p>
                     {line.modifier_labels.length > 0 && (
                       <p className="text-xs text-muted">{line.modifier_labels.join(", ")}</p>
                     )}
-                    {line.note && <p className="text-xs italic text-faint">“{line.note}”</p>}
                   </div>
                   <Money minor={lineTotalMinor(line)} className="text-sm text-content" />
                   <button
@@ -204,7 +212,37 @@ export function CartPanel({
                   >
                     <Plus className="size-3.5" aria-hidden />
                   </Button>
+
+                  {/* Flag this line for final prep at the sub-kitchen. Reachable
+                      here so a plain no-modifier item (added without the sheet)
+                      can still be personalised, and any line re-flagged after
+                      the fact. */}
+                  <label
+                    htmlFor={`prep-${line.uid}`}
+                    className="ml-auto flex items-center gap-2 text-xs text-muted"
+                  >
+                    Prep
+                    <Switch
+                      id={`prep-${line.uid}`}
+                      checked={line.needs_prep}
+                      onCheckedChange={(on) => setPrep(line.uid, on)}
+                    />
+                  </label>
                 </div>
+
+                {/* Note doubles as the chef's instruction on a prep line. Shown
+                    once flagged or whenever a note already exists, so it's
+                    editable without forcing a field onto every plain sale. */}
+                {(line.needs_prep || line.note) && (
+                  <Input
+                    className="mt-2 h-9 text-sm"
+                    placeholder={
+                      line.needs_prep ? "Happy Birthday Ali, no onions…" : "Note for the kitchen…"
+                    }
+                    value={line.note ?? ""}
+                    onChange={(e) => setNote(line.uid, e.target.value)}
+                  />
+                )}
               </li>
             ))}
           </ul>
