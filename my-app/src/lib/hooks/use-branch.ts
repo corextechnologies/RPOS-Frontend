@@ -184,6 +184,14 @@ export function useBranchRequests(filters?: RequestFilters) {
   });
 }
 
+/** Server-side request counts (open / received / rejected / total) for tiles. */
+export function useBranchRequestsSummary() {
+  return useQuery({
+    queryKey: [...branchKeys.requests(), "summary"],
+    queryFn: () => api.getBranchRequestsSummary(),
+  });
+}
+
 export function useCreateBranchRequest() {
   const qc = useQueryClient();
   return useMutation({

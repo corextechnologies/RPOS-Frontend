@@ -1,8 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { PageState } from "@/components/ui/page-state";
 import {
   Select,
@@ -12,7 +10,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CompleteTicketDialog } from "@/components/branch/sub-kitchen/CompleteTicketDialog";
-import { NewBatchDialog } from "@/components/branch/sub-kitchen/NewBatchDialog";
 import { PrepTicketCard } from "@/components/branch/sub-kitchen/PrepTicketCard";
 import { usePrepBoard } from "@/lib/hooks/use-sub-kitchen";
 import { prepStatusLabel } from "@/lib/sub-kitchen/prep-transitions";
@@ -31,7 +28,6 @@ const OPEN_ORDER: PrepStatus[] = ["QUEUED", "IN_PROGRESS", "READY"];
 
 export default function SubKitchenBoardPage() {
   const [filter, setFilter] = useState<BoardFilter>("OPEN");
-  const [newBatch, setNewBatch] = useState(false);
   const [completing, setCompleting] = useState<PrepTicket | null>(null);
 
   const board = usePrepBoard(filter === "OPEN" ? undefined : { status: filter });
@@ -48,7 +44,7 @@ export default function SubKitchenBoardPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Select value={filter} onValueChange={(v) => setFilter(v as BoardFilter)}>
           <SelectTrigger className="sm:w-44">
             <SelectValue />
@@ -61,10 +57,6 @@ export default function SubKitchenBoardPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => setNewBatch(true)}>
-          <Plus className="mr-1.5 size-4" aria-hidden />
-          New batch job
-        </Button>
       </div>
 
       <PageState
@@ -78,7 +70,7 @@ export default function SubKitchenBoardPage() {
         emptyTitle={filter === "OPEN" ? "Nothing on the board" : "Nothing here"}
         emptyDescription={
           filter === "OPEN"
-            ? "Queue a batch job, or wait for made-to-order tickets to arrive."
+            ? "Made-to-order tickets appear here as they arrive."
             : "No tickets in this state."
         }
       >
@@ -104,7 +96,6 @@ export default function SubKitchenBoardPage() {
         )}
       </PageState>
 
-      <NewBatchDialog open={newBatch} onOpenChange={setNewBatch} />
       <CompleteTicketDialog
         ticket={completing}
         open={completing !== null}

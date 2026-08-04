@@ -9,6 +9,7 @@ import type { Kitchen, Paginated, RequestFilters, StockRequest } from "@/lib/typ
 import type {
   BranchCustomer,
   BranchDelivery,
+  BranchRequestSummary,
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
@@ -327,6 +328,16 @@ export const branchApi = {
       page: numberFromMeta(meta, "page", page),
       page_size: numberFromMeta(meta, "page_size", pageSize),
       total: numberFromMeta(meta, "total", data.length),
+    };
+  },
+
+  async getBranchRequestsSummary(): Promise<BranchRequestSummary> {
+    const data = await request<BranchRequestSummary>("/branch/requests/summary");
+    return {
+      open: Number(data.open ?? 0),
+      received: Number(data.received ?? 0),
+      rejected: Number(data.rejected ?? 0),
+      total: Number(data.total ?? 0),
     };
   },
 
