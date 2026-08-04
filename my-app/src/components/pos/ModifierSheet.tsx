@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { formatMinor, sumMinor } from "@/lib/money";
 import { usePosCurrency } from "@/lib/pos/pos-session";
 import { validateModifiers } from "@/lib/pos/cart";
@@ -34,10 +35,11 @@ export function ModifierSheet({
   item: ResolvedMenuItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAdd: (item: ResolvedMenuItem, optionIds: number[], note?: string) => void;
+  onAdd: (item: ResolvedMenuItem, optionIds: number[], note?: string, needsPrep?: boolean) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [note, setNote] = useState("");
+  const [needsPrep, setNeedsPrep] = useState(false);
   const { currency, minorUnits } = usePosCurrency();
 
   // Memoised because `item?.modifier_groups ?? []` allocates a fresh array on
@@ -71,6 +73,7 @@ export function ModifierSheet({
   function reset() {
     setSelected([]);
     setNote("");
+    setNeedsPrep(false);
   }
 
   return (
@@ -142,11 +145,26 @@ export function ModifierSheet({
             <Label htmlFor="note">Note</Label>
             <Input
               id="note"
-              placeholder="no ice, extra crispy…"
+              placeholder={needsPrep ? "Happy Birthday Ali, no onions…" : "no ice, extra crispy…"}
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
           </div>
+
+          {/* Needs final prep — flags the line so sending drops a job on the
+              branch sub-kitchen board, carrying the note as the instruction. */}
+          <label
+            htmlFor="needs-prep"
+            className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface px-3 py-2.5"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-medium text-content">Needs final prep</span>
+              <span className="block text-xs text-muted">
+                Sends this line to the sub-kitchen board with the note.
+              </span>
+            </span>
+            <Switch id="needs-prep" checked={needsPrep} onCheckedChange={setNeedsPrep} />
+          </label>
         </div>
 
         <DialogFooter>
@@ -154,7 +172,7 @@ export function ModifierSheet({
             className="h-12 w-full text-base"
             disabled={!validation.ok}
             onClick={() => {
-              onAdd(item, selected, note.trim() || undefined);
+              onAdd(item, selected, note.trim() || undefined, needsPrep);
               reset();
               onOpenChange(false);
             }}
