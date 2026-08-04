@@ -87,8 +87,6 @@ export type AuthAction =
   // Sub-kitchen prep station. The manager holds it for the oversight view; a
   // branch CHEF reaches it via the PREP_READ capability instead.
   | "sub-kitchen:read"
-  // Propose a dish for the menu (branch manager → admin review). Manager-only.
-  | "branch-menu:propose"
   | "branch-requests:read"
   | "branch-requests:create"
   | "branch-planning:read"
@@ -180,7 +178,6 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "branch-inventory:read",
     "branch-waste:log",
     "sub-kitchen:read",
-    "branch-menu:propose",
     "branch-requests:read",
     "branch-requests:create",
     "branch-planning:read",

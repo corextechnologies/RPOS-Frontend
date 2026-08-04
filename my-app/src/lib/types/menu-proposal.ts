@@ -34,21 +34,11 @@ export interface MenuProposal {
   created_at: string | null;
 }
 
-/** Provide EITHER product_id OR the new_product_* fields, not both. */
+/** The chef proposes a dish — just a name and (optional) category. Admin prices it. */
 export interface CreateMenuProposalInput {
   name: string;
-  /** Decimal string — authoring convenience; stored/returned as `_minor`. */
-  price: string;
   category?: string | null;
-  description?: string | null;
-  calories?: number | null;
-  prep_time_minutes?: number | null;
-  made_to_order?: boolean;
   note?: string | null;
-  product_id?: number | null;
-  new_product_name?: string | null;
-  new_product_sku?: string | null;
-  new_product_stock_unit?: StockUnit;
 }
 
 export interface ApproveMenuProposalInput {

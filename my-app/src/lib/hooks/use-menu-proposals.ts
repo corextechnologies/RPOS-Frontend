@@ -11,16 +11,16 @@ import type {
 } from "@/lib/types/menu-proposal";
 
 export const menuProposalKeys = {
-  branch: (status?: MenuProposalStatus) => ["menu-proposals", "branch", status ?? "all"] as const,
+  chef: (status?: MenuProposalStatus) => ["menu-proposals", "chef", status ?? "all"] as const,
   admin: (status?: MenuProposalStatus) => ["menu-proposals", "admin", status ?? "all"] as const,
 };
 
-// ---- Branch: propose / list own / withdraw ----
+// ---- Sub-kitchen chef: propose / list own / withdraw ----
 
-export function useBranchProposals(status?: MenuProposalStatus) {
+export function useChefProposals(status?: MenuProposalStatus) {
   return useQuery({
-    queryKey: menuProposalKeys.branch(status),
-    queryFn: () => menuProposalApi.listBranchProposals(status),
+    queryKey: menuProposalKeys.chef(status),
+    queryFn: () => menuProposalApi.listChefProposals(status),
     retry: false,
   });
 }
@@ -30,8 +30,8 @@ export function useCreateProposal() {
   return useMutation({
     mutationFn: (input: CreateMenuProposalInput) => menuProposalApi.createProposal(input),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["menu-proposals", "branch"] });
-      toast.success("Menu item proposed. Waiting on admin review.");
+      qc.invalidateQueries({ queryKey: ["menu-proposals", "chef"] });
+      toast.success("Dish proposed. Waiting on admin review.");
     },
     onError: (err) => toast.error(posErrorMessage(err)),
   });
@@ -41,7 +41,7 @@ export function useWithdrawProposal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => menuProposalApi.withdrawProposal(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["menu-proposals", "branch"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["menu-proposals", "chef"] }),
     onError: (err) => toast.error(posErrorMessage(err)),
   });
 }

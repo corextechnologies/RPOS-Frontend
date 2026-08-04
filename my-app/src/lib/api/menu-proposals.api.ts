@@ -24,22 +24,22 @@ const statusQ = (status?: MenuProposalStatus) =>
   status ? `?status=${status}` : "";
 
 export const menuProposalApi = {
-  // ---- Branch: propose / list own / withdraw ----
+  // ---- Sub-kitchen chef: propose / list own / withdraw ----
 
   createProposal(input: CreateMenuProposalInput): Promise<MenuProposal> {
-    return request<MenuProposal>("/branch/menu/proposals", {
+    return request<MenuProposal>("/sub-kitchen/menu-proposals", {
       method: "POST",
       ...json(input),
     });
   },
 
-  /** This branch's own proposals (never another branch's). */
-  listBranchProposals(status?: MenuProposalStatus): Promise<MenuProposal[]> {
-    return request<MenuProposal[]>(`/branch/menu/proposals${statusQ(status)}`);
+  /** This station's own proposals (never another branch's). */
+  listChefProposals(status?: MenuProposalStatus): Promise<MenuProposal[]> {
+    return request<MenuProposal[]>(`/sub-kitchen/menu-proposals${statusQ(status)}`);
   },
 
   withdrawProposal(id: number): Promise<void> {
-    return request(`/branch/menu/proposals/${id}`, { method: "DELETE" });
+    return request(`/sub-kitchen/menu-proposals/${id}`, { method: "DELETE" });
   },
 
   // ---- Admin: review queue / decide ----
@@ -59,6 +59,14 @@ export const menuProposalApi = {
     return request<MenuProposal>(`/admin/menu/proposals/${id}/reject`, {
       method: "POST",
       ...json({ reason }),
+    });
+  },
+
+  /** Stamp approved proposals as live, right after publishing them to the menu. */
+  markProposalsPublished(ids: number[]): Promise<{ published: number }> {
+    return request<{ published: number }>("/admin/menu/proposals/mark-published", {
+      method: "POST",
+      ...json({ ids }),
     });
   },
 
