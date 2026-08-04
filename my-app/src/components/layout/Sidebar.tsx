@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Logomark } from "@/components/icons";
 import { isNavActive, visibleNavItems } from "@/lib/nav";
 import { useAuth } from "@/lib/auth";
+import { useRestaurantFeatures } from "@/lib/hooks/use-restaurant-features";
 import { cn } from "@/lib/utils";
 import type { NavItem, NavSection } from "@/lib/nav";
 
@@ -43,6 +44,8 @@ interface SidebarProps {
 export function Sidebar({ sections, portalLabel, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const { can } = useAuth();
+  const { hasCentralKitchen } = useRestaurantFeatures();
+  const features = { central_kitchen: hasCentralKitchen };
 
   return (
     <div className="flex h-full flex-col">
@@ -56,7 +59,7 @@ export function Sidebar({ sections, portalLabel, onNavigate }: SidebarProps) {
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {sections.map((section) => {
-          const items = visibleNavItems(section.items, can);
+          const items = visibleNavItems(section.items, can, features);
           if (items.length === 0) return null;
           return (
             <div key={section.title} className="space-y-1">

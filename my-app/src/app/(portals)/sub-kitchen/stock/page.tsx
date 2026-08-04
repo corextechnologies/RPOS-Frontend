@@ -47,7 +47,13 @@ export default function SubKitchenStockPage() {
   const inventory = useSubKitchenInventory();
   const nearExpiry = useSubKitchenNearExpiry({ within_days: NEAR_EXPIRY_DAYS });
 
-  const rows = useMemo(() => aggregate(inventory.data ?? []), [inventory.data]);
+  // Out-of-stock products drop off the list — the station only cares about what
+  // it can actually prep with. The endpoint still returns zero-qty lots; we hide
+  // them here.
+  const rows = useMemo(
+    () => aggregate(inventory.data ?? []).filter((r) => r.quantity > 0),
+    [inventory.data],
+  );
   const expiring = nearExpiry.data ?? [];
 
   return (
@@ -126,12 +132,8 @@ export default function SubKitchenStockPage() {
                   {stockRows.map((row) => (
                     <TableRow key={row.productId}>
                       <TableCell className="font-medium text-content">{row.name}</TableCell>
-                      <TableCell className="text-right">
-                        {row.quantity === 0 ? (
-                          <span className="text-faint">Out</span>
-                        ) : (
-                          <span className="tabular-nums text-content">{row.quantity}</span>
-                        )}
+                      <TableCell className="text-right tabular-nums text-content">
+                        {row.quantity}
                       </TableCell>
                       <TableCell className="text-muted">
                         {stockUnitColumnLabel(row.unit)}

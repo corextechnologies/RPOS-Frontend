@@ -49,6 +49,11 @@ export interface CartLine {
   modifier_labels: string[];
   modifier_delta_minor: Minor;
   note?: string;
+  /**
+   * Flags the line for final prep at the branch sub-kitchen. Sending the order
+   * drops a prep job on the chef's board carrying `note` as the instruction.
+   */
+  needs_prep: boolean;
   is_combo: boolean;
   /** Send this line to the branch sub-kitchen for finishing. Defaulted from the
    *  menu item's made_to_order when the line is added; toggleable per line. */
@@ -129,6 +134,7 @@ export function cartFromOrder(order: PosOrder, menu: readonly MenuItem[]): CartS
         modifier_labels: options.map((o) => o.name),
         modifier_delta_minor: sumMinor(options.map((o) => o.price_delta_minor)),
         note: l.note ?? undefined,
+        needs_prep: l.needs_prep ?? false,
         is_combo: item?.is_combo ?? false,
         // Recall keeps the prep flag the order was sent/parked with (falls back to
         // the item default if an older order read predates the field).
@@ -149,7 +155,8 @@ export function cartFromOrder(order: PosOrder, menu: readonly MenuItem[]): CartS
   };
 }
 
-function sameLine(a: CartLine, b: Omit<CartLine, "uid">): boolean {
+/** Exported for tests. Two adds collapse into one row only when this holds. */
+export function sameLine(a: CartLine, b: Omit<CartLine, "uid">): boolean {
   return (
     a.menu_item_id === b.menu_item_id &&
     a.note === b.note &&
@@ -225,7 +232,7 @@ interface CartValue {
   cart: CartState;
   subtotalMinor: Minor;
   itemCount: number;
-  addItem: (item: MenuItem, optionIds: number[], note?: string) => void;
+  addItem: (item: MenuItem, optionIds: number[], note?: string, needsPrep?: boolean) => void;
   setQty: (uid: string, qty: number) => void;
   remove: (uid: string) => void;
   setNote: (uid: string, note: string) => void;
@@ -258,10 +265,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(CART_KEY, JSON.stringify(cart));
   }, [cart]);
 
-  const addItem = useCallback((item: MenuItem, optionIds: number[], note?: string) => {
-    const options = item.modifier_groups
-      .flatMap((g) => g.options)
-      .filter((o) => optionIds.includes(o.id));
+  const addItem = useCallback(
+    (item: MenuItem, optionIds: number[], note?: string, needsPrep = false) => {
+      const options = item.modifier_groups
+        .flatMap((g) => g.options)
+        .filter((o) => optionIds.includes(o.id));
 
     dispatch({
       type: "add",

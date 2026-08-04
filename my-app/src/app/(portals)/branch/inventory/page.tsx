@@ -31,6 +31,11 @@ import type { WasteEvent } from "@/lib/types/waste";
 /**
  * Branch stock on hand, plus write-off of wasted/expired stock and its history.
  *
+ * The backend already returns one row per product + expiry date (quantities
+ * summed, zero-quantity rows removed, sorted soonest-expiry-first) and flags
+ * expired lots with `is_expired` — so rows render as-is; there is no client-side
+ * grouping or date maths.
+ *
  * Inventory is readable by BRANCH_STAFF; writing off is a manager action gated
  * on `branch-waste:log`. There is **no price column** and there must never be
  * one: cost is Admin-only and is absent from `BranchInventoryItem`
@@ -50,12 +55,12 @@ export default function BranchInventoryPage() {
 
   const handleWaste = async (values: WasteStockForm) => {
     if (!wasting) return;
+    // Branch waste is product-level — no batch_code (the server ignores it).
     await wasteStock.mutateAsync({
       product_id: wasting.product_id,
       quantity: Number(values.quantity),
       waste_reason: values.waste_reason,
       movement_type: values.movement_type,
-      batch_code: wasting.batch_code || undefined,
       notes: values.notes || undefined,
     });
     setWasting(null);
@@ -74,20 +79,19 @@ export default function BranchInventoryPage() {
         isLoading={isLoading}
         isError={!!error}
         data={data}
-        isEmpty={(rows) => rows.length === 0}
+        isEmpty={(list) => list.length === 0}
         errorTitle="Couldn't load inventory"
         errorDescription={error instanceof Error ? error.message : undefined}
         onRetry={() => void refetch()}
         emptyTitle="No stock yet"
         emptyDescription="Stock allocated to this branch will appear here."
       >
-        {(rows) => (
+        {(list) => (
           <div className="rounded-2xl border border-line bg-surface">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
-                  <TableHead>Batch</TableHead>
                   <TableHead className="text-right">On hand</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Expires</TableHead>
@@ -95,7 +99,7 @@ export default function BranchInventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((item) => (
+                {list.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
                       <span className="font-medium text-content">{item.product_name}</span>
@@ -103,23 +107,17 @@ export default function BranchInventoryPage() {
                         <span className="ml-2 font-mono text-xs text-faint">{item.sku}</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted">
-                      {item.batch_code || <span className="text-faint">—</span>}
-                    </TableCell>
                     <TableCell className="text-right">
-                      {item.quantity === 0 ? (
-                        <Badge variant="destructive">Out</Badge>
-                      ) : (
-                        <span className="tabular-nums text-content">
-                          {item.quantity}
-                        </span>
-                      )}
+                      <span className="tabular-nums text-content">{item.quantity}</span>
                     </TableCell>
                     <TableCell className="text-muted">
                       {stockUnitColumnLabel(item.stock_unit)}
                     </TableCell>
                     <TableCell className="text-muted">
-                      {item.expiry_date ? formatDate(item.expiry_date) : "-"}
+                      <span className="inline-flex items-center gap-2">
+                        {item.expiry_date ? formatDate(item.expiry_date) : "-"}
+                        {item.is_expired && <Badge variant="destructive">Expired</Badge>}
+                      </span>
                     </TableCell>
                     {canWaste && (
                       <TableCell className="text-right">
@@ -127,7 +125,6 @@ export default function BranchInventoryPage() {
                           variant="ghost"
                           size="sm"
                           className="text-danger"
-                          disabled={item.quantity === 0}
                           onClick={() => setWasting(item)}
                         >
                           <Trash2 className="mr-2 h-4 w-4" /> Waste
@@ -147,7 +144,7 @@ export default function BranchInventoryPage() {
         <WasteEventsTable
           title="Waste & expired"
           description="Everything written off from this branch."
-          searchPlaceholder="Search name, SKU, or batch…"
+          searchPlaceholder="Search name or SKU…"
           searchValue={wasteSearch}
           onSearchChange={setWasteSearch}
           items={wasteEvents.data}
@@ -155,12 +152,14 @@ export default function BranchInventoryPage() {
           isError={wasteEvents.isError}
           onRetry={() => wasteEvents.refetch()}
           onSelect={setViewingWaste}
+          showBatch={false}
         />
       )}
 
       <BranchWasteDialog
         item={wasting}
         open={!!wasting}
+        defaultMovementType={wasting?.is_expired ? "EXPIRY" : "WASTE"}
         onOpenChange={(open) => {
           if (!open) setWasting(null);
         }}

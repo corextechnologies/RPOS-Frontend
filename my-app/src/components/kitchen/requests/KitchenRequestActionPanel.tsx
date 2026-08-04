@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  isResaleOnlyBranchRequest,
   kitchenActionHint,
   kitchenActionLabel,
   kitchenAllowedTransitions,
@@ -46,9 +47,12 @@ export function KitchenRequestActionPanel({
   isSubmitting,
   onSubmit,
 }: KitchenRequestActionPanelProps) {
+  // A resale-only branch request has nothing to produce, so it skips the
+  // production steps and offers "Dispatch to branch" straight away.
+  const resaleOnly = isResaleOnlyBranchRequest(request);
   const transitions = useMemo(
-    () => kitchenAllowedTransitions(request.request_type, request.status),
-    [request.request_type, request.status],
+    () => kitchenAllowedTransitions(request.request_type, request.status, { resaleOnly }),
+    [request.request_type, request.status, resaleOnly],
   );
 
   const [pending, setPending] = useState<KitchenRequestStatus | null>(null);

@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/state";
 import { useAuth } from "@/lib/auth";
-import { useWarehouses } from "@/lib/hooks/use-locations";
+import { useKitchens, useWarehouses } from "@/lib/hooks/use-locations";
 import { useRequest, useUpdateRequestStatus } from "@/lib/hooks/use-requests";
-import { resolveRequestFromLabel } from "@/lib/requests";
+import { resolveRequestFromLabel, resolveRequestToKitchenLabel } from "@/lib/requests";
 
 export default function AdminRequestDetailPage() {
   const params = useParams<{ id: string }>();
@@ -26,6 +26,13 @@ export default function AdminRequestDetailPage() {
   const warehouses = useWarehouses();
   const fromLabel = request.data
     ? resolveRequestFromLabel(request.data, warehouses.data)
+    : undefined;
+
+  // The kitchen the branch chose (BRANCH_TO_ADMIN) is an id on the request;
+  // resolve its name against the kitchen list for display.
+  const kitchens = useKitchens();
+  const toLabel = request.data
+    ? resolveRequestToKitchenLabel(request.data, kitchens.data)
     : undefined;
 
   if (request.isLoading) {
@@ -71,7 +78,7 @@ export default function AdminRequestDetailPage() {
         </div>
       </div>
 
-      <RequestDetail request={request.data} fromLabel={fromLabel} />
+      <RequestDetail request={request.data} fromLabel={fromLabel} toLabel={toLabel} />
 
       {request.data.type === "KITCHEN_TO_ADMIN" ? (
         <DispatchAllocationPanel

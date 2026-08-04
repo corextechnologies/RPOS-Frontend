@@ -23,8 +23,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/state";
 import { useAuth } from "@/lib/auth";
 import { useKitchens } from "@/lib/hooks/use-locations";
+import { useRestaurantFeatures } from "@/lib/hooks/use-restaurant-features";
 import { useProductionTargets } from "@/lib/hooks/use-production-targets";
 import type { AdminProductionTargetFilters } from "@/lib/types/production-target";
 
@@ -34,6 +36,7 @@ export default function AdminProductionTargetsPage() {
   const router = useRouter();
   const { can } = useAuth();
   const kitchens = useKitchens();
+  const { hasCentralKitchen, isLoading: featuresLoading } = useRestaurantFeatures();
   const [kitchenId, setKitchenId] = useState<string>(ALL_KITCHENS);
   const [date, setDate] = useState("");
 
@@ -47,6 +50,24 @@ export default function AdminProductionTargetsPage() {
   const { data, isLoading, isError, error, refetch } = useProductionTargets(filters);
   const targets = (data ?? []).filter((t) => t.status === "PENDING");
   const filtering = kitchenId !== ALL_KITCHENS || !!date;
+
+  // No central kitchen → no production targets (they are keyed to a kitchen).
+  // Guards direct URL access even though the nav item is hidden.
+  if (!featuresLoading && !hasCentralKitchen) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
+            Production targets
+          </h1>
+        </div>
+        <EmptyState
+          title="Central kitchen is disabled"
+          description="This restaurant runs without a central kitchen, so there are no production targets to set. Each branch produces to order in its own sub-kitchen."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

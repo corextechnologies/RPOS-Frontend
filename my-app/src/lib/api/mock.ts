@@ -4,6 +4,7 @@
 import type {
   AdminCustomer,
   AdminCustomerFilters,
+  AdminLocationType,
   AdminProfile,
   AdminRequestType,
   Branch,
@@ -90,6 +91,7 @@ import type {
   BranchCustomer,
   BranchCustomerFilters,
   BranchDelivery,
+  BranchRequestSummary,
   BranchStaff,
   CreateBranchStaffInput,
   CreateBranchStaffResult,
@@ -151,7 +153,10 @@ import type { BranchPosition, ProductionMode } from "@/lib/types/super-admin";
 import type { Capability } from "@/lib/types/pos";
 // Mock and live agree on the state machine by sharing the real map, the same way
 // the warehouse mock does.
-import { kitchenAllowedTransitions } from "@/lib/kitchen/request-transitions";
+import {
+  isResaleOnlyBranchRequest,
+  kitchenAllowedTransitions,
+} from "@/lib/kitchen/request-transitions";
 import {
   ApiError,
   type BillingSummary,
@@ -256,7 +261,7 @@ const producedByIdempotencyKey = new Map<string, ProductionRun>();
  *     branch (br-002), and selling_price/category/is_available on products.
  * 21: `waste_events` — write-off history for the Waste & expired table.
  */
-const SEED_VERSION = 31;
+const SEED_VERSION = 32;
 
 interface MockInvoiceRecord {
   id: number;
@@ -647,6 +652,21 @@ function seedUsers(): MockUserAccount[] {
         must_change_password: true,
       },
     },
+    {
+      // Admin of the kitchen-off tenant (rest-004). Log in here to see the
+      // Admin portal with its central-kitchen surfaces hidden (F4).
+      email: "admin@branch-only.ros",
+      password: "Demo@1234",
+      me: {
+        id: 9,
+        email: "admin@branch-only.ros",
+        full_name: "Riley Kapoor",
+        role: "ADMIN",
+        restaurant_id: 4,
+        created_by_id: 1,
+        is_active: true,
+      },
+    },
   );
 
   return users;
@@ -690,6 +710,7 @@ function seedDb(): MockDb {
     plan_status: "active",
     branch_limit: 2,
     branch_count: 1,
+    has_central_kitchen: true,
     plan_amount: "499.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
@@ -712,6 +733,7 @@ function seedDb(): MockDb {
     plan_status: "halted",
     branch_limit: 25,
     branch_count: 8,
+    has_central_kitchen: true,
     plan_amount: "999.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
@@ -734,6 +756,7 @@ function seedDb(): MockDb {
     plan_status: "active",
     branch_limit: 3,
     branch_count: 2,
+    has_central_kitchen: true,
     plan_amount: "199.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
@@ -2300,8 +2323,11 @@ function requirePrepOperate(me: MeResponse) {
  * No `cost_price`: structurally absent, not nulled (`pricing-leak.test.ts`).
  */
 function branchInventoryRows(db: MockDb, branchId: string): BranchInventoryItem[] {
+  // Mirror the live API: one row per product + expiry, zero-quantity rows
+  // dropped, `is_expired` decided server-side, sorted soonest-expiry-first.
+  const today = now().slice(0, 10);
   return db.inventory
-    .filter((i) => i.location_type === "BRANCH" && i.location_id === branchId)
+    .filter((i) => i.location_type === "BRANCH" && i.location_id === branchId && i.quantity > 0)
     .map((i) => ({
       id: i.id,
       product_id: i.product_id,
@@ -2310,10 +2336,16 @@ function branchInventoryRows(db: MockDb, branchId: string): BranchInventoryItem[
       quantity: i.quantity,
       batch_code: i.batch_code ?? "",
       expiry_date: i.expiry_date ?? null,
+      is_expired: i.expiry_date != null && i.expiry_date < today,
       // Resolved from the catalog so the table can show the unit.
       stock_unit: db.products.find((p) => p.id === i.product_id)?.stock_unit ?? "EACH",
       location_id: i.location_id,
-    }));
+    }))
+    .sort(
+      (a, b) =>
+        (a.expiry_date ?? "9999-12-31").localeCompare(b.expiry_date ?? "9999-12-31") ||
+        a.product_name.localeCompare(b.product_name),
+    );
 }
 
 function toPublicCustomer(c: MockCustomer): BranchCustomer {
@@ -2549,6 +2581,12 @@ function toPublicRequest(req: MockStockRequest): StockRequest {
     status: req.status as RequestStatus,
     notes: req.notes,
     from_label: req.from_label,
+    source_location_type: req.source_location_type as AdminLocationType | null | undefined,
+    source_location_id: req.source_location_id,
+    // The branch's chosen kitchen on a BRANCH_TO_ADMIN request — shown to Admin
+    // and used to pre-select the forward picker.
+    target_location_type: req.target_location_type as AdminLocationType | null | undefined,
+    target_location_id: req.target_location_id,
     line_items: req.line_items,
     // Only KITCHEN_TO_ADMIN ever carries these; undefined elsewhere.
     allocations: req.allocations,
@@ -3242,6 +3280,7 @@ export const mockClient: ApiClient = {
       plan_status: "active",
       branch_limit: body.branch_limit ?? planByTier(tier)?.branchLimit ?? 1,
       branch_count: body.branch_limit ?? 1,
+      has_central_kitchen: body.has_central_kitchen ?? true,
       plan_amount: amount,
       next_billing_date: nextBilling,
       admin: {
@@ -3304,11 +3343,31 @@ export const mockClient: ApiClient = {
       );
     }
 
+    // Guarded disable: a tenant cannot drop its central kitchen while kitchen
+    // locations or kitchen staff still exist — those must be decommissioned
+    // first, so historical production data is never orphaned.
+    if (current.has_central_kitchen && body.has_central_kitchen === false) {
+      const hasKitchens = db.kitchens.some((k) => k.restaurant_id === id);
+      const hasKitchenStaff = db.employees.some(
+        (e) =>
+          e.restaurant_id === id &&
+          (e.role === "KITCHEN_MANAGER" || e.role === "KITCHEN_STAFF"),
+      );
+      if (hasKitchens || hasKitchenStaff) {
+        throw new ApiError(
+          "Remove this restaurant's kitchen locations and kitchen staff before disabling its central kitchen.",
+          409,
+          "kitchen_in_use",
+        );
+      }
+    }
+
     const updated: Restaurant = {
       ...current,
       name: body.name ?? current.name,
       plan_tier: body.plan_tier ?? current.plan_tier,
       branch_limit: body.branch_limit ?? current.branch_limit,
+      has_central_kitchen: body.has_central_kitchen ?? current.has_central_kitchen,
       admin: {
         ...current.admin,
         name: body.owner_name ?? current.admin.name,
@@ -5804,7 +5863,9 @@ export const mockClient: ApiClient = {
     });
 
     saveDb(db);
-    return delay(toPublicKitchenInventoryItem(item, db));
+    // Return a list to match the live shape — a write-off can span several lots.
+    // The mock stays status-only and touches one row, so the list holds one item.
+    return delay([toPublicKitchenInventoryItem(item, db)]);
   },
 
   async listKitchenWasteEvents(filters?: WasteEventFilters) {
@@ -6379,9 +6440,13 @@ export const mockClient: ApiClient = {
     const kitchen = resolveMyKitchen(db, me);
     const found = findKitchenVisibleRequest(db, kitchen, requestId);
 
+    // Resale-only branch requests skip production — the projection resolves each
+    // line's kind from the catalog, so reuse it for a single source of truth.
+    const resaleOnly = isResaleOnlyBranchRequest(toPublicKitchenRequest(found, db));
     const allowed = kitchenAllowedTransitions(
       found.type as KitchenRequestType,
       found.status as KitchenRequestStatus,
+      { resaleOnly },
     );
     if (!allowed.includes(body.to_status)) {
       throw new ApiError(
@@ -7343,6 +7408,30 @@ export const mockClient: ApiClient = {
     });
   },
 
+  async getBranchRequestsSummary(): Promise<BranchRequestSummary> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+
+    const rows = db.requests.filter(
+      (r) =>
+        r.type === "BRANCH_TO_ADMIN" &&
+        r.restaurant_id === branch.restaurant_id &&
+        (r.source_location_id === branch.id ||
+          (r.source_location_id == null && r.from_label === branch.name)),
+    );
+
+    const received = rows.filter((r) => r.status === "RECEIVED").length;
+    const rejected = rows.filter((r) => r.status === "REJECTED").length;
+    // Open = not yet in a terminal state (not received and not rejected).
+    return delay({
+      open: rows.length - received - rejected,
+      received,
+      rejected,
+      total: rows.length,
+    });
+  },
+
   async createBranchRequest(body: CreateBranchRequestInput): Promise<StockRequest> {
     const me = requireAuth();
     requireBranchManager(me);
@@ -7645,6 +7734,10 @@ export const mockClient: ApiClient = {
 
     saveDb(db);
 
+    // Product-level waste can touch several lots on the live API; the mock's
+    // branch stock is one row per product, so it returns that single affected
+    // row — but as an array, matching the new response shape.
+    const today = now().slice(0, 10);
     const result: BranchInventoryItem = {
       id: item.id,
       product_id: item.product_id,
@@ -7653,11 +7746,12 @@ export const mockClient: ApiClient = {
       quantity: item.quantity,
       batch_code: item.batch_code ?? "",
       expiry_date: item.expiry_date ?? null,
+      is_expired: item.expiry_date != null && item.expiry_date < today,
       stock_unit:
         db.products.find((p) => p.id === item.product_id)?.stock_unit ?? "EACH",
       location_id: item.location_id,
     };
-    return delay(result);
+    return delay([result]);
   },
 
   async listBranchWasteEvents(filters?: WasteEventFilters) {

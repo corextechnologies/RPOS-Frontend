@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Minus, PackageOpen, Plus, Trash2, Car, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Money } from "./Money";
 import { CustomerDialog } from "./CustomerDialog";
 import { useCart, lineTotalMinor } from "@/lib/pos/cart";
@@ -168,11 +170,17 @@ export function CartPanel({
               <li key={line.uid} className="p-3">
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-content">{line.name}</p>
+                    <p className="flex items-center gap-1.5 text-sm font-medium text-content">
+                      <span className="min-w-0 truncate">{line.name}</span>
+                      {line.needs_prep && (
+                        <Badge variant="warning" className="shrink-0">
+                          Prep
+                        </Badge>
+                      )}
+                    </p>
                     {line.modifier_labels.length > 0 && (
                       <p className="text-xs text-muted">{line.modifier_labels.join(", ")}</p>
                     )}
-                    {line.note && <p className="text-xs italic text-faint">“{line.note}”</p>}
                   </div>
                   <Money minor={lineTotalMinor(line)} className="text-sm text-content" />
                   <button
@@ -222,6 +230,20 @@ export function CartPanel({
                     </button>
                   )}
                 </div>
+
+                {/* Note doubles as the chef's instruction on a prep line. Shown
+                    once flagged or whenever a note already exists, so it's
+                    editable without forcing a field onto every plain sale. */}
+                {(line.needs_prep || line.note) && (
+                  <Input
+                    className="mt-2 h-9 text-sm"
+                    placeholder={
+                      line.needs_prep ? "Happy Birthday Ali, no onions…" : "Note for the kitchen…"
+                    }
+                    value={line.note ?? ""}
+                    onChange={(e) => setNote(line.uid, e.target.value)}
+                  />
+                )}
               </li>
             ))}
           </ul>

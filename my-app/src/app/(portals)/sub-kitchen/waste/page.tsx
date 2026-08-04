@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageState } from "@/components/ui/page-state";
@@ -86,7 +85,8 @@ export default function SubKitchenWastePage() {
           <PageState
             isLoading={inventory.isLoading}
             isError={inventory.isError}
-            data={inventory.data}
+            // Out-of-stock lots drop off — you can't write off what isn't there.
+            data={(inventory.data ?? []).filter((i) => i.quantity > 0)}
             isEmpty={(rows) => rows.length === 0}
             errorTitle="Couldn't load stock"
             errorDescription={
@@ -101,7 +101,6 @@ export default function SubKitchenWastePage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Product</TableHead>
-                    <TableHead>Batch</TableHead>
                     <TableHead className="text-right">On hand</TableHead>
                     <TableHead>Unit</TableHead>
                     <TableHead>Expires</TableHead>
@@ -117,15 +116,8 @@ export default function SubKitchenWastePage() {
                           <span className="ml-2 font-mono text-xs text-faint">{item.sku}</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-muted">
-                        {item.batch_code || <Badge variant="secondary">Unbatched</Badge>}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {item.quantity === 0 ? (
-                          <span className="text-faint">Out</span>
-                        ) : (
-                          <span className="tabular-nums text-content">{item.quantity}</span>
-                        )}
+                      <TableCell className="text-right tabular-nums text-content">
+                        {item.quantity}
                       </TableCell>
                       <TableCell className="text-muted">
                         {stockUnitColumnLabel(item.stock_unit)}
@@ -140,7 +132,6 @@ export default function SubKitchenWastePage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={item.quantity === 0}
                             onClick={() => openWaste(item)}
                           >
                             Write off
@@ -160,7 +151,9 @@ export default function SubKitchenWastePage() {
         <WasteEventsTable
           title="Write-off history"
           description="Everything written off from the station."
-          searchPlaceholder="Search name, SKU, or batch…"
+          // The branch tracks finished goods by product, not batch — hide it.
+          showBatch={false}
+          searchPlaceholder="Search name or SKU…"
           searchValue={wasteSearch}
           onSearchChange={setWasteSearch}
           items={wasteEvents.data}

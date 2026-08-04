@@ -24,9 +24,15 @@ interface RequestDetailProps {
    * as it does on a WAREHOUSE_TO_ADMIN_PO.
    */
   fromLabel?: string;
+  /**
+   * The kitchen the branch chose to fulfil this, resolved by the caller from
+   * `target_location_id`. Shown for BRANCH_TO_ADMIN requests.
+   */
+  toLabel?: string;
 }
 
-export function RequestDetail({ request, fromLabel }: RequestDetailProps) {
+export function RequestDetail({ request, fromLabel, toLabel }: RequestDetailProps) {
+  const showKitchenTarget = request.target_location_type === "KITCHEN";
   return (
     <div className="space-y-6">
       <Card>
@@ -48,6 +54,14 @@ export function RequestDetail({ request, fromLabel }: RequestDetailProps) {
             <p className="text-xs font-medium uppercase tracking-wider text-faint">From</p>
             <p className="mt-1 text-content">{request.from_label || fromLabel || "-"}</p>
           </div>
+          {showKitchenTarget && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-faint">
+                Requested kitchen
+              </p>
+              <p className="mt-1 text-content">{toLabel || "-"}</p>
+            </div>
+          )}
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-faint">Created</p>
             <p className="mt-1 text-content">{formatDate(request.created_at)}</p>

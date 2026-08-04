@@ -69,6 +69,7 @@ export default function NewRestaurantPage() {
         branch_limit: values.branch_limit,
         plan_tier: values.plan_tier,
         plan_amount: values.plan_amount,
+        has_central_kitchen: values.has_central_kitchen,
         payment_received: values.payment_received === true,
       });
       setCredentials({
@@ -192,6 +193,25 @@ export default function NewRestaurantPage() {
                 planAmount={planAmount}
                 branchLimit={branchLimit}
                 nextBillingDate={nextBillingDate}
+              />
+
+              <FormField
+                control={form.control}
+                name="has_central_kitchen"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-xl border border-line bg-surface-2/40 px-4 py-3">
+                    <div className="space-y-0.5 pr-4">
+                      <FormLabel className="text-base">Central / cloud kitchen</FormLabel>
+                      <p className="text-sm text-muted">
+                        On for tenants that run a central kitchen. Turn off if the client has no
+                        cloud kitchen — each branch then handles production in its own sub-kitchen.
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
               />
 
               <FormField

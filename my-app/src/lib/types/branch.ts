@@ -170,6 +170,18 @@ export interface CreateBranchRequestInput {
   lines: CreateBranchRequestLineInput[];
 }
 
+/**
+ * Server-side counts for the branch's own requests (`GET /branch/requests/summary`).
+ * A single indexed count, scoped to the caller's branch — same visibility as the
+ * list. `open` = not yet in a terminal state (not RECEIVED and not REJECTED).
+ */
+export interface BranchRequestSummary {
+  open: number;
+  received: number;
+  rejected: number;
+  total: number;
+}
+
 // ---- Incoming deliveries (from the kitchen) ----
 //
 // One branch's slice of a kitchen dispatch. The kitchen produced finished goods,
@@ -207,6 +219,13 @@ export interface BranchInventoryItem {
   batch_code: string;
   /** Plain calendar date, `YYYY-MM-DD`. Named to match `InventoryItem`. */
   expiry_date?: string | null;
+  /**
+   * Whether this lot is past its expiry, decided server-side. The backend
+   * returns one row per product + expiry (quantities summed, zero rows removed),
+   * so the UI renders rows as-is and greys out the expired ones by this flag —
+   * no client-side date maths. Absent on legacy payloads → treated as false.
+   */
+  is_expired?: boolean;
   /** Unit of measure the product is stocked in. Always present (defaults to EACH). */
   stock_unit: StockUnit;
   location_id: string;

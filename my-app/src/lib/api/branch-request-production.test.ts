@@ -81,3 +81,27 @@ describe("branch request in-house production", () => {
     ).rejects.toMatchObject({ code: "invalid_request_type" });
   });
 });
+
+describe("branch stock request without a fulfilling kitchen", () => {
+  // A kitchen-off tenant's branch must still be able to raise a stock request;
+  // Admin fulfils it from the warehouse. The API accepts an omitted kitchen_id.
+  it("creates a PENDING BRANCH_TO_ADMIN request when no kitchen is named", async () => {
+    await mockClient.login("branch@demo.ros", "Demo@1234");
+    const req = await mockClient.createBranchRequest({
+      lines: [{ product_id: "prod-001", quantity_requested: 2 }],
+    });
+    expect(req.type).toBe("BRANCH_TO_ADMIN");
+    expect(req.status).toBe("PENDING");
+    expect(req.line_items).toHaveLength(1);
+  });
+
+  it("still rejects a kitchen_id that does not exist", async () => {
+    await mockClient.login("branch@demo.ros", "Demo@1234");
+    await expect(
+      mockClient.createBranchRequest({
+        kitchen_id: "kit-does-not-exist",
+        lines: [{ product_id: "prod-001", quantity_requested: 1 }],
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+});

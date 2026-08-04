@@ -67,6 +67,13 @@ export interface Restaurant {
   plan_status: PlanStatus;
   branch_limit: number;
   branch_count: number;
+  /**
+   * Whether this tenant runs a central/cloud kitchen. When false, kitchen
+   * responsibilities collapse onto each branch's sub-kitchen. Set by Super Admin.
+   * The adapter defaults a missing value to `true`, so a backend that does not
+   * yet send the field behaves exactly as before.
+   */
+  has_central_kitchen: boolean;
   plan_amount?: string | null;
   next_billing_date?: string | null;
   admin: RestaurantAdmin;
@@ -182,6 +189,8 @@ export interface CreateRestaurantInput {
   plan_tier?: string;
   plan_amount?: string | number;
   next_billing_date?: string;
+  /** Whether the new tenant runs a central/cloud kitchen. Defaults to true. */
+  has_central_kitchen?: boolean;
   /**
    * Always send an explicit boolean. When true and a plan is set, backend seeds
    * paid (today) + unpaid (next month) invoices. Unchecked must be `false`, not omitted.
@@ -198,6 +207,8 @@ export interface UpdateRestaurantInput {
   owner_name?: string;
   owner_email?: string;
   owner_phone?: string;
+  /** Toggle the central/cloud kitchen on or off. Omitted when unchanged. */
+  has_central_kitchen?: boolean;
 }
 
 /**
