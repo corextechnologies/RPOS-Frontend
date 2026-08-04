@@ -12,6 +12,7 @@ import {
   TrendingUp,
   UserRound,
   Users,
+  UtensilsCrossed,
 } from "lucide-react";
 import type { NavSection } from "./types";
 
@@ -40,6 +41,13 @@ export const BRANCH_NAV: NavSection[] = [
         href: "/branch/orders",
         icon: Receipt,
         action: "branch-orders:read",
+        match: "prefix",
+      },
+      {
+        label: "Menu",
+        href: "/branch/menu",
+        icon: UtensilsCrossed,
+        action: "branch-menu:propose",
         match: "prefix",
       },
       {

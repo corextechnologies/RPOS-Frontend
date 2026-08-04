@@ -50,6 +50,9 @@ export interface CartLine {
   modifier_delta_minor: Minor;
   note?: string;
   is_combo: boolean;
+  /** Send this line to the branch sub-kitchen for finishing. Defaulted from the
+   *  menu item's made_to_order when the line is added; toggleable per line. */
+  needs_prep?: boolean;
 }
 
 export interface CartState {
@@ -84,6 +87,7 @@ type Action =
   | { type: "setQty"; uid: string; quantity: number }
   | { type: "remove"; uid: string }
   | { type: "setNote"; uid: string; note: string }
+  | { type: "setNeedsPrep"; uid: string; needs_prep: boolean }
   | { type: "patch"; patch: Partial<CartState> }
   | { type: "reset" }
   | { type: "hydrate"; state: CartState };
@@ -126,6 +130,9 @@ export function cartFromOrder(order: PosOrder, menu: readonly MenuItem[]): CartS
         modifier_delta_minor: sumMinor(options.map((o) => o.price_delta_minor)),
         note: l.note ?? undefined,
         is_combo: item?.is_combo ?? false,
+        // Recall keeps the prep flag the order was sent/parked with (falls back to
+        // the item default if an older order read predates the field).
+        needs_prep: l.needs_prep ?? item?.made_to_order ?? false,
       };
     });
 
@@ -146,6 +153,9 @@ function sameLine(a: CartLine, b: Omit<CartLine, "uid">): boolean {
   return (
     a.menu_item_id === b.menu_item_id &&
     a.note === b.note &&
+    // A made-to-order line and a plain one of the same item are different work —
+    // don't collapse them into one row.
+    (a.needs_prep ?? false) === (b.needs_prep ?? false) &&
     a.modifier_option_ids.length === b.modifier_option_ids.length &&
     a.modifier_option_ids.every((id, i) => id === b.modifier_option_ids[i])
   );
@@ -186,6 +196,13 @@ function reducer(state: CartState, action: Action): CartState {
         ...state,
         lines: state.lines.map((l) => (l.uid === action.uid ? { ...l, note: action.note } : l)),
       };
+    case "setNeedsPrep":
+      return {
+        ...state,
+        lines: state.lines.map((l) =>
+          l.uid === action.uid ? { ...l, needs_prep: action.needs_prep } : l,
+        ),
+      };
     case "patch":
       return { ...state, ...action.patch };
     case "reset":
@@ -212,6 +229,7 @@ interface CartValue {
   setQty: (uid: string, qty: number) => void;
   remove: (uid: string) => void;
   setNote: (uid: string, note: string) => void;
+  setNeedsPrep: (uid: string, needsPrep: boolean) => void;
   patch: (patch: Partial<CartState>) => void;
   reset: () => void;
   toCreateInput: () => PosOrderCreate;
@@ -257,6 +275,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         modifier_delta_minor: sumMinor(options.map((o) => o.price_delta_minor)),
         note,
         is_combo: item.is_combo,
+        // A made-to-order dish routes to the sub-kitchen by default; the cashier
+        // can still toggle it off per line.
+        needs_prep: item.made_to_order ?? false,
       },
     });
   }, []);
@@ -271,6 +292,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setQty: (uid, quantity) => dispatch({ type: "setQty", uid, quantity }),
       remove: (uid) => dispatch({ type: "remove", uid }),
       setNote: (uid, note) => dispatch({ type: "setNote", uid, note }),
+      setNeedsPrep: (uid, needs_prep) => dispatch({ type: "setNeedsPrep", uid, needs_prep }),
       patch: (patch) => dispatch({ type: "patch", patch }),
       reset: () => dispatch({ type: "reset" }),
       hydrateFrom: (order, menu) =>
@@ -282,6 +304,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           quantity: l.quantity,
           modifier_option_ids: l.modifier_option_ids.length ? l.modifier_option_ids : undefined,
           note: l.note || undefined,
+          // Send the resolved per-line flag (already defaulted from the item's
+          // made_to_order when the line was added).
+          needs_prep: l.needs_prep,
         })),
         channel: cart.channel,
         order_type: cart.order_type,

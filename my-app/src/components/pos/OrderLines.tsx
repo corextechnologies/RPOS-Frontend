@@ -48,7 +48,14 @@ function Row({ line, child = false }: { line: PosOrderLine; child?: boolean }) {
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className={cn("truncate", child ? "text-muted" : "text-content")}>{line.name}</p>
+        <p className={cn("truncate", child ? "text-muted" : "text-content")}>
+          {line.name}
+          {!child && line.needs_prep && (
+            <span className="ml-1.5 rounded bg-surface-2 px-1.5 py-0.5 align-middle text-[10px] font-medium uppercase tracking-wide text-muted">
+              Made to order
+            </span>
+          )}
+        </p>
         {line.modifiers && line.modifiers.length > 0 && (
           <p className="truncate text-xs text-faint">
             {line.modifiers.map((m) => m.name).join(", ")}

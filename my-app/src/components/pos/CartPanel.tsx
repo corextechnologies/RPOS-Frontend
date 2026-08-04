@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Money } from "./Money";
 import { CustomerDialog } from "./CustomerDialog";
 import { useCart, lineTotalMinor } from "@/lib/pos/cart";
+import { cn } from "@/lib/utils";
 import { usePosBootstrap, usePosSession } from "@/lib/pos/pos-session";
 import type { PosCustomer } from "@/lib/types/pos";
 import {
@@ -39,7 +40,7 @@ export function CartPanel({
   canCreate: boolean;
   parkedCount?: number;
 }) {
-  const { cart, subtotalMinor, itemCount, setQty, remove, patch } = useCart();
+  const { cart, subtotalMinor, itemCount, setQty, remove, setNeedsPrep, patch } = useCart();
   const { device } = usePosBootstrap();
   const { can } = usePosSession();
 
@@ -204,6 +205,22 @@ export function CartPanel({
                   >
                     <Plus className="size-3.5" aria-hidden />
                   </Button>
+
+                  {!line.is_combo && (
+                    <button
+                      type="button"
+                      onClick={() => setNeedsPrep(line.uid, !line.needs_prep)}
+                      aria-pressed={!!line.needs_prep}
+                      className={cn(
+                        "ml-auto rounded px-2 py-1 text-[11px] font-medium uppercase tracking-wide transition-colors",
+                        line.needs_prep
+                          ? "bg-accent/15 text-accent"
+                          : "bg-surface-2 text-faint hover:text-muted",
+                      )}
+                    >
+                      Made to order
+                    </button>
+                  )}
                 </div>
               </li>
             ))}

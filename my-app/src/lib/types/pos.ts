@@ -246,6 +246,9 @@ export interface MenuItem {
   category: string | null;
   price_minor: Minor;
   is_combo: boolean;
+  /** Default for "the branch sub-kitchen finishes/makes this dish": seeds each
+   *  order line's needs_prep. The order-taker can still override per line. */
+  made_to_order?: boolean;
   is_available: boolean;
   /** Why it's off. Names the culprit component when a combo is unavailable. */
   unavailable_reason: string | null;
@@ -376,6 +379,8 @@ export interface CreateMenuItemInput {
   calories?: number | null;
   prep_time_minutes?: number | null;
   is_combo?: boolean;
+  /** Default the branch sub-kitchen finishes/makes this dish (seeds needs_prep). */
+  made_to_order?: boolean;
   component_item_ids?: number[];
   modifier_group_ids?: number[];
 }
@@ -391,6 +396,9 @@ export interface PosOrderLineInput {
   quantity: number;
   modifier_option_ids?: number[];
   note?: string;
+  /** Send this line to the branch sub-kitchen for finishing. Omit to inherit the
+   *  menu item's made_to_order default; send true/false to override per line. */
+  needs_prep?: boolean;
 }
 
 export interface PosOrderCreate {
@@ -419,6 +427,9 @@ export interface PosOrderLine {
   modifier_option_ids: number[];
   modifiers?: Array<{ id: number; name: string; price_delta_minor: Minor }>;
   note?: string | null;
+  /** Whether this line goes to the sub-kitchen. Round-trips so a parked-then-
+   *  recalled order keeps its prep flag. */
+  needs_prep?: boolean;
 }
 
 export interface PosOrder {
