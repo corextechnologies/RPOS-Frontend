@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Package,
   PackageCheck,
-  PackageX,
   Receipt,
   TriangleAlert,
   Users,
@@ -22,7 +21,6 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { localDateOf, toLocalDateString } from "@/lib/date-range";
 import { formatDate } from "@/lib/utils";
-import { stockUnitColumnLabel } from "@/lib/stock-unit";
 import { displayName } from "@/lib/types/super-admin";
 
 /** Stock within this many days of expiry is surfaced on the dashboard. */
@@ -43,8 +41,8 @@ function daysFromNowKey(n: number): string {
 /**
  * The real branch dashboard, replacing the Phase 0 `PortalDashboard`
  * placeholder. Mirrors the kitchen dashboard's shape: a row of at-a-glance
- * tiles, then the two things a branch needs pushed at them — what's about to
- * expire and what has run out.
+ * tiles, then the one thing a branch needs pushed at them — what's about to
+ * expire.
  */
 export default function BranchDashboardPage() {
   const { user, can } = useAuth();
@@ -59,10 +57,6 @@ export default function BranchDashboardPage() {
 
   const rows = inventory.data ?? [];
   const inStock = rows.filter((i) => i.quantity > 0);
-  // "Running low" = the items with the least stock on hand. Not a threshold
-  // alert (branch inventory carries no reorder level) — just lowest-first, so
-  // staff can see what's about to run out.
-  const runningLow = [...inStock].sort((a, b) => a.quantity - b.quantity).slice(0, 6);
 
   // Stock expiring within the next 7 days (today through +7), still on hand.
   // In useMemo so the "now" is read once per data change, not every render.
@@ -130,70 +124,39 @@ export default function BranchDashboardPage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Expiring soon — the one thing that rots if ignored, so it leads. */}
-        <Card className={expiringSoon.length > 0 ? "border-warning/40" : undefined}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TriangleAlert className="size-4 text-warning" aria-hidden />
-              Expiring soon
-            </CardTitle>
-            <CardDescription>
-              Stock within {NEAR_EXPIRY_DAYS} days of its expiry date.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {inventory.isLoading ? (
-              <p className="text-sm text-muted">Loading…</p>
-            ) : expiringSoon.length === 0 ? (
-              <p className="text-sm text-muted">Nothing expiring soon. Good.</p>
-            ) : (
-              <ul className="space-y-2">
-                {expiringSoon.slice(0, 6).map((item) => (
-                  <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate text-content">{item.product_name}</span>
-                    <span className="shrink-0 text-xs text-warning">
-                      {item.expiry_date ? formatDate(item.expiry_date) : "-"}
-                    </span>
-                  </li>
-                ))}
-                {expiringSoon.length > 6 && (
-                  <li className="pt-1 text-xs text-faint">+{expiringSoon.length - 6} more</li>
-                )}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Running low — the items with the least stock on hand. */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <PackageX className="size-4 text-brand" aria-hidden />
-              Running low
-            </CardTitle>
-            <CardDescription>The items with the least stock on hand.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {inventory.isLoading ? (
-              <p className="text-sm text-muted">Loading…</p>
-            ) : runningLow.length === 0 ? (
-              <p className="text-sm text-muted">No stock on hand yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {runningLow.map((item) => (
-                  <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
-                    <span className="min-w-0 truncate text-content">{item.product_name}</span>
-                    <span className="shrink-0 tabular-nums text-muted">
-                      {item.quantity} {stockUnitColumnLabel(item.stock_unit)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Expiring soon — the one thing that rots if ignored, full width. */}
+      <Card className={expiringSoon.length > 0 ? "border-warning/40" : undefined}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TriangleAlert className="size-4 text-warning" aria-hidden />
+            Expiring soon
+          </CardTitle>
+          <CardDescription>
+            Stock within {NEAR_EXPIRY_DAYS} days of its expiry date.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {inventory.isLoading ? (
+            <p className="text-sm text-muted">Loading…</p>
+          ) : expiringSoon.length === 0 ? (
+            <p className="text-sm text-muted">Nothing expiring soon. Good.</p>
+          ) : (
+            <ul className="space-y-2">
+              {expiringSoon.slice(0, 8).map((item) => (
+                <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate text-content">{item.product_name}</span>
+                  <span className="shrink-0 text-xs text-warning">
+                    {item.expiry_date ? formatDate(item.expiry_date) : "-"}
+                  </span>
+                </li>
+              ))}
+              {expiringSoon.length > 8 && (
+                <li className="pt-1 text-xs text-faint">+{expiringSoon.length - 8} more</li>
+              )}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
