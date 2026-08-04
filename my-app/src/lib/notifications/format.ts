@@ -23,10 +23,12 @@ const REQUEST_TYPE_LABELS: Record<string, string> = {
  * the only place the request type is exposed to the client.
  */
 const REQUEST_TYPE_TITLES: Record<string, string> = {
-  KITCHEN_TO_WAREHOUSE: "Kitchen product request",
+  KITCHEN_TO_WAREHOUSE: "Kitchen stock request",
   WAREHOUSE_TO_ADMIN_PO: "Warehouse purchase request",
   KITCHEN_TO_ADMIN: "Kitchen distribution request",
-  BRANCH_TO_ADMIN: "Branch product request",
+  // "stock", not "product": a branch requests raw materials as well as finished
+  // goods (kitchen-off tenants request raw materials straight from a warehouse).
+  BRANCH_TO_ADMIN: "Branch stock request",
 };
 
 /**

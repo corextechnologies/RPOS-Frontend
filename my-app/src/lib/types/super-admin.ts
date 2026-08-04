@@ -32,6 +32,25 @@ export type UserRole =
  */
 export type BranchPosition = "CASHIER" | "SALESPERSON" | "ORDER_TAKER" | "CHEF";
 
+/**
+ * Where a restaurant's finished goods get made. "central_kitchen" ships
+ * already-made goods to branches; "branch_sub_kitchen" means each branch
+ * produces locally from raw materials via the /sub-kitchen prep board.
+ * Derived server-side from `has_central_kitchen` — see RestaurantOut below.
+ */
+export type ProductionMode = "central_kitchen" | "branch_sub_kitchen";
+
+/**
+ * Trimmed production-mode read for non-Admin roles (Branch Manager/Staff via
+ * `GET /branch/restaurant`) — deliberately NOT the full `Restaurant`/`RestaurantOut`,
+ * which carries plan/billing fields that stay Admin-only.
+ */
+export interface RestaurantProductionMode {
+  has_central_kitchen: boolean;
+  production_mode: ProductionMode;
+  production_guidance: string;
+}
+
 export interface RestaurantAdmin {
   id?: string;
   name: string;
@@ -64,6 +83,10 @@ export interface Restaurant {
   logo_url?: string | null;
   /** Stable public identifier for the QR live-menu URL, e.g. `demo-bistro`. */
   public_slug?: string | null;
+  /** Defaults true — a missing value reads as "has a central kitchen". */
+  has_central_kitchen: boolean;
+  production_mode: ProductionMode;
+  production_guidance: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -83,8 +106,9 @@ export interface RestaurantOut {
   address?: string | null;
   logo_url?: string | null;
   public_slug?: string | null;
-  /** Optional until the backend adds it; the adapter treats a missing value as `true`. */
-  has_central_kitchen?: boolean | null;
+  has_central_kitchen: boolean;
+  production_mode: ProductionMode;
+  production_guidance: string;
 }
 
 export interface RestaurantCreateResult {

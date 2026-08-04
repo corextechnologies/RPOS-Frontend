@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import {
+  ArrowRight,
   ClipboardList,
   Package,
   PackageCheck,
@@ -17,8 +18,11 @@ import {
   useBranchInventory,
   useBranchOrders,
   useBranchRequestsSummary,
+  useBranchRestaurantProductionMode,
 } from "@/lib/hooks/use-branch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { SubKitchenModeBanner } from "@/components/dashboard/SubKitchenModeBanner";
 import { localDateOf, toLocalDateString } from "@/lib/date-range";
 import { formatDate } from "@/lib/utils";
 import { displayName } from "@/lib/types/super-admin";
@@ -49,6 +53,7 @@ export default function BranchDashboardPage() {
   const orders = useBranchOrders();
   const customers = useBranchCustomers();
   const inventory = useBranchInventory();
+  const production = useBranchRestaurantProductionMode();
   // One indexed call: open = raised but not yet received and not rejected.
   // Replaces the earlier total − received − rejected derivation now that the
   // backend ships GET /branch/requests/summary.
@@ -83,6 +88,13 @@ export default function BranchDashboardPage() {
         </h1>
         <p className="mt-1 text-sm text-muted">Today at this branch.</p>
       </div>
+
+      {production.data && (
+        <SubKitchenModeBanner
+          productionMode={production.data.production_mode}
+          guidance={production.data.production_guidance}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Stat
@@ -155,6 +167,24 @@ export default function BranchDashboardPage() {
               )}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Taking orders</CardTitle>
+          <CardDescription>
+            The till prices, takes payment, prints tickets and keeps working when the connection
+            drops.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link href="/pos">
+              Open the till
+              <ArrowRight className="ml-1.5 size-4" aria-hidden />
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

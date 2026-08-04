@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useKitchens } from "@/lib/hooks/use-locations";
-import { useRestaurantFeatures } from "@/lib/hooks/use-restaurant-features";
+import { useMyRestaurant } from "@/lib/hooks/use-admin-restaurant";
 import { requestActionSchema } from "@/lib/schemas/request-action";
 import type {
   RequestStatus,
@@ -42,15 +42,14 @@ export function RequestActionPanel({
   isSubmitting,
   onSubmit,
 }: RequestActionPanelProps) {
-  const { hasCentralKitchen } = useRestaurantFeatures();
+  // Admin manages exactly one restaurant. When it has no central kitchen, a
+  // branch's request is fulfilled entirely by the warehouse (and received by
+  // the branch) — Admin has no actions on it, so the panel shows it read-only.
+  const restaurant = useMyRestaurant();
+  const hasCentralKitchen = restaurant.data?.has_central_kitchen ?? true;
 
-  // Without a central kitchen there is nowhere to forward to — drop that option
-  // so Admin can only approve/reject/dispatch a branch request directly.
   const transitions = useMemo(
-    () =>
-      allowedTransitions(request.type, request.status).filter(
-        (t) => hasCentralKitchen || t !== "FORWARDED_TO_KITCHEN",
-      ),
+    () => allowedTransitions(request.type, request.status, { hasCentralKitchen }),
     [request.type, request.status, hasCentralKitchen],
   );
 

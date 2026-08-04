@@ -758,6 +758,7 @@ function ItemBuilder({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [productId, setProductId] = useState("");
   const [isCombo, setIsCombo] = useState(false);
+  const [madeToOrder, setMadeToOrder] = useState(false);
   const [componentTempIds, setComponentTempIds] = useState<string[]>([]);
   const [groupTempIds, setGroupTempIds] = useState<string[]>([]);
 
@@ -797,6 +798,7 @@ function ItemBuilder({
         calories: calories.trim() ? Number(calories) : null,
         prep_time_minutes: prepTime.trim() ? Number(prepTime) : null,
         is_combo: isCombo,
+        made_to_order: !isCombo && madeToOrder,
         componentTempIds: isCombo ? componentTempIds : [],
         groupTempIds,
       },
@@ -810,6 +812,7 @@ function ItemBuilder({
     setImageUrl("");
     setProductId("");
     setIsCombo(false);
+    setMadeToOrder(false);
     setComponentTempIds([]);
     setGroupTempIds([]);
   }
@@ -826,6 +829,19 @@ function ItemBuilder({
           </div>
           <Switch checked={isCombo} onCheckedChange={setIsCombo} />
         </div>
+
+        {!isCombo && (
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2">
+            <div>
+              <Label className="text-sm">Made to order</Label>
+              <p className="text-xs text-faint">
+                Finished at the branch sub-kitchen. Every sale defaults to a prep
+                ticket; the till can still override per line.
+              </p>
+            </div>
+            <Switch checked={madeToOrder} onCheckedChange={setMadeToOrder} />
+          </div>
+        )}
 
         {!isCombo && (
           <div className="space-y-1.5">
@@ -1101,6 +1117,7 @@ function ItemEditDialog({
     item.prep_time_minutes != null ? String(item.prep_time_minutes) : "",
   );
   const [imageUrl, setImageUrl] = useState(item.image_url ?? "");
+  const [madeToOrder, setMadeToOrder] = useState(item.made_to_order ?? false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1119,6 +1136,7 @@ function ItemEditDialog({
       description: description.trim() || undefined,
       calories: calories.trim() ? Number(calories) : null,
       prep_time_minutes: prepTime.trim() ? Number(prepTime) : null,
+      made_to_order: item.is_combo ? false : madeToOrder,
     });
   }
 
@@ -1153,6 +1171,18 @@ function ItemEditDialog({
             <p className="rounded-lg border border-line bg-surface-2 p-2 text-xs text-faint">
               This is a combo — its components and option groups are kept as they are.
             </p>
+          )}
+
+          {!item.is_combo && (
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-2 px-3 py-2">
+              <div>
+                <Label className="text-sm">Made to order</Label>
+                <p className="text-xs text-faint">
+                  Finished at the branch sub-kitchen; every sale defaults to a prep ticket.
+                </p>
+              </div>
+              <Switch checked={madeToOrder} onCheckedChange={setMadeToOrder} />
+            </div>
           )}
 
           {mode === "add" && products.length > 0 && (

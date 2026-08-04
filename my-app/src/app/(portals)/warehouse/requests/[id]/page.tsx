@@ -22,8 +22,14 @@ export default function WarehouseRequestDetailPage() {
   const request = useWarehouseRequest(params.id);
   const updateStatus = useUpdateWarehouseRequestStatus(params.id);
 
-  const isPo = request.data?.request_type === "WAREHOUSE_TO_ADMIN_PO";
-  const backHref = isPo ? "/warehouse/requests/po" : "/warehouse/requests/kitchen";
+  const requestType = request.data?.request_type;
+  const isPo = requestType === "WAREHOUSE_TO_ADMIN_PO";
+  const isBranch = requestType === "BRANCH_TO_ADMIN";
+  const backHref = isPo
+    ? "/warehouse/requests/po"
+    : isBranch
+      ? "/warehouse/requests/branch"
+      : "/warehouse/requests/kitchen";
 
   const backLink = (
     <Button variant="ghost" size="icon" asChild>
@@ -71,7 +77,7 @@ export default function WarehouseRequestDetailPage() {
         {backLink}
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-            {isPo ? "Purchase order" : "Kitchen request"}
+            {isPo ? "Purchase order" : isBranch ? "Branch request" : "Kitchen request"}
           </h1>
           <p className="text-sm text-muted">
             {isPo

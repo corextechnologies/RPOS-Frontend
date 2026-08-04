@@ -143,6 +143,7 @@ import type {
   ResetPasswordInput,
   Restaurant,
   RestaurantFilters,
+  RestaurantProductionMode,
   RestaurantStats,
   TokenResponse,
   UpdateAdminRestaurantInput,
@@ -319,6 +320,9 @@ export interface ApiClient {
   listWarehouseKitchenRequests(
     filters?: WarehouseRequestFilters,
   ): Promise<Paginated<WarehouseRequest>>;
+  listWarehouseBranchRequests(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>>;
   getWarehouseRequest(requestId: string): Promise<WarehouseRequest>;
   updateWarehouseRequestStatus(
     requestId: string,
@@ -450,6 +454,7 @@ export interface ApiClient {
   // Admin's StockRequest projection, scoped to the caller's branch.
   // Kitchens this branch can direct a stock request to (the picker source).
   listBranchKitchens(): Promise<Kitchen[]>;
+  listBranchWarehouses(): Promise<Warehouse[]>;
   listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>>;
   // Server-side counts for the branch's requests — one indexed call powering the
   // dashboard's "Open requests" tile, so the client needn't tally statuses.
@@ -465,6 +470,9 @@ export interface ApiClient {
   // so it can affect several lots — returns every affected row.
   wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem[]>;
   listBranchWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
+  // Where THIS branch's finished goods get made — central kitchen vs. this
+  // branch's own sub-kitchen prep board. Trimmed read: no plan/billing fields.
+  getBranchRestaurantProductionMode(): Promise<RestaurantProductionMode>;
 
   // Sub-kitchen — the branch prep station. Portal routes, caller's portal token.
   // No `status` returns the working board (QUEUED + IN_PROGRESS + READY).

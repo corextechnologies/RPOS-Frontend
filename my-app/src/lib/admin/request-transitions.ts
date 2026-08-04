@@ -53,7 +53,16 @@ export const ADMIN_REQUEST_TRANSITIONS: Record<
 export function allowedTransitions(
   type: AdminRequestType,
   status: RequestStatus,
+  opts?: { hasCentralKitchen?: boolean },
 ): RequestStatus[] {
+  // A kitchen-less restaurant's branch request is fulfilled entirely by the
+  // WAREHOUSE (approve → dispatch) and the branch (receive) — Admin is out of
+  // the loop, exactly like KITCHEN_TO_WAREHOUSE. So Admin gets NO actions on it;
+  // it stays read-only in the Admin portal. Mirrors the backend, which 403s any
+  // Admin transition on a no-kitchen BRANCH_TO_ADMIN request.
+  if (type === "BRANCH_TO_ADMIN" && opts?.hasCentralKitchen === false) {
+    return [];
+  }
   return [...(ADMIN_REQUEST_TRANSITIONS[type]?.[status] ?? [])];
 }
 

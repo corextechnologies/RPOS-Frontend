@@ -59,6 +59,13 @@ export const WAREHOUSE_NAV: NavSection[] = [
         match: "prefix",
       },
       {
+        label: "Branch requests",
+        href: "/warehouse/requests/branch",
+        icon: Inbox,
+        action: "kitchen-requests:read",
+        match: "prefix",
+      },
+      {
         label: "Purchase orders",
         href: "/warehouse/requests/po",
         icon: ClipboardList,

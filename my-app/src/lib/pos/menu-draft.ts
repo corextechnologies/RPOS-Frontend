@@ -53,6 +53,8 @@ export interface DraftItem {
   /** Typical preparation time in minutes; empty when not set. */
   prep_time_minutes?: number | null;
   is_combo: boolean;
+  /** Default the branch sub-kitchen finishes/makes this dish (seeds needs_prep). */
+  made_to_order?: boolean;
   /** `tempId`s of other draft items this combo contains. */
   componentTempIds: string[];
   /** `tempId`s of draft modifier groups attached to this item. */
@@ -113,6 +115,7 @@ export function draftFromMenu(menu: PosMenu): MenuDraft {
     calories: item.calories ?? null,
     prep_time_minutes: item.prep_time_minutes ?? null,
     is_combo: item.is_combo,
+    made_to_order: item.made_to_order ?? false,
     componentTempIds: item.components.map((c) => itemTempId(c.item_id)),
     groupTempIds: item.modifier_groups.map((g) => groupTempId(g.id)),
   }));
@@ -248,6 +251,7 @@ export function toItemInput(
     calories: item.calories ?? undefined,
     prep_time_minutes: item.prep_time_minutes ?? undefined,
     is_combo: item.is_combo || undefined,
+    made_to_order: item.made_to_order || undefined,
     component_item_ids: item.is_combo
       ? item.componentTempIds.map((t) => {
           const id = itemIds.get(t);

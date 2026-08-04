@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Building2,
+  ClipboardCheck,
   Contact,
   CookingPot,
   DollarSign,
@@ -130,6 +131,13 @@ export const ADMIN_NAV: NavSection[] = [
         icon: BookOpen,
         action: "menu:read",
         match: "exact",
+      },
+      {
+        label: "Menu proposals",
+        href: "/admin/menu/proposals",
+        icon: ClipboardCheck,
+        action: "menu:publish",
+        match: "prefix",
       },
       {
         label: "QR Menu",

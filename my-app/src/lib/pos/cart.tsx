@@ -55,6 +55,9 @@ export interface CartLine {
    */
   needs_prep: boolean;
   is_combo: boolean;
+  /** Send this line to the branch sub-kitchen for finishing. Defaulted from the
+   *  menu item's made_to_order when the line is added; toggleable per line. */
+  needs_prep?: boolean;
 }
 
 export interface CartState {
@@ -89,7 +92,7 @@ type Action =
   | { type: "setQty"; uid: string; quantity: number }
   | { type: "remove"; uid: string }
   | { type: "setNote"; uid: string; note: string }
-  | { type: "setPrep"; uid: string; needs_prep: boolean }
+  | { type: "setNeedsPrep"; uid: string; needs_prep: boolean }
   | { type: "patch"; patch: Partial<CartState> }
   | { type: "reset" }
   | { type: "hydrate"; state: CartState };
@@ -133,6 +136,9 @@ export function cartFromOrder(order: PosOrder, menu: readonly MenuItem[]): CartS
         note: l.note ?? undefined,
         needs_prep: l.needs_prep ?? false,
         is_combo: item?.is_combo ?? false,
+        // Recall keeps the prep flag the order was sent/parked with (falls back to
+        // the item default if an older order read predates the field).
+        needs_prep: l.needs_prep ?? item?.made_to_order ?? false,
       };
     });
 
@@ -154,9 +160,9 @@ export function sameLine(a: CartLine, b: Omit<CartLine, "uid">): boolean {
   return (
     a.menu_item_id === b.menu_item_id &&
     a.note === b.note &&
-    // A prep-flagged line and a plain one of the same item are different rows —
-    // one spawns a chef ticket, the other doesn't. Never collapse them together.
-    a.needs_prep === b.needs_prep &&
+    // A made-to-order line and a plain one of the same item are different work —
+    // don't collapse them into one row.
+    (a.needs_prep ?? false) === (b.needs_prep ?? false) &&
     a.modifier_option_ids.length === b.modifier_option_ids.length &&
     a.modifier_option_ids.every((id, i) => id === b.modifier_option_ids[i])
   );
@@ -197,7 +203,7 @@ function reducer(state: CartState, action: Action): CartState {
         ...state,
         lines: state.lines.map((l) => (l.uid === action.uid ? { ...l, note: action.note } : l)),
       };
-    case "setPrep":
+    case "setNeedsPrep":
       return {
         ...state,
         lines: state.lines.map((l) =>
@@ -230,7 +236,7 @@ interface CartValue {
   setQty: (uid: string, qty: number) => void;
   remove: (uid: string) => void;
   setNote: (uid: string, note: string) => void;
-  setPrep: (uid: string, needsPrep: boolean) => void;
+  setNeedsPrep: (uid: string, needsPrep: boolean) => void;
   patch: (patch: Partial<CartState>) => void;
   reset: () => void;
   toCreateInput: () => PosOrderCreate;
@@ -265,24 +271,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         .flatMap((g) => g.options)
         .filter((o) => optionIds.includes(o.id));
 
-      dispatch({
-        type: "add",
-        line: {
-          menu_item_id: item.id,
-          name: item.name,
-          unit_price_minor: item.price_minor,
-          quantity: 1,
-          modifier_option_ids: [...optionIds].sort((a, b) => a - b),
-          modifier_labels: options.map((o) => o.name),
-          modifier_delta_minor: sumMinor(options.map((o) => o.price_delta_minor)),
-          note,
-          needs_prep: needsPrep,
-          is_combo: item.is_combo,
-        },
-      });
-    },
-    [],
-  );
+    dispatch({
+      type: "add",
+      line: {
+        menu_item_id: item.id,
+        name: item.name,
+        unit_price_minor: item.price_minor,
+        quantity: 1,
+        modifier_option_ids: [...optionIds].sort((a, b) => a - b),
+        modifier_labels: options.map((o) => o.name),
+        modifier_delta_minor: sumMinor(options.map((o) => o.price_delta_minor)),
+        note,
+        is_combo: item.is_combo,
+        // A made-to-order dish routes to the sub-kitchen by default; the cashier
+        // can still toggle it off per line.
+        needs_prep: item.made_to_order ?? false,
+      },
+    });
+  }, []);
 
   const value = useMemo<CartValue>(() => {
     const subtotalMinor = cartSubtotalMinor(cart.lines);
@@ -294,7 +300,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setQty: (uid, quantity) => dispatch({ type: "setQty", uid, quantity }),
       remove: (uid) => dispatch({ type: "remove", uid }),
       setNote: (uid, note) => dispatch({ type: "setNote", uid, note }),
-      setPrep: (uid, needs_prep) => dispatch({ type: "setPrep", uid, needs_prep }),
+      setNeedsPrep: (uid, needs_prep) => dispatch({ type: "setNeedsPrep", uid, needs_prep }),
       patch: (patch) => dispatch({ type: "patch", patch }),
       reset: () => dispatch({ type: "reset" }),
       hydrateFrom: (order, menu) =>
@@ -306,7 +312,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           quantity: l.quantity,
           modifier_option_ids: l.modifier_option_ids.length ? l.modifier_option_ids : undefined,
           note: l.note || undefined,
-          needs_prep: l.needs_prep || undefined,
+          // Send the resolved per-line flag (already defaulted from the item's
+          // made_to_order when the line was added).
+          needs_prep: l.needs_prep,
         })),
         channel: cart.channel,
         order_type: cart.order_type,

@@ -35,6 +35,15 @@ export const WAREHOUSE_REQUEST_TRANSITIONS: Record<
     // explicit at the one place a reader would otherwise get it wrong.
     DISPATCHED: [],
   },
+  // A kitchen-off branch's raw-material request the warehouse fulfils directly —
+  // identical shape to a kitchen request: approve/partial, then dispatch. The
+  // branch confirms RECEIVED on its side, so DISPATCHED is a dead end for us.
+  BRANCH_TO_ADMIN: {
+    PENDING: ["APPROVED", "PARTIALLY_APPROVED"],
+    APPROVED: ["DISPATCHED"],
+    PARTIALLY_APPROVED: ["DISPATCHED"],
+    DISPATCHED: [],
+  },
   WAREHOUSE_TO_ADMIN_PO: {
     // Admin sent the goods: confirm what arrived, or report a problem.
     DISPATCHED: ["RECEIVED", "REPORTED"],
@@ -76,11 +85,17 @@ export function warehouseActionHint(
   toStatus: WarehouseRequestStatus,
   fromStatus?: WarehouseRequestStatus,
 ): string | null {
-  if (type === "KITCHEN_TO_WAREHOUSE" && toStatus === "PARTIALLY_APPROVED") {
+  if (
+    (type === "KITCHEN_TO_WAREHOUSE" || type === "BRANCH_TO_ADMIN") &&
+    toStatus === "PARTIALLY_APPROVED"
+  ) {
     return "Approve a lower quantity per line. Dispatch later releases the approved amounts, not the requested ones.";
   }
   if (type === "KITCHEN_TO_WAREHOUSE" && toStatus === "DISPATCHED") {
     return "Dispatching removes the approved quantities from your on-hand stock. The kitchen confirms receipt on their side.";
+  }
+  if (type === "BRANCH_TO_ADMIN" && toStatus === "DISPATCHED") {
+    return "Dispatching removes the approved quantities from your on-hand stock. The branch confirms receipt on their side.";
   }
   if (type === "WAREHOUSE_TO_ADMIN_PO" && toStatus === "RECEIVED") {
     // This used to close the order only, with intake booked separately. Since
@@ -119,5 +134,8 @@ export function warehouseTransitionNeedsApprovals(
   type: WarehouseRequestType,
   toStatus: WarehouseRequestStatus,
 ): boolean {
-  return type === "KITCHEN_TO_WAREHOUSE" && toStatus === "PARTIALLY_APPROVED";
+  return (
+    (type === "KITCHEN_TO_WAREHOUSE" || type === "BRANCH_TO_ADMIN") &&
+    toStatus === "PARTIALLY_APPROVED"
+  );
 }

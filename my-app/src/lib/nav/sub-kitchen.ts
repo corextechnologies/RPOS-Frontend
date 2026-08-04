@@ -1,4 +1,11 @@
-import { ChefHat, ClipboardList, LineChart, Package, Trash2 } from "lucide-react";
+import {
+  ChefHat,
+  ClipboardList,
+  LineChart,
+  Package,
+  Trash2,
+  UtensilsCrossed,
+} from "lucide-react";
 import type { NavSection } from "./types";
 
 /**
@@ -18,6 +25,12 @@ export const SUB_KITCHEN_NAV: NavSection[] = [
       { label: "Board", href: "/sub-kitchen", icon: ClipboardList, match: "exact" },
       { label: "Stock", href: "/sub-kitchen/stock", icon: Package, match: "exact" },
       { label: "Recipes", href: "/sub-kitchen/recipes", icon: ChefHat, match: "prefix" },
+      {
+        label: "Propose dish",
+        href: "/sub-kitchen/menu-proposals",
+        icon: UtensilsCrossed,
+        match: "prefix",
+      },
       { label: "Waste", href: "/sub-kitchen/waste", icon: Trash2, match: "exact" },
     ],
   },
