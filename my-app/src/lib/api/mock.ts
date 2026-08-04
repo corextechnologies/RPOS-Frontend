@@ -710,7 +710,6 @@ function seedDb(): MockDb {
     plan_status: "active",
     branch_limit: 2,
     branch_count: 1,
-    has_central_kitchen: true,
     plan_amount: "499.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
@@ -733,7 +732,6 @@ function seedDb(): MockDb {
     plan_status: "halted",
     branch_limit: 25,
     branch_count: 8,
-    has_central_kitchen: true,
     plan_amount: "999.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
@@ -756,7 +754,6 @@ function seedDb(): MockDb {
     plan_status: "active",
     branch_limit: 3,
     branch_count: 2,
-    has_central_kitchen: true,
     plan_amount: "199.00",
     next_billing_date: defaultNextBillingDate(),
     admin: {
@@ -3280,7 +3277,6 @@ export const mockClient: ApiClient = {
       plan_status: "active",
       branch_limit: body.branch_limit ?? planByTier(tier)?.branchLimit ?? 1,
       branch_count: body.branch_limit ?? 1,
-      has_central_kitchen: body.has_central_kitchen ?? true,
       plan_amount: amount,
       next_billing_date: nextBilling,
       admin: {
@@ -3293,7 +3289,7 @@ export const mockClient: ApiClient = {
       public_slug: slug,
       created_at: localCreatedAt(),
       updated_at: now(),
-      ...productionModeFields(true),
+      ...productionModeFields(body.has_central_kitchen ?? true),
     };
 
     db.restaurants.push(restaurant);

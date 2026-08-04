@@ -52,7 +52,6 @@ export function restaurantFromApi(r: RestaurantOut): Restaurant {
     address: r.address ?? null,
     logo_url: r.logo_url ?? null,
     public_slug: r.public_slug ?? null,
-    has_central_kitchen: r.has_central_kitchen,
     production_mode: r.production_mode,
     production_guidance: r.production_guidance,
   };

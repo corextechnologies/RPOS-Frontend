@@ -67,13 +67,6 @@ export interface Restaurant {
   plan_status: PlanStatus;
   branch_limit: number;
   branch_count: number;
-  /**
-   * Whether this tenant runs a central/cloud kitchen. When false, kitchen
-   * responsibilities collapse onto each branch's sub-kitchen. Set by Super Admin.
-   * The adapter defaults a missing value to `true`, so a backend that does not
-   * yet send the field behaves exactly as before.
-   */
-  has_central_kitchen: boolean;
   plan_amount?: string | null;
   next_billing_date?: string | null;
   admin: RestaurantAdmin;
@@ -83,7 +76,12 @@ export interface Restaurant {
   logo_url?: string | null;
   /** Stable public identifier for the QR live-menu URL, e.g. `demo-bistro`. */
   public_slug?: string | null;
-  /** Defaults true — a missing value reads as "has a central kitchen". */
+  /**
+   * Whether this tenant runs a central/cloud kitchen. When false, kitchen
+   * responsibilities collapse onto each branch's sub-kitchen. Set by Super Admin.
+   * The adapter defaults a missing value to `true`, so a backend that does not
+   * yet send the field behaves exactly as before.
+   */
   has_central_kitchen: boolean;
   production_mode: ProductionMode;
   production_guidance: string;
@@ -106,7 +104,8 @@ export interface RestaurantOut {
   address?: string | null;
   logo_url?: string | null;
   public_slug?: string | null;
-  has_central_kitchen: boolean;
+  /** Defaults true — a missing value reads as "has a central kitchen". */
+  has_central_kitchen?: boolean;
   production_mode: ProductionMode;
   production_guidance: string;
 }
