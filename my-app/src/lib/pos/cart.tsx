@@ -49,15 +49,13 @@ export interface CartLine {
   modifier_labels: string[];
   modifier_delta_minor: Minor;
   note?: string;
+  is_combo: boolean;
   /**
-   * Flags the line for final prep at the branch sub-kitchen. Sending the order
-   * drops a prep job on the chef's board carrying `note` as the instruction.
+   * Flags the line for final prep at the branch sub-kitchen. Defaulted from the
+   * menu item's `made_to_order` when the line is added; toggleable per line.
+   * Sending the order drops a prep job on the chef's board carrying `note`.
    */
   needs_prep: boolean;
-  is_combo: boolean;
-  /** Send this line to the branch sub-kitchen for finishing. Defaulted from the
-   *  menu item's made_to_order when the line is added; toggleable per line. */
-  needs_prep?: boolean;
 }
 
 export interface CartState {
@@ -134,7 +132,6 @@ export function cartFromOrder(order: PosOrder, menu: readonly MenuItem[]): CartS
         modifier_labels: options.map((o) => o.name),
         modifier_delta_minor: sumMinor(options.map((o) => o.price_delta_minor)),
         note: l.note ?? undefined,
-        needs_prep: l.needs_prep ?? false,
         is_combo: item?.is_combo ?? false,
         // Recall keeps the prep flag the order was sent/parked with (falls back to
         // the item default if an older order read predates the field).
@@ -162,7 +159,7 @@ export function sameLine(a: CartLine, b: Omit<CartLine, "uid">): boolean {
     a.note === b.note &&
     // A made-to-order line and a plain one of the same item are different work —
     // don't collapse them into one row.
-    (a.needs_prep ?? false) === (b.needs_prep ?? false) &&
+    a.needs_prep === b.needs_prep &&
     a.modifier_option_ids.length === b.modifier_option_ids.length &&
     a.modifier_option_ids.every((id, i) => id === b.modifier_option_ids[i])
   );

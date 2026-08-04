@@ -42,7 +42,7 @@ export function CartPanel({
   canCreate: boolean;
   parkedCount?: number;
 }) {
-  const { cart, subtotalMinor, itemCount, setQty, remove, setNeedsPrep, patch } = useCart();
+  const { cart, subtotalMinor, itemCount, setQty, remove, setNote, setNeedsPrep, patch } = useCart();
   const { device } = usePosBootstrap();
   const { can } = usePosSession();
 

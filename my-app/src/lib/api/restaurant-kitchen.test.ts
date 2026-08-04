@@ -20,6 +20,8 @@ describe("has_central_kitchen — adapter defaults", () => {
     plan_amount: null,
     branch_limit: null,
     next_billing_date: null,
+    production_mode: "central_kitchen",
+    production_guidance: "Central kitchen produces finished goods for branches.",
   };
 
   it("defaults a missing flag to true (backend not yet sending it)", () => {
