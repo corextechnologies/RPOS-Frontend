@@ -147,7 +147,7 @@ import {
 } from "@/lib/types/production-target";
 import { POS_ERROR } from "@/lib/api/errors";
 import { tryConvertQty } from "@/lib/unit-convert";
-import type { BranchPosition } from "@/lib/types/super-admin";
+import type { BranchPosition, ProductionMode } from "@/lib/types/super-admin";
 import type { Capability } from "@/lib/types/pos";
 // Mock and live agree on the state machine by sharing the real map, the same way
 // the warehouse mock does.
@@ -460,6 +460,27 @@ function localCreatedAt(d = new Date()): string {
   return `${localYmd(d)}T12:00:00`;
 }
 
+/** Mirrors the backend's resolve_production_mode() (app/schemas/restaurant.py) so mock data matches live-API shape. */
+function productionModeFields(hasCentralKitchen: boolean): {
+  has_central_kitchen: boolean;
+  production_mode: ProductionMode;
+  production_guidance: string;
+} {
+  return hasCentralKitchen
+    ? {
+        has_central_kitchen: true,
+        production_mode: "central_kitchen",
+        production_guidance:
+          "Finished goods are produced at a central kitchen, then dispatched to branches via BRANCH_TO_ADMIN requests.",
+      }
+    : {
+        has_central_kitchen: false,
+        production_mode: "branch_sub_kitchen",
+        production_guidance:
+          "This restaurant has no central kitchen. Branches receive raw materials from the warehouse and produce finished goods locally via the branch prep board — see /sub-kitchen/recipes and /sub-kitchen/batch.",
+      };
+}
+
 function addMonths(date: Date, months: number): Date {
   const d = new Date(date);
   d.setMonth(d.getMonth() + months);
@@ -681,6 +702,7 @@ function seedDb(): MockDb {
     public_slug: "demo-restaurant-group",
     created_at: localCreatedAt(),
     updated_at: now(),
+    ...productionModeFields(true),
   };
 
   const r2: Restaurant = {
@@ -701,8 +723,10 @@ function seedDb(): MockDb {
     },
     created_at: localCreatedAt(),
     updated_at: now(),
+    ...productionModeFields(true),
   };
 
+  // No central kitchen — exercises the branch sub-kitchen banner in dev/demo.
   const r3: Restaurant = {
     id: "rest-003",
     name: "Sunset Bistro",
@@ -721,6 +745,7 @@ function seedDb(): MockDb {
     },
     created_at: localCreatedAt(),
     updated_at: now(),
+    ...productionModeFields(false),
   };
 
   const restaurants = [r1, r2, r3];
@@ -2545,7 +2570,11 @@ function isWarehouseVisibleRequest(
   if (req.type === "WAREHOUSE_TO_ADMIN_PO") {
     return req.requester_id === meId;
   }
-  if (req.type === "KITCHEN_TO_WAREHOUSE") {
+  if (
+    req.type === "KITCHEN_TO_WAREHOUSE" ||
+    // A kitchen-off branch's request the warehouse fulfils directly.
+    req.type === "BRANCH_TO_ADMIN"
+  ) {
     return (
       req.target_location_type === "WAREHOUSE" &&
       req.target_location_id === warehouse.id
@@ -3225,6 +3254,7 @@ export const mockClient: ApiClient = {
       public_slug: slug,
       created_at: localCreatedAt(),
       updated_at: now(),
+      ...productionModeFields(true),
     };
 
     db.restaurants.push(restaurant);
@@ -5488,6 +5518,37 @@ export const mockClient: ApiClient = {
     return delay(result);
   },
 
+  async listWarehouseBranchRequests(filters?: WarehouseRequestFilters) {
+    const me = requireAuth();
+    const db = loadDb();
+    const warehouse = resolveMyWarehouse(db, me);
+
+    const page = filters?.page ?? 1;
+    const page_size = filters?.page_size ?? 20;
+
+    // Kitchen-off branch requests routed to THIS warehouse — same target-scoped
+    // rule as kitchen requests, so a request to another warehouse never shows.
+    let rows = db.requests.filter(
+      (req) =>
+        req.type === "BRANCH_TO_ADMIN" &&
+        req.restaurant_id === warehouse.restaurant_id &&
+        req.target_location_type === "WAREHOUSE" &&
+        req.target_location_id === warehouse.id,
+    );
+    if (filters?.status && filters.status !== "all") {
+      rows = rows.filter((req) => req.status === filters.status);
+    }
+
+    const start = (page - 1) * page_size;
+    const result: Paginated<WarehouseRequest> = {
+      items: rows.slice(start, start + page_size).map(toPublicWarehouseRequest),
+      page,
+      page_size,
+      total: rows.length,
+    };
+    return delay(result);
+  },
+
   async getWarehouseRequest(requestId: string) {
     const me = requireAuth();
     const db = loadDb();
@@ -5552,7 +5613,10 @@ export const mockClient: ApiClient = {
     // Every stock effect below is gated on the request TYPE first. DISPATCHED
     // and RECEIVED both belong to two vocabularies and mean opposite things, so
     // a status-only check here would debit stock on the wrong request.
-    if (type === "KITCHEN_TO_WAREHOUSE" && body.to_status === "DISPATCHED") {
+    if (
+      (type === "KITCHEN_TO_WAREHOUSE" || type === "BRANCH_TO_ADMIN") &&
+      body.to_status === "DISPATCHED"
+    ) {
       if (
         found.target_location_type !== "WAREHOUSE" ||
         !found.target_location_id
@@ -7239,6 +7303,15 @@ export const mockClient: ApiClient = {
     return delay(db.kitchens.filter((k) => k.restaurant_id === branch.restaurant_id));
   },
 
+  async listBranchWarehouses(): Promise<Warehouse[]> {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    // Every warehouse in the branch's restaurant is a valid fulfilment target
+    // for a kitchen-off tenant's raw-material request.
+    return delay(db.warehouses.filter((w) => w.restaurant_id === branch.restaurant_id));
+  },
+
   async listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {
     const me = requireAuth();
     const db = loadDb();
@@ -7286,12 +7359,29 @@ export const mockClient: ApiClient = {
       }
     }
 
-    // The branch picks which kitchen should fulfil it. Admin still approves and
-    // forwards; this records the branch's chosen destination up front.
-    const kitchen = db.kitchens.find(
-      (k) => k.id === body.kitchen_id && k.restaurant_id === branch.restaurant_id,
-    );
-    if (!kitchen) throw new ApiError("Kitchen not found", 404);
+    // Route the target by what the branch named. Kitchen tenant names a kitchen;
+    // kitchen-off tenant names a warehouse (fulfilled directly by the warehouse
+    // manager, exactly like a kitchen->warehouse request).
+    const restaurant = db.restaurants.find((r) => r.id === branch.restaurant_id);
+    const hasCentralKitchen = restaurant?.has_central_kitchen ?? true;
+
+    let targetType: StockLocationType | null = null;
+    let targetId: string | null = null;
+    if (hasCentralKitchen) {
+      const kitchen = db.kitchens.find(
+        (k) => k.id === body.kitchen_id && k.restaurant_id === branch.restaurant_id,
+      );
+      if (!kitchen) throw new ApiError("Kitchen not found", 404);
+      targetType = "KITCHEN";
+      targetId = kitchen.id;
+    } else {
+      const warehouse = db.warehouses.find(
+        (w) => w.id === body.warehouse_id && w.restaurant_id === branch.restaurant_id,
+      );
+      if (!warehouse) throw new ApiError("Warehouse not found", 404);
+      targetType = "WAREHOUSE";
+      targetId = warehouse.id;
+    }
 
     const id = `req-${Date.now()}`;
     const created: MockStockRequest = {
@@ -7307,9 +7397,10 @@ export const mockClient: ApiClient = {
       assignee_id: null,
       source_location_type: "BRANCH",
       source_location_id: branch.id,
-      // The branch's chosen kitchen. Admin can confirm or re-route on forward.
-      target_location_type: "KITCHEN",
-      target_location_id: kitchen.id,
+      // Kitchen (kitchen tenant) or warehouse (kitchen-off tenant) named by the
+      // branch up front. The fulfilling location's manager acts on it from here.
+      target_location_type: targetType,
+      target_location_id: targetId,
       line_items: lines.map((line, index) => ({
         id: `${id}-l${index + 1}`,
         product_id: line.product_id,
@@ -7585,6 +7676,19 @@ export const mockClient: ApiClient = {
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .map(toPublicWasteEvent);
     return delay(events);
+  },
+
+  async getBranchRestaurantProductionMode() {
+    const me = requireAuth();
+    const db = loadDb();
+    const branch = resolveMyBranch(db, me);
+    const restaurant = db.restaurants.find((r) => r.id === branch.restaurant_id);
+    if (!restaurant) throw new ApiError("Restaurant not found", 404);
+    return delay({
+      has_central_kitchen: restaurant.has_central_kitchen,
+      production_mode: restaurant.production_mode,
+      production_guidance: restaurant.production_guidance,
+    });
   },
 
   // ---- Sub-kitchen prep board ----

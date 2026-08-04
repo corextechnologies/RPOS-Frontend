@@ -265,7 +265,11 @@ export interface NearExpiryFilters {
 // Warehouse-local on purpose. The wire shape differs from Admin's StockRequest:
 // `request_type` (not `type`). Do not reuse the Admin request types.
 
-export type WarehouseRequestType = "WAREHOUSE_TO_ADMIN_PO" | "KITCHEN_TO_WAREHOUSE";
+export type WarehouseRequestType =
+  | "WAREHOUSE_TO_ADMIN_PO"
+  | "KITCHEN_TO_WAREHOUSE"
+  // A kitchen-off branch's raw-material request, fulfilled by the warehouse.
+  | "BRANCH_TO_ADMIN";
 
 /**
  * Purchase orders the warehouse raises to Admin.

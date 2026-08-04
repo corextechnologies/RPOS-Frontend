@@ -35,6 +35,15 @@ export function useWarehouseKitchenRequests(filters?: WarehouseRequestFilters) {
   });
 }
 
+export function useWarehouseBranchRequests(filters?: WarehouseRequestFilters) {
+  return useQuery({
+    queryKey: queryKeys.warehouseBranchRequests(filters),
+    queryFn: () => api.listWarehouseBranchRequests(filters),
+    retry: (failureCount, error) =>
+      !isMissingWarehouseAssignment(error) && failureCount < 3,
+  });
+}
+
 export function useWarehouseRequest(id: string) {
   return useQuery({
     queryKey: queryKeys.warehouseRequest(id),

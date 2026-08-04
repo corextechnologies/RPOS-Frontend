@@ -27,6 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SubKitchenModeBanner } from "@/components/dashboard/SubKitchenModeBanner";
+import { useMyRestaurant } from "@/lib/hooks/use-admin-restaurant";
 import { useEmployees } from "@/lib/hooks/use-employees";
 import {
   useBranches,
@@ -87,6 +89,7 @@ function StatCard({
 
 export default function AdminDashboardPage() {
   const router = useRouter();
+  const restaurant = useMyRestaurant();
   const branches = useBranches();
   const kitchens = useKitchens();
   const warehouses = useWarehouses();
@@ -123,6 +126,13 @@ export default function AdminDashboardPage() {
           Restaurant-wide overview for locations, staff, and pending requests.
         </p>
       </div>
+
+      {restaurant.data && (
+        <SubKitchenModeBanner
+          productionMode={restaurant.data.production_mode}
+          guidance={restaurant.data.production_guidance}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard

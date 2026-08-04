@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useKitchens } from "@/lib/hooks/use-locations";
+import { useMyRestaurant } from "@/lib/hooks/use-admin-restaurant";
 import { requestActionSchema } from "@/lib/schemas/request-action";
 import type {
   RequestStatus,
@@ -41,9 +42,15 @@ export function RequestActionPanel({
   isSubmitting,
   onSubmit,
 }: RequestActionPanelProps) {
+  // Admin manages exactly one restaurant. When it has no central kitchen, a
+  // branch's request is fulfilled entirely by the warehouse (and received by
+  // the branch) — Admin has no actions on it, so the panel shows it read-only.
+  const restaurant = useMyRestaurant();
+  const hasCentralKitchen = restaurant.data?.has_central_kitchen ?? true;
+
   const transitions = useMemo(
-    () => allowedTransitions(request.type, request.status),
-    [request.type, request.status],
+    () => allowedTransitions(request.type, request.status, { hasCentralKitchen }),
+    [request.type, request.status, hasCentralKitchen],
   );
 
   const [selected, setSelected] = useState<RequestStatus | null>(null);

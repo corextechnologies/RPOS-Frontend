@@ -410,6 +410,12 @@ export const warehouseApi = {
     return fetchRequestList("/warehouse/requests/kitchen", filters);
   },
 
+  async listWarehouseBranchRequests(
+    filters?: WarehouseRequestFilters,
+  ): Promise<Paginated<WarehouseRequest>> {
+    return fetchRequestList("/warehouse/requests/branch", filters);
+  },
+
   async getWarehouseRequest(requestId: string): Promise<WarehouseRequest> {
     const data = await request<WarehouseRequest>(
       `/warehouse/requests/${requestId}`,

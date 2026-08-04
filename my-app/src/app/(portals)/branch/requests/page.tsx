@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import { PackageCheck, Plus, Trash2 } from "lucide-react";
 import {
-  useBranchInventory,
   useBranchKitchens,
   useBranchRequests,
+  useBranchRestaurantProductionMode,
+  useBranchWarehouses,
   useCreateBranchRequest,
   useReceiveBranchRequest,
 } from "@/lib/hooks/use-branch";
+import { useSubKitchenProducts } from "@/lib/hooks/use-sub-kitchen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -217,23 +219,35 @@ function NewRequestDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: inventory } = useBranchInventory();
+  const production = useBranchRestaurantProductionMode();
+  // No central kitchen → the branch names a WAREHOUSE (warehouse manager
+  // fulfils it directly); otherwise it names a KITCHEN. Default to the kitchen
+  // path while production mode is still loading.
+  const needsKitchen = production.data
+    ? production.data.production_mode === "central_kitchen"
+    : true;
   const kitchens = useBranchKitchens();
+  const warehouses = useBranchWarehouses();
   const create = useCreateBranchRequest();
   const [lines, setLines] = useState<DraftLine[]>([newLine()]);
   const [kitchenId, setKitchenId] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
   const [notes, setNotes] = useState("");
 
-  // The branch's own catalogue. Pricing is Admin-only and absent from this
-  // shape, so inventory — not the pricing catalogue — is the branch-scoped
-  // source, same as the sub-kitchen dialog. Deduped: one product, many batches.
-  const products = Array.from(
-    new Map((inventory ?? []).map((i) => [i.product_id, i.product_name])).entries(),
-  ).map(([id, name]) => ({ id, name }));
+  // The restaurant's whole catalogue, NOT the branch's own inventory — ordering
+  // is precisely how a branch gets a product it does not hold yet, so scoping
+  // the picker to current branch stock (as the sub-kitchen recipe picker does
+  // for its RAW_MATERIAL side) would hide every product actually worth
+  // requesting. `all: true` is the same widen-past-branch-stock knob that
+  // picker uses. Pricing is Admin-only and absent from this shape either way.
+  const catalogue = useSubKitchenProducts(undefined, { all: true });
+  const products = (catalogue.data ?? []).map((p) => ({ id: p.id, name: p.name }));
 
   const kitchenOptions = kitchens.data ?? [];
+  const warehouseOptions = warehouses.data ?? [];
   const usable = lines.filter((l) => l.product_id && l.quantity_requested > 0);
-  const valid = usable.length > 0 && !!kitchenId;
+  const fulfillerChosen = needsKitchen ? !!kitchenId : !!warehouseId;
+  const valid = usable.length > 0 && fulfillerChosen;
 
   function update(uid: string, patch: Partial<DraftLine>) {
     setLines((prev) => prev.map((l) => (l.uid === uid ? { ...l, ...patch } : l)));
@@ -242,6 +256,7 @@ function NewRequestDialog({
   function reset() {
     setLines([newLine()]);
     setKitchenId("");
+    setWarehouseId("");
     setNotes("");
   }
 
@@ -251,30 +266,54 @@ function NewRequestDialog({
         <DialogHeader>
           <DialogTitle>New stock request</DialogTitle>
           <DialogDescription>
-            What this branch needs, and which kitchen should fulfil it. Admin
-            reviews and approves it.
+            {needsKitchen
+              ? "What this branch needs, and which kitchen should fulfil it. Admin reviews and approves it."
+              : "What this branch needs, and which warehouse should fulfil it. The warehouse reviews and dispatches it."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Fulfilling kitchen</Label>
-            <Select value={kitchenId} onValueChange={setKitchenId}>
-              <SelectTrigger className="h-10">
-                <SelectValue
-                  placeholder={kitchens.isLoading ? "Loading kitchens…" : "Choose a kitchen…"}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {kitchenOptions.map((k) => (
-                  <SelectItem key={k.id} value={k.id}>
-                    {k.name}
-                    {k.location ? ` — ${k.location}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {needsKitchen ? (
+            <div className="space-y-1">
+              <Label className="text-xs">Fulfilling kitchen</Label>
+              <Select value={kitchenId} onValueChange={setKitchenId}>
+                <SelectTrigger className="h-10">
+                  <SelectValue
+                    placeholder={kitchens.isLoading ? "Loading kitchens…" : "Choose a kitchen…"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {kitchenOptions.map((k) => (
+                    <SelectItem key={k.id} value={k.id}>
+                      {k.name}
+                      {k.location ? ` — ${k.location}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Label className="text-xs">Fulfilling warehouse</Label>
+              <Select value={warehouseId} onValueChange={setWarehouseId}>
+                <SelectTrigger className="h-10">
+                  <SelectValue
+                    placeholder={
+                      warehouses.isLoading ? "Loading warehouses…" : "Choose a warehouse…"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouseOptions.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                      {w.location ? ` — ${w.location}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {lines.map((line) => (
             <div key={line.uid} className="flex items-end gap-2">
@@ -285,7 +324,9 @@ function NewRequestDialog({
                   onValueChange={(v) => update(line.uid, { product_id: v })}
                 >
                   <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Choose…" />
+                    <SelectValue
+                      placeholder={catalogue.isLoading ? "Loading products…" : "Choose…"}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {products.map((p) => (
@@ -345,8 +386,10 @@ function NewRequestDialog({
 
           {!valid && (
             <Badge variant="outline" className="text-warning">
-              {!kitchenId
-                ? "Pick a kitchen and add at least one product"
+              {!fulfillerChosen
+                ? needsKitchen
+                  ? "Pick a kitchen and add at least one product"
+                  : "Pick a warehouse and add at least one product"
                 : "Add at least one product with a quantity"}
             </Badge>
           )}
@@ -361,7 +404,8 @@ function NewRequestDialog({
             onClick={() =>
               create.mutate(
                 {
-                  kitchen_id: kitchenId,
+                  kitchen_id: needsKitchen ? kitchenId : undefined,
+                  warehouse_id: needsKitchen ? undefined : warehouseId,
                   notes: notes.trim() || undefined,
                   lines: usable.map(({ product_id, quantity_requested }) => ({
                     product_id,

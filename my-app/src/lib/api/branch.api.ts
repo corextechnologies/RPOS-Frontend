@@ -5,7 +5,7 @@
  * deliberately unchanged by the POS work. See `@/lib/types/branch`.
  */
 
-import type { Kitchen, Paginated, RequestFilters, StockRequest } from "@/lib/types/admin";
+import type { Kitchen, Paginated, RequestFilters, StockRequest, Warehouse } from "@/lib/types/admin";
 import type {
   BranchCustomer,
   BranchDelivery,
@@ -24,6 +24,7 @@ import type {
   UpdateBranchCustomerInput,
 } from "@/lib/types/branch";
 import type { DeviceCreateInput, PosDevice, PosDeviceActivation } from "@/lib/types/pos";
+import type { RestaurantProductionMode } from "@/lib/types/super-admin";
 import type { WasteEvent, WasteEventFilters } from "@/lib/types/waste";
 import type { StockUnit } from "@/lib/stock-unit";
 import { request, requestEnvelope } from "./client";
@@ -309,6 +310,17 @@ export const branchApi = {
     }));
   },
 
+  /** Warehouses this branch may name to fulfil a request (kitchen-off tenant). */
+  async listBranchWarehouses(): Promise<Warehouse[]> {
+    const rows = await request<Warehouse[]>("/branch/warehouses");
+    return (rows ?? []).map((w) => ({
+      ...w,
+      id: String(w.id),
+      restaurant_id: String(w.restaurant_id),
+      location: w.location ?? null,
+    }));
+  },
+
   async listBranchRequests(filters?: RequestFilters): Promise<Paginated<StockRequest>> {
     const page = filters?.page ?? 1;
     const pageSize = filters?.page_size ?? 20;
@@ -333,7 +345,11 @@ export const branchApi = {
       await request<StockRequest>("/branch/requests", {
         method: "POST",
         body: JSON.stringify({
-          kitchen_id: body.kitchen_id,
+          // Send exactly the one the branch named; null (not "") for the other —
+          // the backend schema is `int | None`, and "" fails int coercion.
+          // Kitchen tenant sends kitchen_id; kitchen-less sends warehouse_id.
+          kitchen_id: body.kitchen_id || null,
+          warehouse_id: body.warehouse_id || null,
           notes: optionalText(body.notes),
           lines: body.lines.map((l) => ({
             product_id: l.product_id,
@@ -415,5 +431,10 @@ export const branchApi = {
       batch_code: event.batch_code ?? "",
       location_id: String(event.location_id),
     }));
+  },
+
+  /** Response shape already matches the UI type 1:1 — no adapter needed. */
+  getBranchRestaurantProductionMode(): Promise<RestaurantProductionMode> {
+    return request<RestaurantProductionMode>("/branch/restaurant");
   },
 };

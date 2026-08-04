@@ -53,7 +53,9 @@ function waitingCopy(request: WarehouseRequest): string {
     return "Admin has this order. You can act once it is dispatched to you.";
   }
   if (request.status === "DISPATCHED") {
-    return "Dispatched. The kitchen confirms receipt on their side.";
+    return request.request_type === "BRANCH_TO_ADMIN"
+      ? "Dispatched. The branch confirms receipt on their side."
+      : "Dispatched. The kitchen confirms receipt on their side.";
   }
   return "Nothing to do here.";
 }

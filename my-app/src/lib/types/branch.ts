@@ -155,8 +155,17 @@ export interface CreateBranchRequestLineInput {
 }
 
 export interface CreateBranchRequestInput {
-  /** The kitchen the branch wants to fulfil this — chosen from a picker. */
-  kitchen_id: string;
+  /**
+   * The kitchen the branch names to fulfil this (kitchen tenant). Mutually
+   * exclusive with `warehouse_id`.
+   */
+  kitchen_id?: string;
+  /**
+   * The warehouse the branch names to fulfil this (kitchen-less tenant,
+   * production_mode "branch_sub_kitchen"). The warehouse manager then approves
+   * and dispatches it directly — Admin is not involved.
+   */
+  warehouse_id?: string;
   notes?: string;
   lines: CreateBranchRequestLineInput[];
 }

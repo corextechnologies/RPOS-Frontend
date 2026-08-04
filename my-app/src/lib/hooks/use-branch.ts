@@ -26,6 +26,7 @@ export const branchKeys = {
   orders: (filters?: BranchOrderFilters) =>
     filters ? (["branch-orders", filters] as const) : (["branch-orders"] as const),
   kitchens: ["branch-kitchens"] as const,
+  warehouses: ["branch-warehouses"] as const,
   requests: (filters?: RequestFilters) =>
     filters ? (["branch-requests", filters] as const) : (["branch-requests"] as const),
   deliveries: ["branch-deliveries"] as const,
@@ -34,6 +35,7 @@ export const branchKeys = {
     filters && Object.keys(filters).length
       ? (["branch-waste", filters] as const)
       : (["branch-waste"] as const),
+  restaurant: ["branch-restaurant"] as const,
 };
 
 // ---- Terminals ----
@@ -177,6 +179,14 @@ export function useBranchKitchens() {
   });
 }
 
+/** Warehouses the branch can direct a request to (kitchen-off tenant). */
+export function useBranchWarehouses() {
+  return useQuery({
+    queryKey: branchKeys.warehouses,
+    queryFn: () => api.listBranchWarehouses(),
+  });
+}
+
 export function useBranchRequests(filters?: RequestFilters) {
   return useQuery({
     queryKey: branchKeys.requests(filters),
@@ -258,6 +268,14 @@ export function useBranchWasteEvents(
     queryKey: branchKeys.waste(filters),
     queryFn: () => api.listBranchWasteEvents(filters),
     enabled: options?.enabled ?? true,
+  });
+}
+
+/** Where this branch's finished goods get made — central kitchen or its own sub-kitchen. */
+export function useBranchRestaurantProductionMode() {
+  return useQuery({
+    queryKey: branchKeys.restaurant,
+    queryFn: () => api.getBranchRestaurantProductionMode(),
   });
 }
 

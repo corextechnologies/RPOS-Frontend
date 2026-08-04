@@ -3,9 +3,15 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, Package, Receipt, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { useBranchCustomers, useBranchInventory, useBranchOrders } from "@/lib/hooks/use-branch";
+import {
+  useBranchCustomers,
+  useBranchInventory,
+  useBranchOrders,
+  useBranchRestaurantProductionMode,
+} from "@/lib/hooks/use-branch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SubKitchenModeBanner } from "@/components/dashboard/SubKitchenModeBanner";
 import { displayName } from "@/lib/types/super-admin";
 
 /**
@@ -18,6 +24,7 @@ export default function BranchDashboardPage() {
   const orders = useBranchOrders();
   const customers = useBranchCustomers();
   const inventory = useBranchInventory();
+  const production = useBranchRestaurantProductionMode();
 
   const outOfStock = (inventory.data ?? []).filter((i) => i.quantity === 0);
 
@@ -29,6 +36,13 @@ export default function BranchDashboardPage() {
         </h1>
         <p className="mt-1 text-sm text-muted">Today at this branch.</p>
       </div>
+
+      {production.data && (
+        <SubKitchenModeBanner
+          productionMode={production.data.production_mode}
+          guidance={production.data.production_guidance}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat
