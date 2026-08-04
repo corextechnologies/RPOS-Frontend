@@ -455,7 +455,9 @@ export interface ApiClient {
   listBranchDeliveries(): Promise<BranchDelivery[]>;
   receiveBranchDelivery(deliveryId: string): Promise<BranchDelivery>;
   listBranchInventory(): Promise<BranchInventoryItem[]>;
-  wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem>;
+  // Branch waste is product-level and spends across lots earliest-expiry-first,
+  // so it can affect several lots — returns every affected row.
+  wasteBranchStock(body: BranchWasteInput): Promise<BranchInventoryItem[]>;
   listBranchWasteEvents(filters?: WasteEventFilters): Promise<WasteEvent[]>;
 
   // Sub-kitchen — the branch prep station. Portal routes, caller's portal token.

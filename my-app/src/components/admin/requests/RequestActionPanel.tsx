@@ -66,7 +66,14 @@ export function RequestActionPanel({
   );
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [rejectOpen, setRejectOpen] = useState(false);
-  const [kitchenId, setKitchenId] = useState("");
+  // Default the forward picker to the kitchen the branch chose on a
+  // BRANCH_TO_ADMIN request; Admin can still re-route before confirming.
+  // String-safe so a numeric live id still matches a Select option's string id.
+  const defaultKitchenId =
+    request.target_location_type === "KITCHEN" && request.target_location_id != null
+      ? String(request.target_location_id)
+      : "";
+  const [kitchenId, setKitchenId] = useState(defaultKitchenId);
 
   // Only the forward action needs this, but the request is cached and shared, so
   // fetching here keeps the picker colocated with its one consumer.
@@ -77,7 +84,11 @@ export function RequestActionPanel({
     setNotes("");
     setErrorMessage(undefined);
     setRejectOpen(false);
-    setKitchenId("");
+    setKitchenId(
+      request.target_location_type === "KITCHEN" && request.target_location_id != null
+        ? String(request.target_location_id)
+        : "",
+    );
     setLineQtys(
       Object.fromEntries(
         request.line_items.map((line) => [
