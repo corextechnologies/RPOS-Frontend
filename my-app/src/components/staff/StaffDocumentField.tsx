@@ -57,7 +57,7 @@ export function StaffDocumentField({
           <img
             src={value}
             alt={label}
-            className="h-16 w-28 rounded-lg border border-line object-cover"
+            className="h-16 w-28 rounded-lg border border-line bg-surface-2 object-contain"
           />
         ) : (
           <div className="flex h-16 w-28 items-center justify-center rounded-lg border border-dashed border-line bg-surface-2 text-faint">

@@ -32,13 +32,13 @@ export function StaffDocumentImage({
         src={url}
         alt={label}
         onError={() => setFailed(true)}
-        className="h-24 w-full rounded-lg border border-line object-cover"
+        className="aspect-[86/54] w-full rounded-lg border border-line bg-surface-2 object-contain"
       />
     );
   }
 
   return (
-    <div className="flex h-24 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line bg-surface-2 text-faint">
+    <div className="flex aspect-[86/54] w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line bg-surface-2 text-faint">
       <IdCard className="size-5" aria-hidden />
       <span className="text-xs">{url ? "Reopen to view" : "Not uploaded"}</span>
     </div>
