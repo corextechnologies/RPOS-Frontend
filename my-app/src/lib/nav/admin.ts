@@ -1,12 +1,14 @@
 import {
   BookOpen,
   Building2,
+  CalendarDays,
   ClipboardCheck,
   Contact,
   CookingPot,
   DollarSign,
   Inbox,
   LayoutDashboard,
+  LineChart,
   Package,
   QrCode,
   Receipt,
@@ -180,6 +182,27 @@ export const ADMIN_NAV: NavSection[] = [
         href: "/admin/sales",
         icon: DollarSign,
         action: "sales:read",
+        match: "prefix",
+      },
+    ],
+  },
+  {
+    title: "Forecasting",
+    items: [
+      // Works for every tenant — forecasting is branch demand, not kitchen
+      // production, so it is NOT gated on `central_kitchen`.
+      {
+        label: "Forecast & Planning",
+        href: "/admin/forecast",
+        icon: LineChart,
+        action: "forecast:read",
+        match: "prefix",
+      },
+      {
+        label: "Event Calendar",
+        href: "/admin/calendar",
+        icon: CalendarDays,
+        action: "calendar:read",
         match: "prefix",
       },
     ],

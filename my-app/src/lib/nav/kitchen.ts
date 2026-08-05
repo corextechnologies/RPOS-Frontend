@@ -1,5 +1,6 @@
 import {
   Boxes,
+  CalendarClock,
   ClipboardCheck,
   Factory,
   Inbox,
@@ -55,6 +56,15 @@ export const KITCHEN_NAV: NavSection[] = [
         icon: Target,
         action: "kitchen-production-targets:read",
         match: "prefix",
+      },
+      {
+        label: "Production plan",
+        href: "/kitchen/planning",
+        icon: CalendarClock,
+        action: "kitchen-planning:read",
+        match: "exact",
+        // Kitchen-off tenants have no /kitchen router at all — hide it there.
+        requiresFeature: "central_kitchen",
       },
     ],
   },

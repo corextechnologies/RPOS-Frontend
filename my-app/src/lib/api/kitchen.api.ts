@@ -27,6 +27,7 @@ import type {
   KitchenRecipe,
 } from "@/lib/types/kitchen";
 import type { ProductionRun } from "@/lib/types/branch";
+import type { KitchenPlanningResponse } from "@/lib/types/forecast";
 import type {
   KitchenProductionTargetFilters,
   ProductionTarget,
@@ -619,6 +620,19 @@ export const kitchenApi = {
       { method: "POST" },
     );
     return normalizeProductionTarget(data);
+  },
+
+  // ---- Phase 7 production plan (read-only, §8) ----
+  //
+  // Confirmed plans only, summed across branches — a central kitchen makes one
+  // batch for the chain. `ready: false` with empty targets when there is
+  // nothing. There is no write route; this is purely a read. The whole kitchen
+  // router is 403 for a kitchen-off tenant, so the nav item is feature-gated.
+
+  async kitchenPlanning(days = 7): Promise<KitchenPlanningResponse> {
+    return request<KitchenPlanningResponse>(
+      `/kitchen/planning?${new URLSearchParams({ days: String(days) })}`,
+    );
   },
 };
 

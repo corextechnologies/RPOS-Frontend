@@ -15,6 +15,14 @@ import type {
   AdminProductionTargetFilters,
   KitchenProductionTargetFilters,
 } from "@/lib/types/production-target";
+import type {
+  EventsQuery,
+  ForecastQuery,
+  HotProductsQuery,
+  NormalDemandQuery,
+  PlanFilters,
+  UpcomingEventsQuery,
+} from "@/lib/types/forecast";
 
 
 export const queryKeys = {
@@ -138,5 +146,31 @@ export const queryKeys = {
       ? (["kitchen-dispatch-requests", filters] as const)
       : (["kitchen-dispatch-requests"] as const),
   kitchenRequest: (id: string) => ["kitchen-request", id] as const,
+
+  // Phase 7 — Forecasting & Planning
+  calendarTags: ["calendar-tags"] as const,
+  calendarEvents: (query?: EventsQuery) =>
+    query && Object.keys(query).length
+      ? (["calendar-events", query] as const)
+      : (["calendar-events"] as const),
+  eventProductMultipliers: (eventId: number) =>
+    ["event-product-multipliers", eventId] as const,
+  productEventTags: (productId: number) =>
+    ["product-event-tags", productId] as const,
+  productExpectedDailySales: (productId: number) =>
+    ["product-expected-daily-sales", productId] as const,
+  forecast: (query: ForecastQuery) => ["forecast", query] as const,
+  hotProducts: (query?: HotProductsQuery) =>
+    ["hot-products", query ?? {}] as const,
+  upcomingEvents: (query?: UpcomingEventsQuery) =>
+    ["upcoming-events", query ?? {}] as const,
+  normalDemand: (query: NormalDemandQuery) => ["normal-demand", query] as const,
+  forecastPlans: (filters?: PlanFilters) =>
+    filters && Object.keys(filters).length
+      ? (["forecast-plans", filters] as const)
+      : (["forecast-plans"] as const),
+  forecastPlan: (id: number) => ["forecast-plan", id] as const,
+  kitchenPlanning: (days: number) => ["kitchen-planning", days] as const,
+  branchPlanning: (days: number) => ["branch-planning", days] as const,
 };
 

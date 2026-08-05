@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { EditPricingDialog } from "@/components/admin/pricing/EditPricingDialog";
 import { PricingTable } from "@/components/admin/pricing/PricingTable";
+import { ProductForecastDialog } from "@/components/admin/pricing/ProductForecastDialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +24,7 @@ export default function AdminPricingPage() {
   const [view, setView] = useState<PricingView>("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<ProductPricing | null>(null);
+  const [forecastProduct, setForecastProduct] = useState<ProductPricing | null>(null);
 
   const all = useProductPricing();
   // Kept mounted in every view so the queue count stays visible from "All products".
@@ -101,6 +103,7 @@ export default function AdminPricingPage() {
         onRetry={() => active.refetch()}
         canEdit={can("pricing:update")}
         onEdit={setEditing}
+        onForecast={can("forecast:read") ? setForecastProduct : undefined}
         emptyTitle={view === "unpriced" ? "Nothing waiting" : "No products yet"}
         emptyDescription={
           view === "unpriced"
@@ -119,6 +122,14 @@ export default function AdminPricingPage() {
         }}
         onSubmit={handleSave}
         isSubmitting={updatePricing.isPending}
+      />
+
+      <ProductForecastDialog
+        product={forecastProduct}
+        open={!!forecastProduct}
+        onOpenChange={(open) => {
+          if (!open) setForecastProduct(null);
+        }}
       />
     </div>
   );
