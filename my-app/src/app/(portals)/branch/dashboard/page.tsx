@@ -2,30 +2,36 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  ClipboardList,
-  Package,
-  PackageCheck,
-  Receipt,
-  TriangleAlert,
-  Users,
-} from "lucide-react";
+import { ArrowRight, Package, Receipt, TriangleAlert, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
   useBranchCustomers,
   useBranchDeliveries,
   useBranchInventory,
   useBranchOrders,
-  useBranchRequestsSummary,
+  useBranchRequests,
   useBranchRestaurantProductionMode,
 } from "@/lib/hooks/use-branch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { RequestStatusBadge } from "@/components/admin/requests/RequestStatusBadge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { EmptyState, ErrorState } from "@/components/ui/state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SubKitchenModeBanner } from "@/components/dashboard/SubKitchenModeBanner";
 import { localDateOf, toLocalDateString } from "@/lib/date-range";
 import { formatDate } from "@/lib/utils";
 import { displayName } from "@/lib/types/super-admin";
+import type { StockRequest } from "@/lib/types/admin";
+import type { BranchDelivery } from "@/lib/types/branch";
 
 /** Stock within this many days of expiry is surfaced on the dashboard. */
 const NEAR_EXPIRY_DAYS = 7;
@@ -42,11 +48,19 @@ function daysFromNowKey(n: number): string {
   return toLocalDateString(new Date(Date.now() + n * MS_PER_DAY));
 }
 
+/** First product line, e.g. "Coke" or "Coke +2 more". */
+function summarizeRequestLines(req: StockRequest): string {
+  const [first] = req.line_items;
+  if (!first) return "-";
+  const extra = req.line_items.length - 1;
+  return extra > 0 ? `${first.product_name} +${extra} more` : first.product_name;
+}
+
 /**
  * The real branch dashboard, replacing the Phase 0 `PortalDashboard`
- * placeholder. Mirrors the kitchen dashboard's shape: a row of at-a-glance
- * tiles, then the one thing a branch needs pushed at them — what's about to
- * expire.
+ * placeholder: a row of at-a-glance tiles, then the branch's live request and
+ * incoming pipelines (mirroring Admin's recent-requests table) and what's about
+ * to expire.
  */
 export default function BranchDashboardPage() {
   const { user, can } = useAuth();
@@ -54,10 +68,7 @@ export default function BranchDashboardPage() {
   const customers = useBranchCustomers();
   const inventory = useBranchInventory();
   const production = useBranchRestaurantProductionMode();
-  // One indexed call: open = raised but not yet received and not rejected.
-  // Replaces the earlier total − received − rejected derivation now that the
-  // backend ships GET /branch/requests/summary.
-  const requestsSummary = useBranchRequestsSummary();
+  const requests = useBranchRequests({ page: 1, page_size: 5 });
   const deliveries = useBranchDeliveries();
 
   const rows = inventory.data ?? [];
@@ -77,8 +88,9 @@ export default function BranchDashboardPage() {
       .sort((a, b) => (a.expiry_date ?? "").localeCompare(b.expiry_date ?? ""));
   }, [inventory.data]);
 
+  const recentRequests = (requests.data?.items ?? []).slice(0, 5);
   // Incoming = dispatched by the kitchen, not yet received by this branch.
-  const incomingCount = (deliveries.data ?? []).filter((d) => d.status === "DISPATCHED").length;
+  const incoming = (deliveries.data ?? []).filter((d) => d.status === "DISPATCHED").slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -115,26 +127,110 @@ export default function BranchDashboardPage() {
           icon={Package}
           href={can("branch-inventory:read") ? "/branch/inventory" : undefined}
         />
-        <Stat
-          label="Open requests"
-          value={requestsSummary.data?.open ?? 0}
-          icon={ClipboardList}
-          href={can("branch-requests:read") ? "/branch/requests" : undefined}
-        />
-        <Stat
-          label="Incoming"
-          value={incomingCount}
-          icon={PackageCheck}
-          href={can("branch-inventory:read") ? "/branch/deliveries" : undefined}
-        />
-        <Stat
-          label={`Expiring ≤ ${NEAR_EXPIRY_DAYS}d`}
-          value={expiringSoon.length}
-          icon={TriangleAlert}
-          tone={expiringSoon.length > 0 ? "warning" : "default"}
-          href={can("branch-inventory:read") ? "/branch/inventory" : undefined}
-        />
       </div>
+
+      {/* Requests — this branch's own asks, newest first (admin-style table). */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+          <CardTitle>Requests</CardTitle>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/branch/requests">View all</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          {requests.isLoading ? (
+            <TableSkeleton />
+          ) : requests.isError ? (
+            <ErrorState description="Failed to load requests." onRetry={() => requests.refetch()} />
+          ) : recentRequests.length === 0 ? (
+            <EmptyState
+              title="No requests yet"
+              description="Stock you ask head office for will show up here."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Items</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentRequests.map((req) => (
+                  <TableRow key={req.id}>
+                    <TableCell>
+                      <p className="font-medium text-content">{summarizeRequestLines(req)}</p>
+                      <p className="text-xs text-muted">
+                        {req.line_items.length} line item(s)
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <RequestStatusBadge status={req.status} />
+                    </TableCell>
+                    <TableCell className="text-muted">{formatDate(req.created_at)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Incoming — finished goods the kitchen dispatched, awaiting receipt. */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+          <CardTitle>Incoming</CardTitle>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/branch/deliveries">View all</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          {deliveries.isLoading ? (
+            <TableSkeleton />
+          ) : deliveries.isError ? (
+            <ErrorState
+              description="Failed to load incoming stock."
+              onRetry={() => deliveries.refetch()}
+            />
+          ) : incoming.length === 0 ? (
+            <EmptyState
+              title="Nothing incoming"
+              description="Deliveries dispatched from the kitchen appear here until you receive them."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {incoming.map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell>
+                      <p className="font-medium text-content">{d.product_name}</p>
+                      {d.from_label && (
+                        <p className="text-xs text-muted">from {d.from_label}</p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-content">
+                      {d.quantity}
+                    </TableCell>
+                    <TableCell>
+                      <DeliveryStatusBadge status={d.status} />
+                    </TableCell>
+                    <TableCell className="text-muted">{formatDate(d.created_at)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Expiring soon — the one thing that rots if ignored, full width. */}
       <Card className={expiringSoon.length > 0 ? "border-warning/40" : undefined}>
@@ -187,6 +283,25 @@ export default function BranchDashboardPage() {
           </Button>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+/** DISPATCHED / RECEIVED badge for the incoming table. */
+function DeliveryStatusBadge({ status }: { status: BranchDelivery["status"] }) {
+  return (
+    <Badge variant={status === "RECEIVED" ? "success" : "warning"}>
+      {status === "RECEIVED" ? "Received" : "Dispatched"}
+    </Badge>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div className="space-y-3 p-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-12 w-full" />
+      ))}
     </div>
   );
 }

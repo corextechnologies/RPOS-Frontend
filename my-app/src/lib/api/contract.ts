@@ -103,12 +103,10 @@ import type {
   SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
-  CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepTicket,
   SubKitchenProduct,
   SubKitchenProductFilters,
-  SubKitchenRecipe,
   SubKitchenStats,
   SubKitchenStatsFilters,
   UpdatePrepStatusInput,
@@ -485,15 +483,9 @@ export interface ApiClient {
   completePrepTicket(id: string, body?: CompleteTicketInput): Promise<PrepTicket>;
   cancelPrepTicket(id: string): Promise<PrepTicket>;
 
-  // Products the chef can reference — real product ids for both recipe pickers
-  // (never menu_item_ids). `kind=FINISHED_GOOD` = what's made, `RAW_MATERIAL` =
-  // what it's made of.
+  // Products the chef references when stating what a made-to-order job used —
+  // real product ids (never menu_item_ids). `kind=RAW_MATERIAL` = components.
   listSubKitchenProducts(filters?: SubKitchenProductFilters): Promise<SubKitchenProduct[]>;
-
-  // Chef-owned recipes — versioned, never edited in place.
-  listSubKitchenRecipes(): Promise<SubKitchenRecipe[]>;
-  getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe>;
-  createSubKitchenRecipe(body: CreateSubKitchenRecipeInput): Promise<SubKitchenRecipe>;
 
   // Waste — the same branch stock ledger, logged from the prep station.
   logSubKitchenWaste(body: BranchWasteInput): Promise<BranchInventoryItem>;
