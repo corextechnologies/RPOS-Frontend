@@ -126,55 +126,6 @@ export interface CompleteTicketInput {
   expiry_date?: string | null;
 }
 
-// ---- Recipes (chef-owned; versioned, never edited in place) ----
-
-export interface SubKitchenRecipeComponentInput {
-  component_product_id: number;
-  /** Per batch, in `unit`; may be fractional. */
-  quantity: number;
-  /** Omit to use the component's own stock unit; must share dimension. */
-  unit?: StockUnit;
-  /** Expected loss in basis points (250 = 2.5%). */
-  wastage_bp?: number;
-}
-
-export interface CreateSubKitchenRecipeInput {
-  product_id: number;
-  /** How many the recipe makes per run. */
-  yield_qty?: number;
-  note?: string | null;
-  components: SubKitchenRecipeComponentInput[];
-}
-
-export interface SubKitchenRecipeComponent {
-  component_product_id: number;
-  component_name?: string;
-  quantity: number;
-  wastage_bp: number;
-  /** How the ingredient is counted on the shelf — use this against on-hand. */
-  stock_unit: StockUnit;
-  /** The unit the quantity was entered in; absent means `stock_unit`. */
-  unit?: StockUnit;
-}
-
-/** Where a recipe was authored. The sub-kitchen only ever lists its own `BRANCH`. */
-export type RecipeMadeAt = "KITCHEN" | "BRANCH";
-
-export interface SubKitchenRecipe {
-  id: string;
-  product_id: number;
-  product_name?: string;
-  /** Republishing bumps this and retires the previous version. */
-  version: number;
-  is_active: boolean;
-  yield_qty: number;
-  note?: string | null;
-  /** The server already filters the list to `BRANCH`; present for labelling. */
-  made_at?: RecipeMadeAt;
-  components: SubKitchenRecipeComponent[];
-  created_at?: string;
-}
-
 // ---- Stock the station works from ----
 
 /**

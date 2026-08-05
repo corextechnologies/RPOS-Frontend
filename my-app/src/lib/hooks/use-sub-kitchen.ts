@@ -10,7 +10,6 @@ import type {
   SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
-  CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   SubKitchenStatsFilters,
   UpdatePrepStatusInput,
@@ -24,8 +23,6 @@ export const subKitchenKeys = {
   board: (filters?: PrepBoardFilters) =>
     filters ? (["sub-kitchen-board", filters] as const) : (["sub-kitchen-board"] as const),
   ticket: (id: string) => ["sub-kitchen-ticket", id] as const,
-  recipes: ["sub-kitchen-recipes"] as const,
-  recipe: (id: string) => ["sub-kitchen-recipe", id] as const,
   waste: (filters?: WasteEventFilters) =>
     filters && Object.keys(filters).length
       ? (["sub-kitchen-waste", filters] as const)
@@ -128,39 +125,6 @@ export function useCancelPrepTicket() {
   return useMutation({
     mutationFn: (id: string) => api.cancelPrepTicket(id),
     onSuccess: () => invalidate(),
-    onError: (err) => toast.error(subKitchenErrorMessage(err)),
-  });
-}
-
-// ---- Recipes ----
-
-export function useSubKitchenRecipes() {
-  return useQuery({
-    queryKey: subKitchenKeys.recipes,
-    queryFn: () => api.listSubKitchenRecipes(),
-  });
-}
-
-export function useSubKitchenRecipe(id: string | null) {
-  return useQuery({
-    queryKey: subKitchenKeys.recipe(id ?? ""),
-    queryFn: () => api.getSubKitchenRecipe(id as string),
-    enabled: !!id,
-  });
-}
-
-export function useCreateSubKitchenRecipe() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: CreateSubKitchenRecipeInput) => api.createSubKitchenRecipe(body),
-    onSuccess: (recipe) => {
-      qc.invalidateQueries({ queryKey: subKitchenKeys.recipes });
-      toast.success(
-        recipe.version > 1
-          ? `Recipe saved (v${recipe.version}) — the previous one is retired.`
-          : "Recipe saved.",
-      );
-    },
     onError: (err) => toast.error(subKitchenErrorMessage(err)),
   });
 }

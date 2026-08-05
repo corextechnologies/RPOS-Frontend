@@ -5,12 +5,10 @@ import type {
   SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
-  CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepTicket,
   SubKitchenProduct,
   SubKitchenProductFilters,
-  SubKitchenRecipe,
   SubKitchenStats,
   SubKitchenStatsFilters,
   UpdatePrepStatusInput,
@@ -20,22 +18,6 @@ import { normalizeBranchInventory, type RawBranchInventoryItem } from "./branch.
 import { idOrNull, numberFromMeta } from "./normalize";
 
 const json = (body: unknown): RequestInit => ({ body: JSON.stringify(body) });
-
-function normalizeRecipe(r: SubKitchenRecipe): SubKitchenRecipe {
-  return {
-    ...r,
-    id: String(r.id),
-    product_id: Number(r.product_id),
-    version: Number(r.version),
-    yield_qty: Number(r.yield_qty ?? 1),
-    components: (r.components ?? []).map((c) => ({
-      ...c,
-      component_product_id: Number(c.component_product_id),
-      quantity: Number(c.quantity),
-      wastage_bp: Number(c.wastage_bp ?? 0),
-    })),
-  };
-}
 
 function normalizeWasteEvent(e: WasteEvent): WasteEvent {
   return {
@@ -142,28 +124,6 @@ export const subKitchenApi = {
       units_per_pack: p.units_per_pack ?? null,
       pack_size: p.pack_size ?? null,
     }));
-  },
-
-  // ---- Recipes ----
-
-  async listSubKitchenRecipes(): Promise<SubKitchenRecipe[]> {
-    const data = await request<SubKitchenRecipe[]>("/sub-kitchen/recipes");
-    return (data ?? []).map(normalizeRecipe);
-  },
-
-  async getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe> {
-    const data = await request<SubKitchenRecipe>(`/sub-kitchen/recipes/${id}`);
-    return normalizeRecipe(data);
-  },
-
-  async createSubKitchenRecipe(
-    body: CreateSubKitchenRecipeInput,
-  ): Promise<SubKitchenRecipe> {
-    const data = await request<SubKitchenRecipe>("/sub-kitchen/recipes", {
-      method: "POST",
-      ...json(body),
-    });
-    return normalizeRecipe(data);
   },
 
   // ---- Waste (same branch ledger, logged from the station) ----

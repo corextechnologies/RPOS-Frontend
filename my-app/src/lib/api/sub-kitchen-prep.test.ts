@@ -82,17 +82,16 @@ describe("sub-kitchen prep board", () => {
     expect(openBoard.items.map((t) => t.id)).not.toContain("prep-001");
   });
 
-  it("rejects illegal moves, empty completions, and shortfalls", async () => {
+  it("rejects illegal moves and shortfalls; allows empty completions", async () => {
     // prep-002 is IN_PROGRESS; QUEUED is not a legal next step.
     await expect(
       mockClient.updatePrepStatus("prep-002", { status: "QUEUED" as never }),
     ).rejects.toMatchObject({ code: "invalid_prep_transition" });
 
-    // A batch of a recipe-less item can't be completed without inputs.
+    // A job can be completed with no inputs — a labour-only finish, no deduction.
     const cola = await mockClient.createBatchJob({ product_id: 5, quantity: 2 });
-    await expect(
-      mockClient.completePrepTicket(cola.id, {}),
-    ).rejects.toMatchObject({ code: "no_active_recipe" });
+    const colaDone = await mockClient.completePrepTicket(cola.id, {});
+    expect(colaDone.status).toBe("COMPLETED");
 
     // Asking for more than on-hand fails all-or-nothing.
     await expect(

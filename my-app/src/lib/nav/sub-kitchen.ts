@@ -1,5 +1,4 @@
 import {
-  ChefHat,
   ClipboardList,
   LineChart,
   Package,
@@ -24,7 +23,6 @@ export const SUB_KITCHEN_NAV: NavSection[] = [
       { label: "Overview", href: "/sub-kitchen/overview", icon: LineChart, match: "exact" },
       { label: "Board", href: "/sub-kitchen", icon: ClipboardList, match: "exact" },
       { label: "Stock", href: "/sub-kitchen/stock", icon: Package, match: "exact" },
-      { label: "Recipes", href: "/sub-kitchen/recipes", icon: ChefHat, match: "prefix" },
       {
         label: "Propose dish",
         href: "/sub-kitchen/menu-proposals",

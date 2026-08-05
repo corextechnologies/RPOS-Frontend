@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
 /**
- * The rest of the sub-kitchen station: recipe-driven completion, recipe
- * versioning, stats, and near-expiry. The prep-ticket lifecycle itself is
- * covered by `sub-kitchen-prep.test.ts`.
+ * The rest of the sub-kitchen station: completing a job by stating the
+ * components used, stats, near-expiry, and the component picker. The prep-ticket
+ * lifecycle itself is covered by `sub-kitchen-prep.test.ts`.
  *
  * The mock reads `window`/`localStorage`; the suite runs under `node`, so both
  * are stubbed before the module is imported.
@@ -33,36 +33,40 @@ beforeAll(async () => {
 });
 
 describe("sub-kitchen station", () => {
-  it("completes a ticket from its recipe when no inputs are given", async () => {
-    // Seeded: prep-001 (8× Burger) + a recipe of 0.05 KG Mozzarella (prod-003)
-    // and 1 Tomato Sauce (prod-002) per burger.
+  it("completes a made-to-order ticket from the stated components", async () => {
+    // prep-001 is 8× Burger. The chef states what was used at completion; each
+    // component is deducted from branch stock. The finished item is credited
+    // only because prep-001 is a legacy BATCH ticket.
     const before = await mockClient.listBranchInventory();
     const mozBefore = onHand(before, "prod-003");
     const sauceBefore = onHand(before, "prod-002");
 
-    const done = await mockClient.completePrepTicket("prep-001");
+    const done = await mockClient.completePrepTicket("prep-001", {
+      inputs: [
+        { product_id: 3, quantity: 0.4 }, // Mozzarella (prod-003)
+        { product_id: 2, quantity: 8 }, // Tomato Sauce (prod-002)
+      ],
+    });
     expect(done.status).toBe("COMPLETED");
 
     const after = await mockClient.listBranchInventory();
-    // 8 burgers × (0.05 Mozzarella + 1 Tomato Sauce); 8 burgers credited.
     expect(onHand(after, "prod-003")).toBeCloseTo(mozBefore - 0.4, 5);
     expect(onHand(after, "prod-002")).toBe(sauceBefore - 8);
     expect(onHand(after, "prod-006")).toBe(8);
   });
 
-  it("republishes a recipe as a new version and retires the old", async () => {
-    const created = await mockClient.createSubKitchenRecipe({
-      product_id: 6,
-      yield_qty: 1,
-      components: [{ component_product_id: 3, quantity: 2 }],
-    });
-    expect(created.version).toBe(2);
+  it("marks a ticket done with no deduction when no components are given", async () => {
+    // Labour-only finish (e.g. writing a name): a fresh job completes with empty
+    // inputs and consumes no components. (Left prep-002 open for the stats test.)
+    const job = await mockClient.createBatchJob({ product_id: 7, quantity: 1 });
+    const before = await mockClient.listBranchInventory();
 
-    const active = await mockClient.listSubKitchenRecipes();
-    const burgerRecipes = active.filter((r) => r.product_id === 6);
-    // Only the new version is active.
-    expect(burgerRecipes).toHaveLength(1);
-    expect(burgerRecipes[0].version).toBe(2);
+    const done = await mockClient.completePrepTicket(job.id, { inputs: [] });
+    expect(done.status).toBe("COMPLETED");
+
+    const after = await mockClient.listBranchInventory();
+    expect(onHand(after, "prod-002")).toBe(onHand(before, "prod-002"));
+    expect(onHand(after, "prod-003")).toBe(onHand(before, "prod-003"));
   });
 
   it("reports stats and near-expiry stock", async () => {
@@ -93,17 +97,11 @@ describe("sub-kitchen station", () => {
   });
 
   it("never scopes the made-item picker, even with nothing on the shelf", async () => {
-    // The branch holds no finished goods, but you still write recipes for them.
+    // The branch holds no finished goods, but they're still valid products.
     const goods = await mockClient.listSubKitchenProducts({ kind: "FINISHED_GOOD" });
     const ids = goods.map((p) => p.id);
     expect(ids).toContain("6"); // Classic Burger
     expect(ids).toContain("7"); // Named Cake
-  });
-
-  it("lists only the branch's own (BRANCH) recipes", async () => {
-    const recipes = await mockClient.listSubKitchenRecipes();
-    expect(recipes.length).toBeGreaterThan(0);
-    expect(recipes.every((r) => r.made_at === "BRANCH")).toBe(true);
   });
 
   it("writes off branch stock and records it in the history", async () => {

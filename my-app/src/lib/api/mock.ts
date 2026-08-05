@@ -111,13 +111,11 @@ import type {
   SubKitchenNearExpiryFilters,
   CreateBatchInput,
   CompleteTicketInput,
-  CreateSubKitchenRecipeInput,
   PrepBoardFilters,
   PrepStatus,
   PrepTicket,
   SubKitchenProduct,
   SubKitchenProductFilters,
-  SubKitchenRecipe,
   SubKitchenStats,
   SubKitchenStatsFilters,
   UpdatePrepStatusInput,
@@ -384,12 +382,6 @@ interface MockPrepTicket extends PrepTicket {
   create_expiry_date: string | null;
 }
 
-interface MockSubKitchenRecipe extends SubKitchenRecipe {
-  restaurant_id: string;
-  branch_id: string;
-}
-
-
 /** A daily production target, tenant-scoped and keyed to one kitchen. */
 interface MockProductionTarget extends ProductionTarget {
   restaurant_id: string;
@@ -423,8 +415,6 @@ interface MockDb {
   production_targets: MockProductionTarget[];
   /** Sub-kitchen prep board — one branch's prep tickets. */
   prep_tickets: MockPrepTicket[];
-  /** Chef-owned prep recipes, versioned. */
-  sub_kitchen_recipes: MockSubKitchenRecipe[];
   /**
    * Low-stock limits, per product PER LOCATION. Not on the inventory row: the
    * limit is compared against total on hand across every batch, so it cannot
@@ -482,7 +472,7 @@ function productionModeFields(hasCentralKitchen: boolean): {
         has_central_kitchen: false,
         production_mode: "branch_sub_kitchen",
         production_guidance:
-          "This restaurant has no central kitchen. Branches receive raw materials from the warehouse and produce finished goods locally via the branch prep board — see /sub-kitchen/recipes and /sub-kitchen/batch.",
+          "This restaurant has no central kitchen. Branches receive raw materials from the warehouse and produce finished goods locally via the branch prep board.",
       };
 }
 
@@ -1563,47 +1553,7 @@ function seedDb(): MockDb {
     production_runs: [],
     production_targets: seedProductionTargets(),
     prep_tickets: seedPrepTickets(),
-    sub_kitchen_recipes: seedSubKitchenRecipes(),
   };
-}
-
-/**
- * One prep recipe so the recipe-driven completion path works on a fresh demo:
- * a Classic Burger is assembled from a little Mozzarella and a can of tomato
- * sauce — raw-material components off branch stock.
- */
-function seedSubKitchenRecipes(): MockSubKitchenRecipe[] {
-  return [
-    {
-      id: "skr-001",
-      restaurant_id: "rest-001",
-      branch_id: "br-001",
-      product_id: 6,
-      product_name: "Classic Burger",
-      version: 1,
-      is_active: true,
-      yield_qty: 1,
-      note: null,
-      made_at: "BRANCH",
-      components: [
-        {
-          component_product_id: 3,
-          component_name: "Mozzarella Block",
-          quantity: 0.05,
-          wastage_bp: 0,
-          stock_unit: "KG",
-        },
-        {
-          component_product_id: 2,
-          component_name: "Tomato Sauce (Can)",
-          quantity: 1,
-          wastage_bp: 0,
-          stock_unit: "EACH",
-        },
-      ],
-      created_at: now(),
-    },
-  ];
 }
 
 /**
@@ -1678,14 +1628,6 @@ function sortPrepTickets(a: MockPrepTicket, b: MockPrepTicket): number {
 }
 
 const OPEN_PREP_STATUSES: PrepStatus[] = ["QUEUED", "IN_PROGRESS", "READY"];
-
-/** Strip the internal scoping off a stored recipe. */
-function toPublicSkRecipe(r: MockSubKitchenRecipe): SubKitchenRecipe {
-  const { restaurant_id, branch_id, ...pub } = r;
-  void restaurant_id;
-  void branch_id;
-  return pub;
-}
 
 /** Inclusive `YYYY-MM-DD` stats window; defaults to the last 7 days. */
 function statsWindow(filters?: SubKitchenStatsFilters): { start: string; end: string } {
@@ -7906,42 +7848,17 @@ export const mockClient: ApiClient = {
       throw new ApiError("This ticket is already closed.", 409, PREP_NOT_OPEN);
     }
 
-    // Components come from hand-stated `inputs`, or from the product's active
-    // recipe when none are given. No recipe and no inputs → nothing to consume.
+    // The chef states which components were used at completion; each is deducted
+    // from branch stock. No inputs is allowed — a labour-only finish (e.g.
+    // writing a name) completes the ticket with nothing consumed.
     const inputs = body?.inputs ?? [];
-    let resolved: { productId: string; name: string; quantity: number }[];
-    if (inputs.length > 0) {
-      resolved = inputs.map((line) => {
+    const resolved: { productId: string; name: string; quantity: number }[] = inputs.map(
+      (line) => {
         const product = db.products.find((p) => matchesProductId(p.id, line.product_id));
         if (!product) throw new ApiError("Input product not found", 404);
         return { productId: product.id, name: product.name, quantity: Number(line.quantity) };
-      });
-    } else {
-      const recipe = db.sub_kitchen_recipes.find(
-        (r) =>
-          r.branch_id === branch.id &&
-          r.is_active &&
-          matchesProductId(ticket.product_id, r.product_id),
-      );
-      if (!recipe) {
-        throw new ApiError(
-          "No recipe and no inputs given — enter what was used.",
-          409,
-          POS_ERROR.NO_ACTIVE_RECIPE,
-        );
-      }
-      const batches = Math.ceil(ticket.quantity / (recipe.yield_qty || 1));
-      resolved = recipe.components.map((c) => {
-        const product = db.products.find((p) =>
-          matchesProductId(p.id, c.component_product_id),
-        );
-        if (!product) throw new ApiError("Recipe component not found", 404);
-        const from = c.unit ?? c.stock_unit ?? "EACH";
-        const to = c.stock_unit ?? from;
-        const perBatch = tryConvertQty(c.quantity, from, to) ?? c.quantity;
-        return { productId: product.id, name: product.name, quantity: perBatch * batches };
-      });
-    }
+      },
+    );
     for (const line of resolved) {
       const onHand = db.inventory
         .filter(
@@ -8072,88 +7989,6 @@ export const mockClient: ApiClient = {
           pack_size: null,
         })),
     );
-  },
-
-  // ---- Sub-kitchen recipes ----
-
-  async listSubKitchenRecipes(): Promise<SubKitchenRecipe[]> {
-    const me = requireAuth();
-    requirePrepStation(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-    return delay(
-      db.sub_kitchen_recipes
-        .filter((r) => r.branch_id === branch.id && r.is_active && r.made_at === "BRANCH")
-        .map(toPublicSkRecipe),
-    );
-  },
-
-  async getSubKitchenRecipe(id: string): Promise<SubKitchenRecipe> {
-    const me = requireAuth();
-    requirePrepStation(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-    const recipe = db.sub_kitchen_recipes.find(
-      (r) => r.id === id && r.branch_id === branch.id,
-    );
-    if (!recipe) throw new ApiError("Recipe not found", 404);
-    return delay(toPublicSkRecipe(recipe));
-  },
-
-  async createSubKitchenRecipe(
-    body: CreateSubKitchenRecipeInput,
-  ): Promise<SubKitchenRecipe> {
-    const me = requireAuth();
-    requirePrepStation(me);
-    const db = loadDb();
-    const branch = resolveMyBranch(db, me);
-
-    const product = db.products.find((p) => matchesProductId(p.id, body.product_id));
-    if (!product) throw new ApiError("Product not found", 404);
-    if (product.kind === "RAW_MATERIAL") {
-      throw new ApiError(
-        "A raw material can't have a recipe.",
-        409,
-        POS_ERROR.PRODUCT_CANNOT_HAVE_RECIPE,
-      );
-    }
-
-    // Republishing retires the current version and bumps the number.
-    const prev = db.sub_kitchen_recipes.find(
-      (r) =>
-        r.branch_id === branch.id &&
-        r.is_active &&
-        matchesProductId(product.id, r.product_id),
-    );
-    if (prev) prev.is_active = false;
-
-    const recipe: MockSubKitchenRecipe = {
-      id: `skr-${Date.now()}`,
-      restaurant_id: branch.restaurant_id,
-      branch_id: branch.id,
-      product_id: Number(String(product.id).replace(/\D/g, "")) || 0,
-      product_name: product.name,
-      version: (prev?.version ?? 0) + 1,
-      is_active: true,
-      yield_qty: Number(body.yield_qty ?? 1),
-      note: body.note ?? null,
-      made_at: "BRANCH",
-      components: body.components.map((c) => {
-        const comp = db.products.find((p) => matchesProductId(p.id, c.component_product_id));
-        return {
-          component_product_id: c.component_product_id,
-          component_name: comp?.name,
-          quantity: Number(c.quantity),
-          wastage_bp: Number(c.wastage_bp ?? 0),
-          stock_unit: comp?.stock_unit ?? "EACH",
-          unit: c.unit,
-        };
-      }),
-      created_at: now(),
-    };
-    db.sub_kitchen_recipes.push(recipe);
-    saveDb(db);
-    return delay(toPublicSkRecipe(recipe), 400);
   },
 
   // ---- Sub-kitchen waste (same branch ledger) ----
