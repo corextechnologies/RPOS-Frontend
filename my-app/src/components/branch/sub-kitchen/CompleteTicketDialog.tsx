@@ -23,12 +23,16 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useCompletePrepTicket, useSubKitchenProducts } from "@/lib/hooks/use-sub-kitchen";
 import type { PrepTicket } from "@/lib/types/sub-kitchen";
+import { formatStockQty, stockUnitLabel, type StockUnit } from "@/lib/stock-unit";
+import { convertibleUnits, tryConvertQty } from "@/lib/unit-convert";
 
 const numId = (s: string) => Number(String(s).replace(/\D/g, "")) || 0;
 
 interface InputRow {
   productId: string;
   quantity: string;
+  /** The unit the chef is entering in — defaults to the component's stock unit. */
+  unit?: StockUnit;
 }
 
 /**
@@ -55,7 +59,13 @@ export function CompleteTicketDialog({
   const [showAll, setShowAll] = useState(false);
   const products = useSubKitchenProducts("RAW_MATERIAL", { all: showAll });
 
-  const options = (products.data ?? []).map((p) => ({ id: p.id, name: p.name }));
+  const options = (products.data ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    stockUnit: p.stock_unit,
+  }));
+  const stockUnitFor = (productId: string) =>
+    options.find((o) => o.id === productId)?.stockUnit;
 
   const [rows, setRows] = useState<InputRow[]>([{ productId: "", quantity: "" }]);
   const [prevId, setPrevId] = useState<string | undefined>();
@@ -73,10 +83,19 @@ export function CompleteTicketDialog({
       {
         id: ticket.id,
         body: {
-          inputs: usableRows.map((r) => ({
-            product_id: numId(r.productId),
-            quantity: Number(r.quantity),
-          })),
+          inputs: usableRows.map((r) => {
+            const stockUnit = stockUnitFor(r.productId);
+            const entryUnit = r.unit ?? stockUnit;
+            const qty = Number(r.quantity);
+            // Stock is deducted in the product's own unit, and the wire carries
+            // no unit — so convert what the chef entered (e.g. 200 g) back to the
+            // stock unit (e.g. 0.2 kg) before sending.
+            const quantity =
+              stockUnit && entryUnit && entryUnit !== stockUnit
+                ? tryConvertQty(qty, entryUnit, stockUnit) ?? qty
+                : qty;
+            return { product_id: numId(r.productId), quantity };
+          }),
         },
       },
       { onSuccess: () => onOpenChange(false) },
@@ -114,56 +133,100 @@ export function CompleteTicketDialog({
             </label>
           </div>
 
-          {rows.map((row, i) => (
-            <div key={i} className="flex items-end gap-2">
-              <div className="flex-1 space-y-1">
-                {i === 0 && <Label className="text-xs">Component</Label>}
-                <Select
-                  value={row.productId}
-                  onValueChange={(v) =>
-                    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, productId: v } : r)))
-                  }
-                >
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Choose…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          {rows.map((row, i) => {
+            const stockUnit = stockUnitFor(row.productId);
+            const entryUnit = row.unit ?? stockUnit;
+            const unitOptions = stockUnit ? convertibleUnits(stockUnit) : [];
+            // Show the draw-down in the component's stock unit when the chef
+            // entered a different (compatible) one — "200 g = 0.2 kg".
+            const converted =
+              entryUnit && stockUnit && entryUnit !== stockUnit && Number(row.quantity) > 0
+                ? tryConvertQty(Number(row.quantity), entryUnit, stockUnit)
+                : null;
+            return (
+              <div key={i} className="space-y-1">
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    {i === 0 && <Label className="text-xs">Component</Label>}
+                    <Select
+                      value={row.productId}
+                      onValueChange={(v) =>
+                        setRows((rs) =>
+                          rs.map((r, j) =>
+                            // Default the entry unit to how the component is stocked.
+                            j === i ? { ...r, productId: v, unit: stockUnitFor(v) } : r,
+                          ),
+                        )
+                      }
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Choose…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {options.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-20 space-y-1">
+                    {i === 0 && <Label className="text-xs">Qty</Label>}
+                    <Input
+                      className="h-10 tabular-nums"
+                      inputMode="decimal"
+                      value={row.quantity}
+                      onChange={(e) =>
+                        setRows((rs) =>
+                          rs.map((r, j) =>
+                            j === i ? { ...r, quantity: e.target.value.replace(/[^\d.]/g, "") } : r,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="w-24 space-y-1">
+                    {i === 0 && <Label className="text-xs">Unit</Label>}
+                    <Select
+                      value={entryUnit ?? ""}
+                      onValueChange={(v) =>
+                        setRows((rs) => rs.map((r, j) => (j === i ? { ...r, unit: v as StockUnit } : r)))
+                      }
+                      disabled={!stockUnit || unitOptions.length <= 1}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="unit" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {unitOptions.map((u) => (
+                          <SelectItem key={u} value={u}>
+                            {stockUnitLabel(u) || u.toLowerCase()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="text-danger"
+                    aria-label="Remove"
+                    disabled={rows.length === 1}
+                    onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                {converted !== null && (
+                  <p className="pl-1 text-xs text-faint">
+                    Deducts {formatStockQty(converted, stockUnit)} from stock.
+                  </p>
+                )}
               </div>
-              <div className="w-24 space-y-1">
-                {i === 0 && <Label className="text-xs">Qty</Label>}
-                <Input
-                  className="h-10 tabular-nums"
-                  inputMode="decimal"
-                  value={row.quantity}
-                  onChange={(e) =>
-                    setRows((rs) =>
-                      rs.map((r, j) =>
-                        j === i ? { ...r, quantity: e.target.value.replace(/[^\d.]/g, "") } : r,
-                      ),
-                    )
-                  }
-                />
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="text-danger"
-                aria-label="Remove"
-                disabled={rows.length === 1}
-                onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
 
           <Button
             type="button"
