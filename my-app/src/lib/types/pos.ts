@@ -836,24 +836,7 @@ export interface InventorySnapshotRow {
   as_of: string;
 }
 
-/**
- * The planning contract is FINAL even though Phase 7 does not exist. It returns
- * `ready: false` rather than zeros specifically so this screen cannot ship a
- * forecast that silently lies. Render the empty state; change nothing when the
- * data starts arriving.
- */
-export interface PlanningResponse {
-  ready: boolean;
-  reason?: string;
-  forecast: Array<{
-    date: string;
-    product_id: number;
-    product_name?: string;
-    predicted_units: number;
-  }>;
-  suggested_orders: Array<{
-    product_id: number;
-    product_name?: string;
-    suggested_qty: number;
-  }>;
-}
+// The branch planning contract moved to `@/lib/types/forecast`
+// (`BranchPlanningResponse`) when Phase 7 finalised its shape — the earlier
+// placeholder here used `predicted_units`/`suggested_orders`, which the final
+// §9 contract replaced with `expected_stock`/`expected_units`.

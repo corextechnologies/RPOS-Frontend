@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil } from "lucide-react";
+import { LineChart, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +24,8 @@ interface PricingTableProps {
   onRetry?: () => void;
   canEdit: boolean;
   onEdit: (product: ProductPricing) => void;
+  /** Opens the Phase 7 forecast setup (event tags + expected daily). Sellable only. */
+  onForecast?: (product: ProductPricing) => void;
   emptyTitle?: string;
   emptyDescription?: string;
 }
@@ -49,6 +51,7 @@ export function PricingTable({
   onRetry,
   canEdit,
   onEdit,
+  onForecast,
   emptyTitle = "No products yet",
   emptyDescription = "Products will appear here once they exist for your restaurant.",
 }: PricingTableProps) {
@@ -94,7 +97,7 @@ export function PricingTable({
               <TableHead>Category</TableHead>
               <TableHead>Selling price</TableHead>
               <TableHead>Cost price</TableHead>
-              {canEdit && <TableHead className="w-12" />}
+              {canEdit && <TableHead className="w-24" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -138,15 +141,29 @@ export function PricingTable({
                 </TableCell>
                 {canEdit && (
                   <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Edit pricing for ${product.name}`}
-                      onClick={() => onEdit(product)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {onForecast && product.is_sellable && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Forecast setup for ${product.name}`}
+                          title="Forecast setup — event tags & expected daily sales"
+                          onClick={() => onForecast(product)}
+                        >
+                          <LineChart className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Edit pricing for ${product.name}`}
+                        onClick={() => onEdit(product)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 )}
               </TableRow>

@@ -34,7 +34,6 @@ import type {
   FeedWindow,
   InventorySnapshotRow,
   MenuVersionSummary,
-  PlanningResponse,
   PosMenu,
   PosOrder,
   SellableProduct,
@@ -43,6 +42,7 @@ import type {
   SalesHistoryRow,
   WasteHistoryRow,
 } from "@/lib/types/pos";
+import type { BranchPlanningResponse } from "@/lib/types/forecast";
 import { request, requestUpload } from "./client";
 import { apiConfig } from "./config";
 
@@ -196,10 +196,13 @@ export const posAdminApi = {
   },
 
   /**
-   * Returns `ready: false` until Phase 7 lands — deliberately, so a forecast
-   * screen can't ship a lie. The shape is final; wire against it now.
+   * The branch's own expected stock, confirmed plans only (§9). Two shapes in
+   * one, keyed on `ready`: the not-ready form carries `forecast: []` and a
+   * `reason`; the ready form carries `expected_stock`. Read-only.
    */
-  planning(): Promise<PlanningResponse> {
-    return request<PlanningResponse>("/pos/planning");
+  planning(days = 7): Promise<BranchPlanningResponse> {
+    return request<BranchPlanningResponse>(
+      `/pos/planning?${new URLSearchParams({ days: String(days) })}`,
+    );
   },
 };

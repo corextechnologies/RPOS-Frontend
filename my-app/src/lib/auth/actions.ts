@@ -32,6 +32,14 @@ export type AuthAction =
   | "production-targets:update"
   | "production-targets:delete"
   | "overview:read"
+  // Forecasting & Planning (Phase 7). Admin-only back-office; every /admin/*
+  // forecast, calendar and plan route 403s for anyone else. Namespaced away
+  // from the Super Admin's billing "plans:*" — a different concept entirely.
+  | "forecast:read"
+  | "calendar:read"
+  | "calendar:update"
+  | "forecast-plans:read"
+  | "forecast-plans:write"
   // POS back-office (Admin). The till reads these and cannot change them.
   | "devices:read"
   | "devices:create"
@@ -68,6 +76,10 @@ export type AuthAction =
   // manager (acknowledge/complete). The endpoints require KITCHEN_MANAGER.
   | "kitchen-production-targets:read"
   | "kitchen-production-targets:update"
+  // Phase 7 production plan — read-only, confirmed plans only. The whole
+  // kitchen router is 403 for a kitchen-off tenant, so the nav item is also
+  // feature-gated on `central_kitchen`.
+  | "kitchen-planning:read"
   // Branch (Phase 5). Namespaced away from Kitchen/Warehouse for the same
   // reason those are namespaced from each other: different roles, different
   // endpoints, same English words.
@@ -133,6 +145,11 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "production-targets:update",
     "production-targets:delete",
     "overview:read",
+    "forecast:read",
+    "calendar:read",
+    "calendar:update",
+    "forecast-plans:read",
+    "forecast-plans:write",
     "menu:read",
     "menu:publish",
     "discounts:read",
@@ -167,6 +184,7 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "kitchen-requests:update",
     "kitchen-production-targets:read",
     "kitchen-production-targets:update",
+    "kitchen-planning:read",
   ],
   BRANCH_MANAGER: [
     "branch-orders:read",
