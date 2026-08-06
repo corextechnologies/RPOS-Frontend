@@ -12,6 +12,8 @@ import { usePosCurrency, usePosSession } from "@/lib/pos/pos-session";
 import { formatMinor } from "@/lib/money";
 import { MenuGrid } from "@/components/pos/MenuGrid";
 import { ModifierSheet } from "@/components/pos/ModifierSheet";
+import { RefusalSheet } from "@/components/pos/RefusalSheet";
+import { enqueueRefusal } from "@/lib/pos/offline/refusals";
 import { CartPanel } from "@/components/pos/CartPanel";
 import { PriceMismatchDialog } from "@/components/pos/PriceMismatchDialog";
 import { TenderDialog } from "@/components/pos/TenderDialog";
@@ -31,11 +33,12 @@ export default function SellPage() {
 
 function Sell() {
   const { items, categories, isLoading, error } = useResolvedMenu();
-  const { can } = usePosSession();
+  const { can, offline } = usePosSession();
   const { currency, minorUnits } = usePosCurrency();
   const cart = useCart();
 
   const [picked, setPicked] = useState<ResolvedMenuItem | null>(null);
+  const [refusalItem, setRefusalItem] = useState<ResolvedMenuItem | null>(null);
   const [mismatch, setMismatch] = useState<ApiError | null>(null);
   const [tenderFor, setTenderFor] = useState<PosOrder | null>(null);
   const [recallOpen, setRecallOpen] = useState(false);
@@ -120,6 +123,28 @@ function Sell() {
     }
   }
 
+  /**
+   * Queue an offline turn-away for a sold-out item. Online the server records
+   * refusals from the 409 itself, so this path only ever runs offline (the grid
+   * only offers the action then). `available_units` is 0 — the tile is only
+   * tappable when `onHand === 0` — and `occurred_at` is stamped at enqueue.
+   */
+  async function recordTurnAway(item: ResolvedMenuItem, requestedUnits: number) {
+    try {
+      await enqueueRefusal({
+        menu_item_id: item.id,
+        reason: "OUT_OF_STOCK",
+        requested_units: requestedUnits,
+        available_units: 0,
+      });
+      toast.success(
+        `Logged — ${item.name}${requestedUnits > 1 ? ` ×${requestedUnits}` : ""} turned away.`,
+      );
+    } catch {
+      toast.error("Couldn't log that turn-away. Try again.");
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center py-24">
@@ -147,10 +172,17 @@ function Sell() {
           ordinary token and this device holds a device-bound one. It's in the
           branch portal instead. The grid still greys items out — reading
           availability IS a device route.
+
+          Offline, a sold-out tile becomes a turn-away logger: the device is the
+          only witness to demand it refuses while disconnected, so we capture it
+          here and sync it later. Online, the server records refusals from the
+          409 itself, so the grid leaves those tiles inert.
         */}
         <MenuGrid
           items={items}
           categories={categories}
+          offline={offline}
+          onRecordTurnAway={setRefusalItem}
           onPick={(item) =>
             // No options to choose? Straight into the cart. A modal that only
             // exists to be dismissed is a tax on every order.
@@ -173,6 +205,13 @@ function Sell() {
         open={picked !== null}
         onOpenChange={(open) => !open && setPicked(null)}
         onAdd={(item, ids, note, needsPrep) => cart.addItem(item, ids, note, needsPrep)}
+      />
+
+      <RefusalSheet
+        item={refusalItem}
+        open={refusalItem !== null}
+        onOpenChange={(open) => !open && setRefusalItem(null)}
+        onRecord={(item, qty) => void recordTurnAway(item, qty)}
       />
 
       <ParkedOrdersSheet

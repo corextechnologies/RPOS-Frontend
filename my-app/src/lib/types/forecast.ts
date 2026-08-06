@@ -190,6 +190,30 @@ export interface ForecastEventRef {
   is_proposed: boolean;
 }
 
+/**
+ * Shadow "turned-away demand" comparison — DISPLAY ONLY.
+ *
+ * The forecast deliberately does NOT use this yet: `is_live` is false and stays
+ * false while it runs in the background against real data. Counting turned-away
+ * demand is the only change that makes a forecast *larger*, and an over-forecast
+ * wastes food while an under-forecast merely sells out — so it stays in shadow
+ * until it's been watched. Render it as an optional, clearly not-yet-applied
+ * comparison, and hide it entirely when `days_with_refusals` is 0. Decimals are
+ * strings — format with `trimDecimal`, never `parseFloat` + re-render.
+ */
+export interface ForecastUnmetDemand {
+  /** Days in the window where at least one customer was turned away. */
+  days_with_refusals: number;
+  /** Average turned-away units per day (decimal string). */
+  unmet_per_day: string;
+  /** What the baseline would be if turned-away demand were counted (decimal string). */
+  baseline_if_counted: string;
+  /** Whether the counted-in baseline hit the safety cap. */
+  was_capped: boolean;
+  /** Whether this feeds the live forecast. False today, by design. */
+  is_live: boolean;
+}
+
 export interface ForecastRow {
   product_id: number;
   product_name: string;
@@ -203,6 +227,8 @@ export interface ForecastRow {
   events: ForecastEventRef[];
   /** Plain sentences, ready to render as-is. Do not parse. */
   notes: string[];
+  /** Shadow turned-away-demand comparison; absent/empty when no refusals in the window. */
+  unmet_demand?: ForecastUnmetDemand;
 }
 
 export interface ForecastQuery {
@@ -271,6 +297,8 @@ export interface NormalDemandRow {
   weekday_applied: string;
   units: string;
   suggested_units: number;
+  /** Shadow turned-away-demand comparison; absent/empty when no refusals in the window. */
+  unmet_demand?: ForecastUnmetDemand;
 }
 
 export interface NormalDemandQuery {

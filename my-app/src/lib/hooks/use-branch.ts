@@ -8,6 +8,7 @@ import { posErrorMessage, stockAwareMessage } from "@/lib/api/errors";
 import type {
   BranchCustomerFilters,
   BranchOrderFilters,
+  BranchRefusalsQuery,
   BranchWasteInput,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
@@ -36,6 +37,10 @@ export const branchKeys = {
       ? (["branch-waste", filters] as const)
       : (["branch-waste"] as const),
   restaurant: ["branch-restaurant"] as const,
+  refusals: (query?: BranchRefusalsQuery) =>
+    query && Object.keys(query).length
+      ? (["branch-refusals", query] as const)
+      : (["branch-refusals"] as const),
 };
 
 // ---- Terminals ----
@@ -284,6 +289,31 @@ export function useBranchRestaurantProductionMode() {
   return useQuery({
     queryKey: branchKeys.restaurant,
     queryFn: () => api.getBranchRestaurantProductionMode(),
+  });
+}
+
+// ---- Sales rollup & refusals (forecasting) ----
+//
+// Live HTTP only (`branchApi`), same as the device calls — these forecast
+// endpoints have no mock path.
+
+/**
+ * "Day closed" — recount today's sales for the forecast on demand. No success
+ * toast here: the caller shows the counted window (`from`..`to`) from the
+ * result. Harmless to run repeatedly, so nothing is disabled after a press.
+ */
+export function useCloseDay() {
+  return useMutation({
+    mutationFn: () => branchApi.rolloverSales(),
+    onError: (err) => toast.error(posErrorMessage(err)),
+  });
+}
+
+/** This branch's turn-aways over the last `days`, grouped by product + reason. */
+export function useBranchRefusals(query?: BranchRefusalsQuery) {
+  return useQuery({
+    queryKey: branchKeys.refusals(query),
+    queryFn: () => branchApi.refusals(query),
   });
 }
 

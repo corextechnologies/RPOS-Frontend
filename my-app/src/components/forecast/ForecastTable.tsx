@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { MaturityBadge } from "@/components/forecast/MaturityBadge";
 import { isNeutralMultiplier, multiplierLabel, trimDecimal } from "@/lib/forecast/format";
-import type { ForecastEventRef, ForecastRow } from "@/lib/types/forecast";
+import type { ForecastEventRef, ForecastRow, ForecastUnmetDemand } from "@/lib/types/forecast";
 
 /**
  * The main forecast table (§6). One row per product per day. Every field the
@@ -213,6 +213,55 @@ function BreakdownDetail({ row }: { row: ForecastRow }) {
           ))}
         </ul>
       )}
+
+      {/* Shadow comparison — hidden entirely until refusals exist for this
+          product (§: hide when days_with_refusals === 0). */}
+      {row.unmet_demand && row.unmet_demand.days_with_refusals > 0 && (
+        <UnmetDemandNote unmet={row.unmet_demand} currentBaseline={breakdown.baseline} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The turned-away-demand comparison — deliberately NOT applied to the forecast.
+ *
+ * It's the only signal that pushes a forecast *up*, so it runs in shadow until
+ * it's proven against real data. We compare like with like — the current
+ * baseline against the baseline-if-counted — rather than implying a new headline
+ * suggestion, and label it plainly as not applied.
+ */
+function UnmetDemandNote({
+  unmet,
+  currentBaseline,
+}: {
+  unmet: ForecastUnmetDemand;
+  currentBaseline: string;
+}) {
+  const days = unmet.days_with_refusals;
+  return (
+    <div className="rounded-lg border border-dashed border-line bg-surface px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-faint">
+          Turned-away demand
+        </span>
+        {!unmet.is_live && (
+          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+            Not applied
+          </Badge>
+        )}
+      </div>
+      <p className="mt-1 text-muted">
+        {days} {days === 1 ? "day" : "days"} turned customers away — about{" "}
+        <span className="tabular-nums text-content">{trimDecimal(unmet.unmet_per_day)}</span>/day
+        unrecorded. If counted, the baseline would be{" "}
+        <span className="tabular-nums text-content">{trimDecimal(unmet.baseline_if_counted)}</span>
+        /day (now {trimDecimal(currentBaseline)}/day)
+        {unmet.was_capped ? ", at the safety cap" : ""}.
+      </p>
+      <p className="mt-1 text-xs text-faint">
+        Being measured in the background — deliberately not applied to this forecast yet.
+      </p>
     </div>
   );
 }

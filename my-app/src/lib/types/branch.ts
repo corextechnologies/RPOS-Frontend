@@ -277,3 +277,66 @@ export interface ProductionRun {
   created_by_id?: string;
   note?: string | null;
 }
+
+// ---- Sales rollup & refusals (forecasting) ----
+//
+// These feed the forecast, which learns from real sales and from demand the
+// till had to turn away. Counts, not currency — no money crosses this surface.
+
+/**
+ * Result of `POST /branch/sales/rollup` — the "Day closed" recount.
+ *
+ * Idempotent: re-running replaces the numbers, never doubles them, and it
+ * locks/seals nothing (the name is `sales/rollup` for that reason). The two-day
+ * window (`from`..`to`) also sweeps up anything that arrived late for yesterday.
+ * Dates are plain calendar days, `YYYY-MM-DD`.
+ */
+export interface BranchSalesRollup {
+  branch_id: number;
+  /** Inclusive start of the recounted window, `YYYY-MM-DD`. */
+  from: string;
+  /** Inclusive end — the day that just finished, `YYYY-MM-DD`. */
+  to: string;
+  /** How many rollup rows were (re)written. */
+  rows_written: number;
+  /** When the server produced this, ISO-8601. */
+  generated_at: string;
+}
+
+/** A turn-away reason as reported by `GET /branch/sales/refusals`. */
+export type BranchRefusalReason = "OUT_OF_STOCK" | "SHORT_STOCK" | "STAFF_PULLED";
+
+/**
+ * One product's refusals over the window, grouped by reason.
+ *
+ * `is_unmet_demand` is false for deliberate pulls (STAFF_PULLED) — a different
+ * kind of event that must NOT be read as lost demand (we chose not to sell it).
+ */
+export interface BranchRefusalProduct {
+  product_id: number;
+  product_name: string;
+  reason: BranchRefusalReason;
+  /** False for deliberate pulls — render these distinctly; they aren't lost demand. */
+  is_unmet_demand: boolean;
+  /** Distinct occasions a customer was turned away. */
+  occasions: number;
+  /** Units the customer asked for but couldn't get. */
+  unmet_units: number;
+}
+
+/** Query for `GET /branch/sales/refusals`. */
+export interface BranchRefusalsQuery {
+  /** Look-back window in days. Defaults to 30 server-side. */
+  days?: number;
+  /** When true, exclude deliberate pulls and count only genuine unmet demand. */
+  demand_only?: boolean;
+}
+
+/** Response of `GET /branch/sales/refusals`. */
+export interface BranchRefusalsReport {
+  branch_id: number;
+  from: string;
+  to: string;
+  demand_only: boolean;
+  products: BranchRefusalProduct[];
+}
