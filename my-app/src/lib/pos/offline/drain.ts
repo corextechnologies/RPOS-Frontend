@@ -27,7 +27,7 @@ import { newIdempotencyKey } from "@/lib/pos/idempotency";
 import { deviceServices } from "./device-services";
 import { isDue, type OutboxEntryOf } from "./outbox";
 import { lookupOrderId, recordFlagged, rememberOrderId } from "./sync-state";
-import type { SyncEnvelope } from "@/lib/types/pos";
+import type { SyncEnvelope, SyncRefusal } from "@/lib/types/pos";
 
 const MAX_BATCH = 50;
 
@@ -50,6 +50,7 @@ export interface DrainSummary {
   orders: StageCounts;
   payments: StageCounts;
   printResults: StageCounts;
+  refusals: StageCounts;
   /** The run stopped early because the network dropped again. */
   stoppedOffline: boolean;
 }
@@ -63,6 +64,7 @@ export async function drainOutbox(): Promise<DrainSummary> {
     orders: counts(),
     payments: counts(),
     printResults: counts(),
+    refusals: counts(),
     stoppedOffline: false,
   };
   if (draining) return summary;
@@ -74,6 +76,9 @@ export async function drainOutbox(): Promise<DrainSummary> {
     if (await drainPrintResults(summary.printResults)) {
       return (summary.stoppedOffline = true), summary;
     }
+    // Refusals are independent of orders (no cross-reference), so their stage
+    // order doesn't matter — it runs last simply to keep sales replay first.
+    if (await drainRefusals(summary.refusals)) return (summary.stoppedOffline = true), summary;
     return summary;
   } finally {
     draining = false;
@@ -223,6 +228,53 @@ async function drainPrintResults(c: StageCounts): Promise<boolean> {
     await outbox.remove(e.id);
     c.processed += 1;
     c.settled += 1;
+  }
+  return false;
+}
+
+function toRefusal(entry: OutboxEntryOf<"refusal">): SyncRefusal {
+  return entry.body;
+}
+
+/**
+ * Replay queued refusals as the sync batch's `refusals` list (§2 offline half).
+ *
+ * A refusals-only batch — no orders — which the endpoint explicitly allows.
+ * Unlike orders there are no per-element results to reconcile: the response only
+ * carries a count, and the server dedupes by `local_id`, so a `2xx` means it
+ * durably has the whole chunk and we drop it. Chunked to ≤50, same cap as
+ * orders. Offline aborts the run rather than penalising entries with backoff.
+ *
+ * @returns true if the run should stop because we're offline.
+ */
+async function drainRefusals(c: StageCounts): Promise<boolean> {
+  const due = (await outbox.byKind("refusal")).filter((e) => isDue(e));
+
+  for (let i = 0; i < due.length; i += MAX_BATCH) {
+    const chunk = due.slice(i, i + MAX_BATCH);
+    await Promise.all(chunk.map((e) => outbox.markInFlight(e.id)));
+
+    try {
+      await posApi.syncBatch({ refusals: chunk.map(toRefusal) });
+    } catch (err) {
+      if (isNetworkError(err)) {
+        await Promise.all(chunk.map((e) => outbox.reset(e.id)));
+        return true;
+      }
+      const msg = err instanceof Error ? err.message : "refusal sync failed";
+      for (const e of chunk) {
+        await outbox.markFailed(e.id, msg);
+        c.processed += 1;
+        c.failed += 1;
+      }
+      continue;
+    }
+
+    for (const e of chunk) {
+      await outbox.remove(e.id);
+      c.processed += 1;
+      c.settled += 1;
+    }
   }
   return false;
 }

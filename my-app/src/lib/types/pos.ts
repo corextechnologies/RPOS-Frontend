@@ -506,8 +506,44 @@ export interface SyncEnvelope {
   print_results?: SyncPrintResult[];
 }
 
+/**
+ * A refusal reason.
+ *
+ * `OUT_OF_STOCK` — nothing left · `SHORT_STOCK` — some, but not enough ·
+ * `STAFF_PULLED` — deliberately 86'd. Get this right: `STAFF_PULLED` is recorded
+ * for reporting but never feeds the forecast — an item we chose not to sell is
+ * not a shortage. (The till only ever sends `OUT_OF_STOCK` today: it can't 86 an
+ * item, and offline stock caps aren't enforced yet.)
+ */
+export type RefusalReason = "OUT_OF_STOCK" | "SHORT_STOCK" | "STAFF_PULLED";
+
+/**
+ * A demand refusal recorded on the device — a customer turned away because the
+ * till couldn't supply an item. Deduped server-side by `local_id`, exactly like
+ * an order, so a retried upload never double-counts.
+ */
+export interface SyncRefusal {
+  /** Device-generated and unique — the dedup anchor. Never omit it. */
+  local_id: string;
+  menu_item_id: number;
+  reason: RefusalReason;
+  /** What the customer asked for. */
+  requested_units: number;
+  /** What we could have supplied — 0 when empty. Send the real number. */
+  available_units: number;
+  /** When the customer was turned away, NOT when uploaded — ISO-8601. */
+  occurred_at: string;
+  note?: string;
+}
+
 export interface SyncBatchInput {
-  envelopes: SyncEnvelope[];
+  /**
+   * Orders to replay. Optional — a device with only refusals to send may post
+   * `{ refusals: [...] }` with no orders. Max 50.
+   */
+  envelopes?: SyncEnvelope[];
+  /** Demand the till turned away offline. Max 50. */
+  refusals?: SyncRefusal[];
 }
 
 export type SyncResultStatus = "accepted" | "duplicate" | "flagged" | "failed";
@@ -538,6 +574,8 @@ export interface SyncBatchResult {
   flagged: number;
   failed: number;
   results: SyncResult[];
+  /** How many refusals the server recorded (deduped by `local_id`). */
+  refusals_recorded?: number;
 }
 
 /** One print outcome reported after the fact (§11 NEW·P4). */

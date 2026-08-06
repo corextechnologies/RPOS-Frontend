@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { MaturityBadge } from "@/components/forecast/MaturityBadge";
 import { isNeutralMultiplier, multiplierLabel, trimDecimal } from "@/lib/forecast/format";
-import type { ForecastEventRef, ForecastRow } from "@/lib/types/forecast";
+import type { ForecastEventRef, ForecastRow, ForecastUnmetDemand } from "@/lib/types/forecast";
 
 /**
  * The main forecast table (§6). One row per product per day. Every field the
@@ -212,6 +212,68 @@ function BreakdownDetail({ row }: { row: ForecastRow }) {
             <li key={i}>{note}</li>
           ))}
         </ul>
+      )}
+
+      {/* Shadow comparison — hidden entirely until refusals exist for this
+          product (§: hide when days_with_refusals === 0). */}
+      {row.unmet_demand && row.unmet_demand.days_with_refusals > 0 && (
+        <UnmetDemandNote unmet={row.unmet_demand} suggested={row.suggested_units} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The turned-away-demand comparison — deliberately NOT applied to the forecast.
+ *
+ * It's the only signal that pushes a forecast *up*, so it runs in shadow and
+ * never turns on by itself. The backend hands us the finished
+ * `suggested_units_if_counted` (through the same weekday × event × cap path as
+ * the headline), so we just show current-vs-if-counted rather than recomputing
+ * and risking a near-miss. The copy follows `is_live` so it reads correctly the
+ * day the flag flips.
+ */
+function UnmetDemandNote({
+  unmet,
+  suggested,
+}: {
+  unmet: ForecastUnmetDemand;
+  suggested: number;
+}) {
+  const days = unmet.days_with_refusals;
+  const applied = unmet.is_live;
+  return (
+    <div className="rounded-lg border border-dashed border-line bg-surface px-3 py-2.5 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-faint">
+          Turned-away demand
+        </span>
+        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+          {applied ? "Applied" : "Not applied"}
+        </Badge>
+      </div>
+      <p className="mt-1 text-muted">
+        {days} {days === 1 ? "day" : "days"} turned customers away —{" "}
+        {applied ? (
+          "counted in the suggestion above."
+        ) : (
+          <>
+            if counted, this would be{" "}
+            <span
+              className="tabular-nums text-content"
+              title={`Exact: ${trimDecimal(unmet.units_if_counted)}`}
+            >
+              {unmet.suggested_units_if_counted}
+            </span>{" "}
+            (now <span className="tabular-nums text-content">{suggested}</span>)
+            {unmet.was_capped ? ", capped — the refusals looked noisy" : ""}.
+          </>
+        )}
+      </p>
+      {!applied && (
+        <p className="mt-1 text-xs text-faint">
+          Being measured in the background — deliberately not applied to this forecast.
+        </p>
       )}
     </div>
   );

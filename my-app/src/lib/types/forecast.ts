@@ -190,6 +190,41 @@ export interface ForecastEventRef {
   is_proposed: boolean;
 }
 
+/**
+ * Shadow "turned-away demand" comparison — DISPLAY ONLY.
+ *
+ * The forecast deliberately does NOT use this: `is_live` is false and stays
+ * false until a developer flips a backend constant and deploys — it never turns
+ * on by itself, however much data accumulates. Counting turned-away demand is
+ * the only change that makes a forecast *larger*, and an over-forecast wastes
+ * food while an under-forecast merely sells out, so it runs in shadow. Render it
+ * as an optional comparison, marked not-applied while `is_live` is false, and
+ * hide it entirely when `days_with_refusals` is 0. Keep reading `is_live` rather
+ * than hardcoding, so nothing breaks the day it flips. Decimals are strings —
+ * format with `trimDecimal`, never `parseFloat` + re-render.
+ */
+export interface ForecastUnmetDemand {
+  /** Days in the window where at least one customer was turned away. */
+  days_with_refusals: number;
+  /** Average turned-away units per day (decimal string). */
+  unmet_per_day: string;
+  /** What the baseline would be if turned-away demand were counted (decimal string). */
+  baseline_if_counted: string;
+  /**
+   * The suggested units if turned-away demand were counted — whole units, already
+   * rounded through the SAME path as `suggested_units` (weekday × event, then cap).
+   * Display this directly; the backend computes it so client-side maths can't
+   * land on a slightly different number.
+   */
+  suggested_units_if_counted: number;
+  /** The exact decimal behind `suggested_units_if_counted`; tooltip only. */
+  units_if_counted: string;
+  /** Whether the counted-in figure hit the safety cap (refusals looked noisy). */
+  was_capped: boolean;
+  /** Whether this feeds the live forecast. Permanently false until a manual deploy. */
+  is_live: boolean;
+}
+
 export interface ForecastRow {
   product_id: number;
   product_name: string;
@@ -203,6 +238,8 @@ export interface ForecastRow {
   events: ForecastEventRef[];
   /** Plain sentences, ready to render as-is. Do not parse. */
   notes: string[];
+  /** Shadow turned-away-demand comparison; absent/empty when no refusals in the window. */
+  unmet_demand?: ForecastUnmetDemand;
 }
 
 export interface ForecastQuery {
@@ -271,6 +308,8 @@ export interface NormalDemandRow {
   weekday_applied: string;
   units: string;
   suggested_units: number;
+  /** Shadow turned-away-demand comparison; absent/empty when no refusals in the window. */
+  unmet_demand?: ForecastUnmetDemand;
 }
 
 export interface NormalDemandQuery {

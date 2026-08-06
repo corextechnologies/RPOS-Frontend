@@ -19,6 +19,9 @@ import type {
   BranchWasteInput,
   BranchOrder,
   BranchOrderFilters,
+  BranchRefusalsQuery,
+  BranchRefusalsReport,
+  BranchSalesRollup,
   CreateBranchCustomerInput,
   CreateBranchOrderInput,
   CreateBranchRequestInput,
@@ -453,5 +456,30 @@ export const branchApi = {
   /** Response shape already matches the UI type 1:1 — no adapter needed. */
   getBranchRestaurantProductionMode(): Promise<RestaurantProductionMode> {
     return request<RestaurantProductionMode>("/branch/restaurant");
+  },
+
+  // ---- Sales rollup & refusals (forecasting) ----
+  //
+  // Live HTTP only, like the device calls: these are net-new forecast endpoints
+  // with no mock path. `branch_id` is never in the body/query — the server takes
+  // it from the token, as everywhere on this surface.
+
+  /**
+   * The "Day closed" recount — total this branch's sales for the forecast now,
+   * rather than waiting for the 5:30am job. No body. Idempotent and side-effect
+   * free beyond recalculation: safe to call any number of times, at any hour.
+   */
+  rolloverSales(): Promise<BranchSalesRollup> {
+    return request<BranchSalesRollup>("/branch/sales/rollup", { method: "POST" });
+  },
+
+  /** Turn-aways over the last `days`, grouped by product + reason. */
+  refusals(query?: BranchRefusalsQuery): Promise<BranchRefusalsReport> {
+    return request<BranchRefusalsReport>(
+      `/branch/sales/refusals${qs({
+        days: query?.days,
+        demand_only: query?.demand_only === undefined ? undefined : String(query.demand_only),
+      })}`,
+    );
   },
 };

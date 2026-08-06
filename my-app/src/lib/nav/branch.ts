@@ -11,6 +11,7 @@ import {
   Settings,
   TrendingUp,
   UserRound,
+  UserRoundX,
   Users,
 } from "lucide-react";
 import type { NavSection } from "./types";
@@ -118,6 +119,13 @@ export const BRANCH_NAV: NavSection[] = [
         href: "/branch/sales",
         icon: TrendingUp,
         action: "branch-sales:read",
+        match: "exact",
+      },
+      {
+        label: "Refusals",
+        href: "/branch/refusals",
+        icon: UserRoundX,
+        action: "branch-refusals:read",
         match: "exact",
       },
       {

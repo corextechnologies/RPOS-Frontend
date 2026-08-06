@@ -103,6 +103,7 @@ export type AuthAction =
   | "branch-requests:create"
   | "branch-planning:read"
   | "branch-sales:read"
+  | "branch-refusals:read"
   | "branch-staff:read"
   | "branch-staff:create";
 
@@ -200,6 +201,7 @@ const ROLE_ACTIONS: Record<UserRole, AuthAction[]> = {
     "branch-requests:create",
     "branch-planning:read",
     "branch-sales:read",
+    "branch-refusals:read",
     "branch-staff:read",
     "branch-staff:create",
     // A terminal belongs to a branch, and its manager is the one who registers

@@ -16,6 +16,7 @@
  * | order         | `local_id`          | `POST /pos/sync/batch` (envelope)  |
  * | payment       | `client_payment_id` | `POST /pos/orders/{id}/payments`   |
  * | print_result  | `print_job_id`      | `POST /pos/print/results`          |
+ * | refusal       | `local_id`          | `POST /pos/sync/batch` (refusals)  |
  * | requisition   | `local_id`          | the per-type create endpoint       |
  *
  * This is the **web/IndexedDB** implementation of the {@link OutboxStore} seam.
@@ -28,13 +29,13 @@
  */
 
 import type { Minor } from "@/lib/money";
-import type { PaymentInput, PosOrderCreate } from "@/lib/types/pos";
+import type { PaymentInput, PosOrderCreate, SyncRefusal } from "@/lib/types/pos";
 import { OUTBOX_INDEX_KIND, OUTBOX_STORE, promisifyRequest, withStore } from "./db";
 import { uuid } from "@/lib/pos/idempotency";
 
 // ---- entry shapes ----
 
-export type OutboxKind = "order" | "payment" | "print_result" | "requisition";
+export type OutboxKind = "order" | "payment" | "print_result" | "refusal" | "requisition";
 
 /**
  * - `pending`   — queued, never attempted (or reset for retry).
@@ -93,6 +94,14 @@ export interface PrintResultOutboxBody {
   error?: string | null;
 }
 
+/**
+ * A demand refusal captured offline — the device's half of the turn-away
+ * recording. Replays as one entry in the sync batch's `refusals` list; the body
+ * carries its own `local_id` (also the anchor), so a retried upload can't
+ * double-count.
+ */
+export type RefusalOutboxBody = SyncRefusal;
+
 /** A cross-location requisition (§12) — no LAN path, so it always queues. */
 export interface RequisitionOutboxBody {
   /** `/branch/requests` | `/kitchen/requests/warehouse` | `/warehouse/requests/po`. */
@@ -105,6 +114,7 @@ export type OutboxEntry =
   | (OutboxEntryBase & { kind: "order"; anchor: string; body: OrderOutboxBody })
   | (OutboxEntryBase & { kind: "payment"; anchor: string; body: PaymentOutboxBody })
   | (OutboxEntryBase & { kind: "print_result"; anchor: string; body: PrintResultOutboxBody })
+  | (OutboxEntryBase & { kind: "refusal"; anchor: string; body: RefusalOutboxBody })
   | (OutboxEntryBase & { kind: "requisition"; anchor: string; body: RequisitionOutboxBody });
 
 /** The entry variant for one kind — so `byKind("order")` narrows `body` to the order shape. */
@@ -115,6 +125,7 @@ export type NewOutboxEntry =
   | { kind: "order"; anchor: string; body: OrderOutboxBody }
   | { kind: "payment"; anchor: string; body: PaymentOutboxBody }
   | { kind: "print_result"; anchor: string; body: PrintResultOutboxBody }
+  | { kind: "refusal"; anchor: string; body: RefusalOutboxBody }
   | { kind: "requisition"; anchor: string; body: RequisitionOutboxBody };
 
 // ---- the seam ----

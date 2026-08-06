@@ -15,15 +15,26 @@ import type { ResolvedMenuItem } from "@/lib/hooks/use-pos-menu";
  * the cashier hunt for an item that isn't there and then tell the customer
  * something vague. The `reason` comes straight from the server and, for a
  * combo, names the component that ran out.
+ *
+ * OFFLINE ONLY, a sold-out tile (`onHand === 0`) becomes tappable so the cashier
+ * can log the turned-away demand — offline the device is the only witness to it.
+ * Online it stays greyed and inert: the server records refusals from the 409
+ * itself, so there's nothing for the till to capture.
  */
 export function MenuGrid({
   items,
   categories,
   onPick,
+  offline = false,
+  onRecordTurnAway,
 }: {
   items: ResolvedMenuItem[];
   categories: string[];
   onPick: (item: ResolvedMenuItem) => void;
+  /** True when the till is running offline — enables turn-away logging. */
+  offline?: boolean;
+  /** Log a customer turned away for a sold-out item (offline only). */
+  onRecordTurnAway?: (item: ResolvedMenuItem) => void;
 }) {
   const [category, setCategory] = useState<string | null>(null);
   const { currency, minorUnits } = usePosCurrency();
@@ -46,39 +57,59 @@ export function MenuGrid({
       )}
 
       <div className="grid flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-4 sm:grid-cols-3 lg:grid-cols-4">
-        {shown.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            disabled={!item.available}
-            onClick={() => onPick(item)}
-            title={!item.available && item.reason ? item.reason : undefined}
-            className={cn(
-              "flex min-h-24 flex-col items-start gap-1 rounded-xl border p-3 text-left transition select-none",
-              item.available
-                ? "border-line bg-surface hover:border-brand hover:shadow-soft active:scale-[0.98]"
-                : "cursor-not-allowed border-line/60 bg-surface-2 opacity-60",
-            )}
-          >
-            <div className="flex w-full items-start gap-1.5">
-              <span className="min-w-0 flex-1 text-sm font-medium text-content">{item.name}</span>
-              {item.is_combo && (
-                <Layers className="mt-0.5 size-3.5 shrink-0 text-accent" aria-label="Combo" />
+        {shown.map((item) => {
+          // A true sell-out (not a combo/made-to-order with untracked stock).
+          // Only then, and only offline, is the tile a turn-away logger.
+          const recordable = offline && item.onHand === 0 && !!onRecordTurnAway;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              disabled={!item.available && !recordable}
+              onClick={() => {
+                if (item.available) onPick(item);
+                else if (recordable) onRecordTurnAway?.(item);
+              }}
+              title={
+                recordable
+                  ? "Sold out — tap to log a customer turned away"
+                  : !item.available && item.reason
+                    ? item.reason
+                    : undefined
+              }
+              className={cn(
+                "flex min-h-24 flex-col items-start gap-1 rounded-xl border p-3 text-left transition select-none",
+                item.available
+                  ? "border-line bg-surface hover:border-brand hover:shadow-soft active:scale-[0.98]"
+                  : recordable
+                    ? "cursor-pointer border-dashed border-line bg-surface-2 opacity-80 hover:border-brand active:scale-[0.98]"
+                    : "cursor-not-allowed border-line/60 bg-surface-2 opacity-60",
               )}
-            </div>
+            >
+              <div className="flex w-full items-start gap-1.5">
+                <span className="min-w-0 flex-1 text-sm font-medium text-content">{item.name}</span>
+                {item.is_combo && (
+                  <Layers className="mt-0.5 size-3.5 shrink-0 text-accent" aria-label="Combo" />
+                )}
+              </div>
 
-            <span className="font-display text-sm tabular-nums text-muted">
-              {formatMinor(item.price_minor, currency, minorUnits)}
-            </span>
-
-            {!item.available && (
-              <span className="mt-auto flex items-center gap-1 text-xs text-danger">
-                <Ban className="size-3" aria-hidden />
-                <span className="truncate">{item.reason ?? "Unavailable"}</span>
+              <span className="font-display text-sm tabular-nums text-muted">
+                {formatMinor(item.price_minor, currency, minorUnits)}
               </span>
-            )}
-          </button>
-        ))}
+
+              {!item.available && (
+                <span className="mt-auto flex items-center gap-1 text-xs text-danger">
+                  <Ban className="size-3" aria-hidden />
+                  <span className="truncate">
+                    {recordable
+                      ? `${item.reason ?? "Sold out"} · tap to log demand`
+                      : item.reason ?? "Unavailable"}
+                  </span>
+                </span>
+              )}
+            </button>
+          );
+        })}
 
         {shown.length === 0 && (
           <p className="col-span-full py-12 text-center text-sm text-muted">

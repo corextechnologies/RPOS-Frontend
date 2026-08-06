@@ -27,6 +27,7 @@ import {
 import { EmptyState, ErrorState } from "@/components/ui/state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SubKitchenModeBanner } from "@/components/dashboard/SubKitchenModeBanner";
+import { CloseDayButton } from "@/components/branch/CloseDayButton";
 import { localDateOf, toLocalDateString } from "@/lib/date-range";
 import { formatDate } from "@/lib/utils";
 import { displayName } from "@/lib/types/super-admin";
@@ -94,11 +95,14 @@ export default function BranchDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
-          {user ? `Hello, ${displayName(user).split(" ")[0]}` : "Branch"}
-        </h1>
-        <p className="mt-1 text-sm text-muted">Today at this branch.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-content">
+            {user ? `Hello, ${displayName(user).split(" ")[0]}` : "Branch"}
+          </h1>
+          <p className="mt-1 text-sm text-muted">Today at this branch.</p>
+        </div>
+        {can("branch-sales:read") && <CloseDayButton />}
       </div>
 
       {production.data && (
