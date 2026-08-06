@@ -193,13 +193,15 @@ export interface ForecastEventRef {
 /**
  * Shadow "turned-away demand" comparison — DISPLAY ONLY.
  *
- * The forecast deliberately does NOT use this yet: `is_live` is false and stays
- * false while it runs in the background against real data. Counting turned-away
- * demand is the only change that makes a forecast *larger*, and an over-forecast
- * wastes food while an under-forecast merely sells out — so it stays in shadow
- * until it's been watched. Render it as an optional, clearly not-yet-applied
- * comparison, and hide it entirely when `days_with_refusals` is 0. Decimals are
- * strings — format with `trimDecimal`, never `parseFloat` + re-render.
+ * The forecast deliberately does NOT use this: `is_live` is false and stays
+ * false until a developer flips a backend constant and deploys — it never turns
+ * on by itself, however much data accumulates. Counting turned-away demand is
+ * the only change that makes a forecast *larger*, and an over-forecast wastes
+ * food while an under-forecast merely sells out, so it runs in shadow. Render it
+ * as an optional comparison, marked not-applied while `is_live` is false, and
+ * hide it entirely when `days_with_refusals` is 0. Keep reading `is_live` rather
+ * than hardcoding, so nothing breaks the day it flips. Decimals are strings —
+ * format with `trimDecimal`, never `parseFloat` + re-render.
  */
 export interface ForecastUnmetDemand {
   /** Days in the window where at least one customer was turned away. */
@@ -208,9 +210,18 @@ export interface ForecastUnmetDemand {
   unmet_per_day: string;
   /** What the baseline would be if turned-away demand were counted (decimal string). */
   baseline_if_counted: string;
-  /** Whether the counted-in baseline hit the safety cap. */
+  /**
+   * The suggested units if turned-away demand were counted — whole units, already
+   * rounded through the SAME path as `suggested_units` (weekday × event, then cap).
+   * Display this directly; the backend computes it so client-side maths can't
+   * land on a slightly different number.
+   */
+  suggested_units_if_counted: number;
+  /** The exact decimal behind `suggested_units_if_counted`; tooltip only. */
+  units_if_counted: string;
+  /** Whether the counted-in figure hit the safety cap (refusals looked noisy). */
   was_capped: boolean;
-  /** Whether this feeds the live forecast. False today, by design. */
+  /** Whether this feeds the live forecast. Permanently false until a manual deploy. */
   is_live: boolean;
 }
 

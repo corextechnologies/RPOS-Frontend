@@ -7386,22 +7386,21 @@ export const mockClient: ApiClient = {
       }
     }
 
-    // Route the target by what the branch named. Kitchen tenant names a kitchen;
-    // kitchen-off tenant names a warehouse (fulfilled directly by the warehouse
-    // manager, exactly like a kitchen->warehouse request).
-    const restaurant = db.restaurants.find((r) => r.id === branch.restaurant_id);
-    const hasCentralKitchen = restaurant?.has_central_kitchen ?? true;
-
+    // Route the target by what the branch named. A kitchen tenant names a
+    // kitchen; a kitchen-off tenant names a warehouse (fulfilled directly by the
+    // warehouse manager, exactly like a kitchen->warehouse request). Both are
+    // optional: a branch may omit them entirely and leave the request open for
+    // Admin to fulfil from the warehouse. A named id that doesn't resolve is a 404.
     let targetType: StockLocationType | null = null;
     let targetId: string | null = null;
-    if (hasCentralKitchen) {
+    if (body.kitchen_id) {
       const kitchen = db.kitchens.find(
         (k) => k.id === body.kitchen_id && k.restaurant_id === branch.restaurant_id,
       );
       if (!kitchen) throw new ApiError("Kitchen not found", 404);
       targetType = "KITCHEN";
       targetId = kitchen.id;
-    } else {
+    } else if (body.warehouse_id) {
       const warehouse = db.warehouses.find(
         (w) => w.id === body.warehouse_id && w.restaurant_id === branch.restaurant_id,
       );
